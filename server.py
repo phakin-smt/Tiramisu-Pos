@@ -1,614 +1,284 @@
-import json
-import mimetypes
-import re
-import sqlite3
+import os
+import uuid
+import base64
+import hmac
+import secrets
+import threading
+import time
+from io import BytesIO
 from datetime import date
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from datetime import timedelta
+from decimal import Decimal
 
-PRODUCT_ID_RE = re.compile(r'^/api/products/(\d+)$')
+from flask import Flask, jsonify, request, send_file, send_from_directory, session
+from database import ROOT, connect_db, execute, init_schema, is_postgres, transaction
+from private_data.payment_qr import PAYMENT_QR_BASE64
 
-ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / 'pos.db'
-
-CATEGORY_ICONS = {
-    'Tiramisu': '🍮',
-    'Cheesecake': '🍰',
-    'Doughnut': '🍩',
-}
-DEFAULT_ICON = '🧁'
+app = Flask(__name__, static_folder=None)
+app.secret_key = os.getenv('SECRET_KEY') or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Strict',
+    SESSION_COOKIE_SECURE=os.getenv('VERCEL') == '1',
+    PERMANENT_SESSION_LIFETIME=timedelta(
+        minutes=int(os.getenv('SESSION_MINUTES', '480'))
+    ),
+)
+LOGIN_ATTEMPTS = {}
+LOGIN_ATTEMPTS_LOCK = threading.Lock()
+LOGIN_LIMIT = 5
+LOGIN_WINDOW_SECONDS = 300
 PAYMENT_METHODS = {'cash', 'transfer'}
-
+CATEGORY_ICONS = {'Tiramisu':'🍮', 'Cheesecake':'🍰', 'Doughnut':'🍩'}
+DEFAULT_ICON = '🧁'
 STOCK_REASONS = {
-    'prepare': {'movement_type': 'stock_in', 'reference_type': 'daily_prep', 'sign': 1, 'default_note': 'เตรียมขายวันนี้'},
-    'giveaway': {'movement_type': 'stock_out', 'reference_type': 'giveaway', 'sign': -1, 'default_note': 'แถมลูกค้า'},
-    'waste': {'movement_type': 'stock_out', 'reference_type': 'waste', 'sign': -1, 'default_note': 'ของเสีย/หมดอายุ'},
-    'correction': {'movement_type': 'adjust', 'reference_type': 'correction', 'sign': None, 'default_note': 'ปรับยอดสต็อก'},
-}
-
-
-def connect_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
-    return conn
-
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        if path == '/api/products':
-            self.send_json_products()
-            return
-
-        if path == '/api/products/categories':
-            self.send_json_categories()
-            return
-
-        if path == '/api/reports/daily-summary':
-            query = parse_qs(parsed.query)
-            report_date = query.get('date', [None])[0] or date.today().isoformat()
-            self.send_json_daily_summary(report_date)
-            return
-
-        if path == '/api/stock/daily-summary':
-            query = parse_qs(parsed.query)
-            report_date = query.get('date', [None])[0] or date.today().isoformat()
-            self.send_json_stock_daily_summary(report_date)
-            return
-
-        if path == '/api/health':
-            self.send_json({'status': 'ok', 'database': str(DB_PATH)})
-            return
-
-        file_path = ROOT / path.lstrip('/')
-        if not file_path.is_absolute():
-            file_path = ROOT / path.lstrip('/')
-
-        if path == '/' or path == '':
-            file_path = ROOT / 'index.html'
-
-        if file_path.exists() and file_path.is_file():
-            self.serve_file(file_path)
-        else:
-            self.send_error(404, 'Not Found')
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-
-        if parsed.path == '/api/orders':
-            self.create_order()
-            return
-
-        if parsed.path == '/api/stock/adjust':
-            self.adjust_stock()
-            return
-
-        if parsed.path == '/api/products':
-            self.create_product()
-            return
-
-        self.send_error(404, 'Not Found')
-
-    def do_PUT(self):
-        parsed = urlparse(self.path)
-        match = PRODUCT_ID_RE.match(parsed.path)
-
-        if match:
-            self.update_product(int(match.group(1)))
-            return
-
-        self.send_error(404, 'Not Found')
-
-    def do_DELETE(self):
-        parsed = urlparse(self.path)
-        match = PRODUCT_ID_RE.match(parsed.path)
-
-        if match:
-            self.delete_product(int(match.group(1)))
-            return
-
-        self.send_error(404, 'Not Found')
-
-    def read_json_body(self):
-        length = int(self.headers.get('Content-Length', 0))
-        return json.loads(self.rfile.read(length) or b'{}')
-
-    def parse_product_payload(self, payload):
-        sku = str(payload.get('code', '')).strip()
-        name = str(payload.get('name', '')).strip()
-        category = str(payload.get('category', '')).strip()
-
-        if not sku or not name or not category:
-            return None, 'กรุณากรอกรหัสเมนู ชื่อเมนู และหมวดหมู่ให้ครบ'
-
-        try:
-            price = float(payload.get('price'))
-            cost = float(payload.get('cost', 0) or 0)
-            stock = int(payload.get('stock', 0) or 0)
-            stock_min = int(payload.get('minStock', 0) or 0)
-        except (TypeError, ValueError):
-            return None, 'ราคาหรือจำนวนไม่ถูกต้อง'
-
-        if price < 0 or cost < 0 or stock < 0 or stock_min < 0:
-            return None, 'ค่าตัวเลขต้องไม่ติดลบ'
-
-        active = 1 if payload.get('active', True) else 0
-
-        return {
-            'sku': sku,
-            'name': name,
-            'category': category,
-            'price': price,
-            'cost': cost,
-            'stock': stock,
-            'stock_min': stock_min,
-            'active': active
-        }, None
-
-    def send_error_json(self, status, message):
-        body = json.dumps({'error': message}, ensure_ascii=False).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def create_order(self):
-        length = int(self.headers.get('Content-Length', 0))
-        try:
-            payload = json.loads(self.rfile.read(length) or b'{}')
-        except json.JSONDecodeError:
-            self.send_error_json(400, 'Invalid JSON body')
-            return
-
-        items = payload.get('items') or []
-        payment_method = payload.get('paymentMethod', 'cash')
-        customer_type = payload.get('customerType', 'walkin')
-        note = payload.get('note')
-
-        if not items:
-            self.send_error_json(400, 'ตะกร้าว่างเปล่า')
-            return
-
-        if payment_method not in PAYMENT_METHODS:
-            self.send_error_json(400, 'วิธีชำระเงินไม่ถูกต้อง')
-            return
-
-        try:
-            requested_discount = float(payload.get('discount', 0) or 0)
-        except (TypeError, ValueError):
-            self.send_error_json(400, 'ส่วนลดไม่ถูกต้อง')
-            return
-
-        if requested_discount < 0:
-            self.send_error_json(400, 'ส่วนลดต้องไม่ติดลบ')
-            return
-
-        conn = connect_db()
-        try:
-            cursor = conn.cursor()
-
-            line_items = []
-            subtotal = 0.0
-            for item in items:
-                product = cursor.execute(
-                    'SELECT id, sku, name, unit_price, stock_qty FROM products WHERE id = ? AND is_active = 1',
-                    (item.get('productId'),)
-                ).fetchone()
-                if not product:
-                    self.send_error_json(400, f"ไม่พบสินค้ารหัส {item.get('productId')}")
-                    return
-
-                qty = int(item.get('qty', 0))
-                if qty <= 0:
-                    self.send_error_json(400, f"จำนวนสินค้า {product['name']} ไม่ถูกต้อง")
-                    return
-
-                if qty > product['stock_qty']:
-                    self.send_error_json(400, f"{product['name']} คงเหลือไม่พอ (เหลือ {product['stock_qty']} ชิ้น)")
-                    return
-
-                line_total = qty * product['unit_price']
-                subtotal += line_total
-                line_items.append({
-                    'product_id': product['id'],
-                    'sku': product['sku'],
-                    'name': product['name'],
-                    'qty': qty,
-                    'unit_price': product['unit_price'],
-                    'line_total': line_total
-                })
-
-            if requested_discount > subtotal:
-                self.send_error_json(400, 'ส่วนลดมากกว่ายอดรวม')
-                return
-
-            discount = requested_discount
-            vat = 0.0
-            total = subtotal - discount + vat
-            order_date = date.today().isoformat()
-
-            seq = cursor.execute(
-                "SELECT COUNT(*) FROM orders WHERE order_date = ?", (order_date,)
-            ).fetchone()[0] + 1
-            order_number = f"{order_date.replace('-', '')}-{seq:04d}"
-
-            customer = cursor.execute(
-                'SELECT id FROM customers WHERE customer_type = ? AND is_active = 1 LIMIT 1',
-                (customer_type,)
-            ).fetchone()
-            customer_id = customer['id'] if customer else None
-
-            cursor.execute(
-                """
-                INSERT INTO orders (order_number, order_date, customer_id, payment_method, subtotal, discount, vat, total, status, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
-                """,
-                (order_number, order_date, customer_id, payment_method, subtotal, discount, vat, total, note)
-            )
-            order_id = cursor.lastrowid
-
-            for line in line_items:
-                cursor.execute(
-                    """
-                    INSERT INTO order_items (order_id, product_id, product_name, sku, quantity, unit_price, discount, line_total)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-                    """,
-                    (order_id, line['product_id'], line['name'], line['sku'], line['qty'], line['unit_price'], line['line_total'])
-                )
-                cursor.execute(
-                    'UPDATE products SET stock_qty = stock_qty - ?, updated_at = datetime(\'now\') WHERE id = ?',
-                    (line['qty'], line['product_id'])
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, reference_id, note)
-                    VALUES (?, 'sale', ?, 'order', ?, NULL)
-                    """,
-                    (line['product_id'], -line['qty'], order_number)
-                )
-
-            cursor.execute(
-                """
-                INSERT INTO payments (order_id, payment_method, paid_amount, change_amount, payment_reference)
-                VALUES (?, ?, ?, 0, ?)
-                """,
-                (order_id, payment_method, total, order_number)
-            )
-
-            conn.commit()
-
-            self.send_json({
-                'orderNumber': order_number,
-                'subtotal': subtotal,
-                'discount': discount,
-                'vat': vat,
-                'total': total,
-                'paymentMethod': payment_method
-            })
-        except sqlite3.IntegrityError as exc:
-            conn.rollback()
-            self.send_error_json(400, str(exc))
-        finally:
-            conn.close()
-
-    def send_json_daily_summary(self, report_date):
-        conn = connect_db()
-        rows = conn.execute(
-            """
-            SELECT payment_method, COUNT(*) as order_count, COALESCE(SUM(total), 0) as amount
-            FROM orders
-            WHERE order_date = ? AND status = 'completed'
-            GROUP BY payment_method
-            """,
-            (report_date,)
-        ).fetchall()
-        conn.close()
-
-        cash_total = 0.0
-        transfer_total = 0.0
-        order_count = 0
-
-        for row in rows:
-            order_count += row['order_count']
-            if row['payment_method'] == 'cash':
-                cash_total += row['amount']
-            else:
-                transfer_total += row['amount']
-
-        self.send_json({
-            'date': report_date,
-            'orderCount': order_count,
-            'cashTotal': cash_total,
-            'transferTotal': transfer_total,
-            'totalRevenue': cash_total + transfer_total
-        })
-
-    def adjust_stock(self):
-        length = int(self.headers.get('Content-Length', 0))
-        try:
-            payload = json.loads(self.rfile.read(length) or b'{}')
-        except json.JSONDecodeError:
-            self.send_error_json(400, 'Invalid JSON body')
-            return
-
-        product_id = payload.get('productId')
-        reason = payload.get('reason')
-        note = payload.get('note')
-
-        if reason not in STOCK_REASONS:
-            self.send_error_json(400, 'ประเภทการปรับสต็อกไม่ถูกต้อง')
-            return
-
-        try:
-            quantity = int(payload.get('quantity', 0))
-        except (TypeError, ValueError):
-            self.send_error_json(400, 'จำนวนไม่ถูกต้อง')
-            return
-
-        if quantity == 0:
-            self.send_error_json(400, 'จำนวนต้องไม่เป็นศูนย์')
-            return
-
-        rule = STOCK_REASONS[reason]
-        delta = quantity if rule['sign'] is None else rule['sign'] * abs(quantity)
-
-        conn = connect_db()
-        try:
-            cursor = conn.cursor()
-            product = cursor.execute(
-                'SELECT id, name, stock_qty FROM products WHERE id = ?', (product_id,)
-            ).fetchone()
-
-            if not product:
-                self.send_error_json(404, 'ไม่พบสินค้า')
-                return
-
-            new_stock = product['stock_qty'] + delta
-            if new_stock < 0:
-                self.send_error_json(400, f"{product['name']} มีสต็อกไม่พอ (เหลือ {product['stock_qty']} ชิ้น)")
-                return
-
-            cursor.execute(
-                "UPDATE products SET stock_qty = ?, updated_at = datetime('now') WHERE id = ?",
-                (new_stock, product_id)
-            )
-            cursor.execute(
-                """
-                INSERT INTO stock_movements (product_id, movement_type, quantity, reference_type, reference_id, note)
-                VALUES (?, ?, ?, ?, NULL, ?)
-                """,
-                (product_id, rule['movement_type'], delta, rule['reference_type'], note or rule['default_note'])
-            )
-
-            conn.commit()
-            self.send_json({'productId': product_id, 'stock': new_stock})
-        except sqlite3.IntegrityError as exc:
-            conn.rollback()
-            self.send_error_json(400, str(exc))
-        finally:
-            conn.close()
-
-    def send_json_stock_daily_summary(self, report_date):
-        conn = connect_db()
-        products = conn.execute(
-            """
-            SELECT id, sku, name, category, unit_price, cost_price, stock_qty, stock_min, is_active
-            FROM products
-            ORDER BY category, name
-            """
-        ).fetchall()
-
-        movement_rows = conn.execute(
-            """
-            SELECT product_id, movement_type, reference_type, SUM(quantity) as total_qty
-            FROM stock_movements
-            WHERE date(created_at) = ?
-            GROUP BY product_id, movement_type, reference_type
-            """,
-            (report_date,)
-        ).fetchall()
-        conn.close()
-
-        movements_by_product = {}
-        for row in movement_rows:
-            bucket = movements_by_product.setdefault(row['product_id'], {'prepared': 0, 'sold': 0, 'giveaway': 0, 'waste': 0})
-            if row['movement_type'] == 'stock_in' and row['reference_type'] == 'daily_prep':
-                bucket['prepared'] += row['total_qty']
-            elif row['movement_type'] == 'sale':
-                bucket['sold'] += -row['total_qty']
-            elif row['movement_type'] == 'stock_out' and row['reference_type'] == 'giveaway':
-                bucket['giveaway'] += -row['total_qty']
-            elif row['movement_type'] == 'stock_out' and row['reference_type'] == 'waste':
-                bucket['waste'] += -row['total_qty']
-
-        items = []
-        for product in products:
-            m = movements_by_product.get(product['id'], {'prepared': 0, 'sold': 0, 'giveaway': 0, 'waste': 0})
-            prepared = m['prepared']
-            sell_through = round(m['sold'] / prepared, 4) if prepared > 0 else None
-
-            items.append({
-                'productId': product['id'],
-                'code': product['sku'],
-                'name': product['name'],
-                'category': product['category'],
-                'icon': CATEGORY_ICONS.get(product['category'], DEFAULT_ICON),
-                'active': bool(product['is_active']),
-                'price': float(product['unit_price']),
-                'cost': float(product['cost_price']) if product['cost_price'] is not None else 0,
-                'minStock': int(product['stock_min']),
-                'stockNow': product['stock_qty'],
-                'prepared': prepared,
-                'sold': m['sold'],
-                'giveaway': m['giveaway'],
-                'waste': m['waste'],
-                'sellThrough': sell_through
-            })
-
-        self.send_json({'date': report_date, 'items': items})
-
-    def send_json(self, payload):
-        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def send_json_products(self):
-        conn = connect_db()
-        rows = conn.execute(
-            """
-            SELECT id, sku, barcode, name, category, unit_price, cost_price, stock_qty, stock_min, is_active, image_url
-            FROM products
-            WHERE is_active = 1
-            ORDER BY category, name
-            """
-        ).fetchall()
-        conn.close()
-
-        products = []
-        for row in rows:
-            products.append({
-                'id': row['id'],
-                'code': row['sku'],
-                'barcode': row['barcode'],
-                'category': row['category'],
-                'name': row['name'],
-                'price': float(row['unit_price']),
-                'cost': float(row['cost_price']) if row['cost_price'] is not None else 0,
-                'stock': int(row['stock_qty']),
-                'minStock': int(row['stock_min']),
-                'active': bool(row['is_active']),
-                'icon': CATEGORY_ICONS.get(row['category'], DEFAULT_ICON)
-            })
-
-        self.send_json(products)
-
-    def send_json_categories(self):
-        conn = connect_db()
-        rows = conn.execute("SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category").fetchall()
-        conn.close()
-        categories = [row['category'] for row in rows]
-        self.send_json({'categories': categories})
-
-    def create_product(self):
-        try:
-            payload = self.read_json_body()
-        except json.JSONDecodeError:
-            self.send_error_json(400, 'Invalid JSON body')
-            return
-
-        data, error = self.parse_product_payload(payload)
-        if error:
-            self.send_error_json(400, error)
-            return
-
-        conn = connect_db()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO products (sku, barcode, name, category, unit_price, cost_price, stock_qty, stock_min, is_active, image_url)
-                VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, '')
-                """,
-                (data['sku'], data['name'], data['category'], data['price'], data['cost'], data['stock'], data['stock_min'], data['active'])
-            )
-            conn.commit()
-            self.send_json({'id': cursor.lastrowid, 'code': data['sku']})
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            self.send_error_json(400, f"รหัสเมนู {data['sku']} มีอยู่แล้ว")
-        finally:
-            conn.close()
-
-    def update_product(self, product_id):
-        try:
-            payload = self.read_json_body()
-        except json.JSONDecodeError:
-            self.send_error_json(400, 'Invalid JSON body')
-            return
-
-        data, error = self.parse_product_payload(payload)
-        if error:
-            self.send_error_json(400, error)
-            return
-
-        conn = connect_db()
-        try:
-            cursor = conn.cursor()
-            existing = cursor.execute('SELECT id FROM products WHERE id = ?', (product_id,)).fetchone()
-            if not existing:
-                self.send_error_json(404, 'ไม่พบเมนูนี้')
-                return
-
-            cursor.execute(
-                """
-                UPDATE products
-                SET sku = ?, name = ?, category = ?, unit_price = ?, cost_price = ?,
-                    stock_qty = ?, stock_min = ?, is_active = ?, updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (data['sku'], data['name'], data['category'], data['price'], data['cost'],
-                 data['stock'], data['stock_min'], data['active'], product_id)
-            )
-            conn.commit()
-            self.send_json({'id': product_id, 'code': data['sku']})
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            self.send_error_json(400, f"รหัสเมนู {data['sku']} มีอยู่แล้ว")
-        finally:
-            conn.close()
-
-    def delete_product(self, product_id):
-        conn = connect_db()
-        try:
-            cursor = conn.cursor()
-            product = cursor.execute('SELECT id, name FROM products WHERE id = ?', (product_id,)).fetchone()
-            if not product:
-                self.send_error_json(404, 'ไม่พบเมนูนี้')
-                return
-
-            try:
-                cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
-                conn.commit()
-                self.send_json({'id': product_id, 'deleted': True})
-            except sqlite3.IntegrityError:
-                conn.rollback()
-                cursor.execute(
-                    "UPDATE products SET is_active = 0, updated_at = datetime('now') WHERE id = ?",
-                    (product_id,)
-                )
-                conn.commit()
-                self.send_json({
-                    'id': product_id,
-                    'deleted': False,
-                    'deactivated': True,
-                    'message': f"{product['name']} มีประวัติการขายอยู่ จึงปิดการขายแทนการลบถาวร"
-                })
-        finally:
-            conn.close()
-
-    def serve_file(self, file_path):
-        content_type = mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
-        body = file_path.read_bytes()
-        self.send_response(200)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, format, *args):
-        pass
-
-
-if __name__ == '__main__':
-    port = 8000
-    httpd = ThreadingHTTPServer(('0.0.0.0', port), Handler)
-    print(f'Serving POS app at http://localhost:{port}')
-    httpd.serve_forever()
+ 'prepare':('stock_in','daily_prep',1,'เตรียมขายวันนี้'),
+ 'giveaway':('stock_out','giveaway',-1,'แถมลูกค้า'),
+ 'waste':('stock_out','waste',-1,'ของเสีย/หมดอายุ'),
+ 'correction':('adjust','correction',None,'ปรับยอดสต็อก')}
+
+def number(value): return float(value) if isinstance(value, Decimal) else value
+def error(message,status=400): return jsonify(error=message),status
+
+def auth_configured():
+ return bool(os.getenv('POS_PIN')) and bool(os.getenv('SECRET_KEY'))
+
+def client_key():
+ return request.remote_addr or 'unknown'
+
+def is_rate_limited(key):
+ now=time.monotonic()
+ with LOGIN_ATTEMPTS_LOCK:
+  attempts=[stamp for stamp in LOGIN_ATTEMPTS.get(key,[]) if now-stamp<LOGIN_WINDOW_SECONDS]
+  LOGIN_ATTEMPTS[key]=attempts
+  return len(attempts)>=LOGIN_LIMIT
+
+def record_failed_login(key):
+ with LOGIN_ATTEMPTS_LOCK:
+  LOGIN_ATTEMPTS.setdefault(key,[]).append(time.monotonic())
+
+@app.before_request
+def protect_private_routes():
+ public_api={'/api/health','/api/auth/login','/api/auth/status'}
+ protected_qr=request.path in {'/api/payment-qr','/assets/promptpay-qr.jpg'}
+ if (request.path.startswith('/api/') and request.path not in public_api) or protected_qr:
+  if not session.get('authenticated'):
+   return error('กรุณาเข้าสู่ระบบใหม่',401)
+
+@app.get('/api/auth/status')
+def auth_status():
+ return jsonify(authenticated=bool(session.get('authenticated')),configured=auth_configured())
+
+@app.post('/api/auth/login')
+def login():
+ if not auth_configured():
+  return error('ระบบ PIN ยังไม่ได้ตั้งค่า',503)
+ key=client_key()
+ if is_rate_limited(key):
+  return error('ลอง PIN ผิดหลายครั้ง กรุณารอ 5 นาที',429)
+ supplied=str((request.get_json(silent=True) or {}).get('pin',''))
+ if not hmac.compare_digest(supplied,os.environ['POS_PIN']):
+  record_failed_login(key)
+  return error('PIN ไม่ถูกต้อง',401)
+ with LOGIN_ATTEMPTS_LOCK:
+  LOGIN_ATTEMPTS.pop(key,None)
+ session.clear()
+ session['authenticated']=True
+ session.permanent=True
+ return jsonify(authenticated=True)
+
+@app.post('/api/auth/logout')
+def logout():
+ session.clear()
+ return jsonify(authenticated=False)
+
+@app.get('/api/payment-qr')
+def payment_qr():
+ response=send_file(
+  BytesIO(base64.b64decode(PAYMENT_QR_BASE64,validate=True)),
+  mimetype='image/jpeg',
+  conditional=True,
+ )
+ response.headers['Cache-Control']='private, no-store'
+ return response
+
+def rows(query,params=()):
+ connection=connect_db()
+ try: return execute(connection.cursor(),query,params).fetchall()
+ finally: connection.close()
+
+def movement_summary(connection,report_date):
+ result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE date(created_at)=? GROUP BY product_id,movement_type,reference_type',(report_date,)).fetchall()
+ summary={}
+ for row in result:
+  bucket=summary.setdefault(row['product_id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0})
+  if row['movement_type']=='stock_in' and row['reference_type']=='daily_prep': bucket['prepared']+=row['total_qty']
+  elif row['movement_type']=='sale': bucket['sold']-=row['total_qty']
+  elif row['reference_type']=='giveaway': bucket['giveaway']-=row['total_qty']
+  elif row['reference_type']=='waste': bucket['waste']-=row['total_qty']
+ return summary
+
+@app.errorhandler(Exception)
+def unexpected_error(exc):
+ app.logger.exception('Request failed')
+ return error('ระบบหรือฐานข้อมูลไม่พร้อมใช้งาน กรุณาลองใหม่อีกครั้ง',500)
+
+@app.get('/api/health')
+def health():
+ connection=connect_db()
+ try: execute(connection.cursor(),'SELECT 1').fetchone()
+ finally: connection.close()
+ return jsonify(status='ok',database='postgresql' if is_postgres() else 'sqlite')
+
+@app.get('/api/products')
+def products():
+ result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE is_active=1 ORDER BY category,name')
+ return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON)} for r in result])
+
+@app.get('/api/products/categories')
+def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE is_active=1 ORDER BY category')])
+
+def product_payload(payload):
+ try:
+  data={'sku':str(payload.get('code','')).strip(),'name':str(payload.get('name','')).strip(),'category':str(payload.get('category','')).strip(),'price':float(payload.get('price')),'cost':float(payload.get('cost',0) or 0),'stock':int(payload.get('stock',0) or 0),'stock_min':int(payload.get('minStock',0) or 0),'active':1 if payload.get('active',True) else 0}
+ except (TypeError,ValueError): return None,'ราคาหรือจำนวนไม่ถูกต้อง'
+ if not data['sku'] or not data['name'] or not data['category']: return None,'กรุณากรอกรหัส ชื่อ และหมวดหมู่ให้ครบ'
+ if min(data['price'],data['cost'],data['stock'],data['stock_min'])<0: return None,'ค่าตัวเลขต้องไม่ติดลบ'
+ return data,None
+
+@app.post('/api/products')
+def create_product():
+ data,problem=product_payload(request.get_json(silent=True) or {})
+ if problem: return error(problem)
+ try:
+  with transaction() as (_,cursor):
+   query='INSERT INTO products (sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active,image_url) VALUES (?,\'\',?,?,?,?,?,?,?,\'\')'+(' RETURNING id' if is_postgres() else '')
+   result=execute(cursor,query,(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active']))
+   product_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
+  return jsonify(id=product_id,code=data['sku'])
+ except Exception as exc:
+  if 'unique' in str(exc).lower(): return error('รหัสเมนู {} มีอยู่แล้ว'.format(data['sku']))
+  raise
+
+@app.put('/api/products/<int:product_id>')
+def update_product(product_id):
+ data,problem=product_payload(request.get_json(silent=True) or {})
+ if problem: return error(problem)
+ with transaction() as (_,cursor):
+  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  execute(cursor,'UPDATE products SET sku=?,name=?,category=?,unit_price=?,cost_price=?,stock_qty=?,stock_min=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active'],product_id))
+ return jsonify(id=product_id,code=data['sku'])
+
+@app.delete('/api/products/<int:product_id>')
+def delete_product(product_id):
+ with transaction() as (_,cursor):
+  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  used=execute(cursor,'SELECT 1 FROM order_items WHERE product_id=? LIMIT 1',(product_id,)).fetchone()
+  if used: execute(cursor,'UPDATE products SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?',(product_id,))
+  else: execute(cursor,'DELETE FROM products WHERE id=?',(product_id,))
+ return jsonify(id=product_id,deleted=True)
+
+@app.post('/api/orders')
+def create_order():
+ payload=request.get_json(silent=True) or {}; items=payload.get('items') or []; payment=payload.get('paymentMethod','cash'); key=request.headers.get('Idempotency-Key','').strip()
+ if not items: return error('ตะกร้าว่างเปล่า')
+ if payment not in PAYMENT_METHODS: return error('วิธีชำระเงินไม่ถูกต้อง')
+ if not key or len(key)>100: return error('ไม่พบรหัสยืนยันรายการ กรุณาลองใหม่')
+ try: discount=float(payload.get('discount',0) or 0)
+ except (TypeError,ValueError): return error('ส่วนลดไม่ถูกต้อง')
+ if discount<0: return error('ส่วนลดต้องไม่ติดลบ')
+ with transaction() as (_,cursor):
+  if is_postgres():
+   execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',(key,))
+  duplicate=execute(cursor,'SELECT order_number,subtotal,discount,vat,total,payment_method FROM orders WHERE idempotency_key=?',(key,)).fetchone()
+  if duplicate: return jsonify(orderNumber=duplicate['order_number'],subtotal=number(duplicate['subtotal']),discount=number(duplicate['discount']),vat=number(duplicate['vat']),total=number(duplicate['total']),paymentMethod=duplicate['payment_method'],duplicate=True)
+  lines=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
+  for item in items:
+   product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND is_active=1'+lock,(item.get('productId'),)).fetchone()
+   try: qty=int(item.get('qty',0))
+   except (TypeError,ValueError): qty=0
+   if not product or qty<=0: return error('สินค้าในตะกร้าไม่ถูกต้อง')
+   if qty>product['stock_qty']: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
+   line_total=qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,line_total))
+  if discount>subtotal: return error('ส่วนลดมากกว่ายอดรวม')
+  total=subtotal-discount; today=date.today().isoformat()
+  day_code=today.replace('-',''); order_number='{}-{}'.format(day_code,uuid.uuid4().hex[:8].upper())
+  customer=execute(cursor,'SELECT id FROM customers WHERE customer_type=? AND is_active=1 LIMIT 1',(payload.get('customerType','walkin'),)).fetchone()
+  query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
+  result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,payload.get('note')))
+  order_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
+  for product,qty,line_total in lines:
+   execute(cursor,'INSERT INTO order_items (order_id,product_id,product_name,sku,quantity,unit_price,discount,line_total) VALUES (?,?,?,?,?,?,0,?)',(order_id,product['id'],product['name'],product['sku'],qty,product['unit_price'],line_total))
+   updated=execute(cursor,'UPDATE products SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND stock_qty>=?',(qty,product['id'],qty))
+   if updated.rowcount!=1: raise ValueError('สต็อกเปลี่ยนแปลง กรุณาลองใหม่')
+   execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,\'sale\',?,\'order\',?,NULL)',(product['id'],-qty,order_number))
+  execute(cursor,'INSERT INTO payments (order_id,payment_method,paid_amount,change_amount,payment_reference) VALUES (?,?,?,0,?)',(order_id,payment,total,order_number))
+ return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment)
+
+@app.post('/api/stock/adjust')
+def adjust_stock():
+ payload=request.get_json(silent=True) or {}; reason=payload.get('reason')
+ if reason not in STOCK_REASONS: return error('ประเภทการปรับสต็อกไม่ถูกต้อง')
+ try: quantity=int(payload.get('quantity',0))
+ except (TypeError,ValueError): return error('จำนวนไม่ถูกต้อง')
+ if not quantity: return error('จำนวนต้องไม่เป็นศูนย์')
+ movement,reference,sign,default_note=STOCK_REASONS[reason]; delta=quantity if sign is None else sign*abs(quantity)
+ with transaction() as (_,cursor):
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  if not product: return error('ไม่พบสินค้า',404)
+  new_stock=product['stock_qty']+delta
+  if new_stock<0: return error('{} มีสต็อกไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
+  execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_stock,product['id']))
+  execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,?,?,NULL,?)',(product['id'],movement,delta,reference,payload.get('note') or default_note))
+ return jsonify(productId=product['id'],stock=new_stock)
+
+@app.get('/api/reports/daily-summary')
+def daily_summary():
+ report_date=request.args.get('date') or date.today().isoformat()
+ result=rows('SELECT payment_method,COUNT(*) order_count,COALESCE(SUM(total),0) amount FROM orders WHERE order_date=? AND status=\'completed\' GROUP BY payment_method',(report_date,))
+ cash=sum(number(r['amount']) for r in result if r['payment_method']=='cash'); transfer=sum(number(r['amount']) for r in result if r['payment_method']!='cash')
+ return jsonify(date=report_date,orderCount=sum(r['order_count'] for r in result),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer)
+
+def stock_data(report_date):
+ connection=connect_db()
+ try:
+  result=execute(connection.cursor(),'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products ORDER BY category,name').fetchall(); movements=movement_summary(connection,report_date)
+ finally: connection.close()
+ items=[]
+ for p in result:
+  m=movements.get(p['id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0}); prepared=m['prepared']
+  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':p['stock_qty'],**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
+ return items
+
+@app.get('/api/stock/daily-summary')
+def stock_summary():
+ report_date=request.args.get('date') or date.today().isoformat()
+ return jsonify(date=report_date,items=stock_data(report_date))
+
+@app.get('/api/reports/close-day')
+def close_day():
+ report_date=request.args.get('date') or date.today().isoformat(); connection=connect_db()
+ try:
+  cursor=connection.cursor()
+  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE order_date=? AND status=\'completed\' ORDER BY created_at',(report_date,)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(report_date,)).fetchall()
+ finally: connection.close()
+ grouped={}
+ for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
+ orders=[{'orderNumber':r['order_number'],'time':r['created_at'].isoformat() if hasattr(r['created_at'],'isoformat') else r['created_at'],'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
+ cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
+ menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
+ return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,orders=orders,menuSummary=menus)
+
+@app.get('/')
+def index(): return send_from_directory(ROOT,'index.html')
+
+@app.get('/<path:filename>')
+def static_files(filename):
+ if filename.startswith('api/'): return error('ไม่พบ API',404)
+ if filename not in {'app.js','styles.css'}: return error('ไม่พบไฟล์',404)
+ return send_from_directory(ROOT,filename)
+
+init_schema()
+
+if __name__=='__main__': app.run(host='127.0.0.1',port=int(os.getenv('PORT','8000')),debug=False)

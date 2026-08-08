@@ -8,7 +8,19 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <div class="login-overlay" id="loginOverlay">
+    <form class="login-card" id="loginForm">
+      <div class="brand-icon">🧁</div>
+      <h1>Sweetie POS</h1>
+      <p>Enter your PIN to continue</p>
+      <label for="pinInput">PIN</label>
+      <input id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" required />
+      <div class="login-error" id="loginError" role="alert"></div>
+      <button class="btn btn-primary" id="loginButton" type="submit">Log in</button>
+    </form>
+  </div>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-icon">🧁</div>
@@ -17,6 +29,7 @@
           <div class="brand-subtitle">ระบบขายของหวาน</div>
         </div>
       </div>
+
 
       <nav class="nav">
         <div class="nav-label">เมนูหลัก</div>
@@ -32,7 +45,7 @@
           <span class="nav-icon">◫</span>
           <span>ออเดอร์</span>
         </a>
-        <a href="#" class="nav-link">
+       <a href="#" class="nav-link" data-page="reportPage">
           <span class="nav-icon">◌</span>
           <span>รายงาน</span>
         </a>
@@ -41,6 +54,7 @@
           <span>ตั้งค่า</span>
         </a>
       </nav>
+
 
       <div class="sidebar-card">
         <div class="card-title">ระบบ</div>
@@ -51,8 +65,10 @@
         <div class="date-row">
           <span id="dateText">08/08/2026</span>
         </div>
+        <button class="btn btn-light logout-button" id="logoutButton" type="button">Log out</button>
       </div>
     </aside>
+
 
     <main class="main-content">
       <section id="sellPage" class="page">
@@ -67,6 +83,7 @@
         </div>
       </header>
 
+
       <section class="metrics-grid">
         <article class="metric-card">
           <div class="metric-title">ยอดขายวันนี้</div>
@@ -74,11 +91,13 @@
           <div class="metric-subtitle">รวมเงินสด + เงินโอน</div>
         </article>
 
+
         <article class="metric-card highlight">
           <div class="metric-title">จำนวนออเดอร์</div>
           <div class="metric-value" id="ordersCount">0</div>
           <div class="metric-subtitle">ออเดอร์ที่เสร็จสิ้น</div>
         </article>
+
 
         <article class="metric-card">
           <div class="metric-title">เงินสด</div>
@@ -86,11 +105,13 @@
           <div class="metric-subtitle">รับเงินสดวันนี้</div>
         </article>
 
+
         <article class="metric-card">
           <div class="metric-title">เงินโอน</div>
           <div class="metric-value" id="transferTotal">฿0</div>
           <div class="metric-subtitle">โอน / พร้อมเพย์วันนี้</div>
         </article>
+
 
         <article class="metric-card">
           <div class="metric-title">เมนูพร้อมขาย</div>
@@ -98,6 +119,7 @@
           <div class="metric-subtitle">รายการเปิดขาย</div>
         </article>
       </section>
+
 
       <section class="workspace">
         <section class="catalog-panel panel">
@@ -117,10 +139,13 @@
             </div>
           </div>
 
+
           <div class="category-tabs" id="categoryTabs"></div>
+
 
           <div class="product-grid" id="productGrid"></div>
         </section>
+
 
         <aside class="cart-panel panel">
           <div class="cart-header">
@@ -131,6 +156,7 @@
             <button class="icon-button" id="clearCart">ล้าง</button>
           </div>
 
+
           <div class="customer-row">
             <label class="form-label">ลูกค้า</label>
             <select id="customerSelect">
@@ -140,7 +166,9 @@
             </select>
           </div>
 
+
           <div class="cart-items" id="cartItems"></div>
+
 
           <div class="totals">
             <div class="line-row">
@@ -165,6 +193,7 @@
             </div>
           </div>
 
+
           <div class="payment-row">
             <label class="form-label">วิธีชำระ</label>
             <select id="paymentMethod">
@@ -173,6 +202,7 @@
             </select>
           </div>
 
+
           <div class="cart-actions">
             <button class="btn btn-outline" id="holdOrder">พักออเดอร์</button>
             <button class="btn btn-primary btn-wide" id="checkoutBtn">ชำระเงิน</button>
@@ -180,6 +210,7 @@
         </aside>
       </section>
       </section>
+
 
       <section id="stockPage" class="page" hidden>
         <header class="topbar">
@@ -192,6 +223,7 @@
           </div>
         </header>
 
+
         <section class="metrics-grid" id="stockMetrics">
           <article class="metric-card">
             <div class="metric-title">เตรียมวันนี้</div>
@@ -199,11 +231,13 @@
             <div class="metric-subtitle">ชิ้น ทุกเมนูรวมกัน</div>
           </article>
 
+
           <article class="metric-card highlight">
             <div class="metric-title">ขายวันนี้</div>
             <div class="metric-value" id="soldTotal">0</div>
             <div class="metric-subtitle">ชิ้น</div>
           </article>
+
 
           <article class="metric-card">
             <div class="metric-title">แถมวันนี้</div>
@@ -211,12 +245,14 @@
             <div class="metric-subtitle">ชิ้น</div>
           </article>
 
+
           <article class="metric-card">
             <div class="metric-title">เสียวันนี้</div>
             <div class="metric-value" id="wasteTotal">0</div>
             <div class="metric-subtitle">ชิ้น</div>
           </article>
         </section>
+
 
         <section class="panel stock-panel">
           <div class="panel-header">
@@ -226,6 +262,7 @@
             </div>
             <button class="btn btn-primary" id="addMenuBtn">+ เพิ่มเมนูใหม่</button>
           </div>
+
 
           <div class="stock-table-wrap">
             <table class="stock-table" id="stockTable">
@@ -247,10 +284,123 @@
           </div>
         </section>
       </section>
+
+
+     <section id="reportPage" class="page" hidden>
+       <header class="topbar">
+         <div>
+           <div class="page-kicker">สรุปยอดขาย 📊</div>
+           <h1>ปิดการขายวันนี้</h1>
+         </div>
+         <div class="top-actions">
+           <button class="btn btn-light" id="backToSellFromReportBtn">← กลับไปขายสินค้า</button>
+           <button class="btn btn-primary" id="closeDayBtn">🔒 ปิดการขายวันนี้</button>
+         </div>
+       </header>
+
+
+       <div class="empty-report" id="reportEmptyState">
+         <p>กดปุ่ม "ปิดการขายวันนี้" เพื่อสรุปยอดขาย ออเดอร์ และสต็อกของวันนี้ทั้งหมด</p>
+       </div>
+
+
+       <div id="reportContent" hidden>
+         <section class="metrics-grid" id="reportMetrics">
+           <article class="metric-card highlight">
+             <div class="metric-title">ยอดขายรวมวันนี้</div>
+             <div class="metric-value" id="reportTotalRevenue">฿0</div>
+             <div class="metric-subtitle" id="reportOrderCount">0 ออเดอร์</div>
+           </article>
+
+
+           <article class="metric-card">
+             <div class="metric-title">เงินสด</div>
+             <div class="metric-value" id="reportCashTotal">฿0</div>
+             <div class="metric-subtitle">รับเงินสดวันนี้</div>
+           </article>
+
+
+           <article class="metric-card">
+             <div class="metric-title">เงินโอน</div>
+             <div class="metric-value" id="reportTransferTotal">฿0</div>
+             <div class="metric-subtitle">โอน / พร้อมเพย์วันนี้</div>
+           </article>
+
+
+           <article class="metric-card">
+             <div class="metric-title">ยอดขายก่อนหักส่วนลด</div>
+             <div class="metric-value" id="reportSubtotal">฿0</div>
+             <div class="metric-subtitle">รวมทุกออเดอร์</div>
+           </article>
+
+
+           <article class="metric-card">
+             <div class="metric-title">ส่วนลดรวม</div>
+             <div class="metric-value" id="reportDiscount">฿0</div>
+             <div class="metric-subtitle">รวมทุกออเดอร์</div>
+           </article>
+         </section>
+
+
+         <section class="panel report-panel">
+           <div class="panel-header">
+             <div>
+               <div class="panel-title">รายการออเดอร์วันนี้ 🧾</div>
+               <div class="panel-subtitle" id="reportOrdersSubtitle">0 ออเดอร์</div>
+             </div>
+           </div>
+
+
+           <div class="stock-table-wrap">
+             <table class="stock-table" id="reportOrdersTable">
+               <thead>
+                 <tr>
+                   <th>เวลา</th>
+                   <th>เลขออเดอร์</th>
+                   <th>วิธีชำระ</th>
+                   <th>รายการ</th>
+                   <th>ส่วนลด</th>
+                   <th>ยอดสุทธิ</th>
+                 </tr>
+               </thead>
+               <tbody id="reportOrdersBody"></tbody>
+             </table>
+           </div>
+         </section>
+
+
+         <section class="panel report-panel">
+           <div class="panel-header">
+             <div>
+               <div class="panel-title">สรุปยอดขายแต่ละเมนู 🍮</div>
+               <div class="panel-subtitle">เมนูที่เปิดขายหรือมีความเคลื่อนไหววันนี้</div>
+             </div>
+           </div>
+
+
+           <div class="stock-table-wrap">
+             <table class="stock-table" id="reportMenuTable">
+               <thead>
+                 <tr>
+                   <th>เมนู</th>
+                   <th>ขายได้</th>
+                   <th>แถม</th>
+                   <th>เสีย</th>
+                   <th>คงเหลือ</th>
+                 </tr>
+               </thead>
+               <tbody id="reportMenuBody"></tbody>
+             </table>
+           </div>
+         </section>
+       </div>
+     </section>
     </main>
   </div>
 
+
   <div class="toast" id="toast">บันทึกออเดอร์สำเร็จ</div>
+
 
   <div class="modal-overlay" id="productModal" hidden>
     <div class="modal-card">
@@ -259,16 +409,19 @@
         <button class="icon-button" id="productModalClose">×</button>
       </div>
 
+
       <div class="modal-body">
         <label class="modal-field">
           <span>รหัสเมนู</span>
           <input type="text" id="productCode" placeholder="เช่น M019" />
         </label>
 
+
         <label class="modal-field">
           <span>ชื่อเมนู</span>
           <input type="text" id="productName" placeholder="เช่น Mango Sticky Rice Cup" />
         </label>
+
 
         <label class="modal-field">
           <span>หมวดหมู่</span>
@@ -276,11 +429,13 @@
           <datalist id="categoryOptions"></datalist>
         </label>
 
+
         <div class="modal-field-row">
           <label class="modal-field">
             <span>ราคาขาย (บาท)</span>
             <input type="number" id="productPrice" min="0" step="0.01" />
           </label>
+
 
           <label class="modal-field">
             <span>ต้นทุน/ชิ้น (บาท)</span>
@@ -288,11 +443,13 @@
           </label>
         </div>
 
+
         <div class="modal-field-row">
           <label class="modal-field">
             <span>จำนวนคงเหลือ</span>
             <input type="number" id="productStock" min="0" step="1" />
           </label>
+
 
           <label class="modal-field">
             <span>จุดสั่งเตรียมขั้นต่ำ</span>
@@ -300,11 +457,13 @@
           </label>
         </div>
 
+
         <label class="modal-field modal-checkbox">
           <input type="checkbox" id="productActive" checked />
           <span>เปิดขายเมนูนี้</span>
         </label>
       </div>
+
 
       <div class="modal-actions">
         <button class="btn btn-outline" id="productModalCancel">ยกเลิก</button>
@@ -313,6 +472,7 @@
     </div>
   </div>
 
+
   <div class="modal-overlay" id="qrModal" hidden>
     <div class="modal-card qr-modal-card">
       <div class="modal-header">
@@ -320,14 +480,18 @@
         <button class="icon-button" id="qrModalClose">×</button>
       </div>
 
+
       <div class="qr-amount-due">
         <span>ยอดที่ต้องชำระ</span>
         <strong id="qrAmountDue">฿0.00</strong>
       </div>
 
-      <img class="qr-image" src="assets/promptpay-qr.jpg" alt="PromptPay QR" />
+
+      <img class="qr-image" id="promptPayQr" data-src="/api/payment-qr" alt="PromptPay QR" />
+
 
       <p class="qr-hint">ให้ลูกค้าสแกนคิวอาร์นี้เพื่อโอนเงิน แล้วกด "ยืนยันว่าโอนแล้ว" เพื่อบันทึกออเดอร์</p>
+
 
       <div class="modal-actions">
         <button class="btn btn-outline" id="qrModalCancel">ยกเลิก</button>
@@ -335,6 +499,7 @@
       </div>
     </div>
   </div>
+
 
   <script src="app.js"></script>
 </body>

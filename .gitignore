@@ -1,12 +1,22 @@
 .claude/
 pos.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vercel/
 
 .env
 .env.*
 !.env.example
+
+init_supabase_local.ps1
+verify_supabase_local.ps1

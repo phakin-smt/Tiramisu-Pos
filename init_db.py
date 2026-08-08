@@ -1,8 +1,4 @@
-import sqlite3
-from pathlib import Path
-
-DB_PATH = Path('pos.db')
-SCHEMA_PATH = Path('schema.sql')
+from database import SQLITE_PATH, execute, init_schema, is_postgres, transaction
 
 # Imported from Menu Master sheet: code, name, category, selling price, COGS/piece,
 # stock_qty (units per recipe batch), stock_min, is_active (1=เปิดขาย, 0=พักขาย)
@@ -33,13 +29,11 @@ customers = [
     ("CUST-0003", "ร้านอาหารต้นกล้า", "083-888-1234", "store@example.com", "store", 1),
 ]
 
-conn = sqlite3.connect(DB_PATH)
-conn.executescript(SCHEMA_PATH.read_text(encoding='utf-8'))
-
-cursor = conn.cursor()
-
-for sku, barcode, name, category, price, cost, stock, stock_min, active, image_url in products:
-    cursor.execute(
+init_schema()
+with transaction() as (_, cursor):
+ for sku, barcode, name, category, price, cost, stock, stock_min, active, image_url in products:
+    execute(
+        cursor,
         """
         INSERT INTO products (sku, barcode, name, category, unit_price, cost_price, stock_qty, stock_min, is_active, image_url)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -49,7 +43,6 @@ for sku, barcode, name, category, price, cost, stock, stock_min, active, image_u
             category = excluded.category,
             unit_price = excluded.unit_price,
             cost_price = excluded.cost_price,
-            stock_qty = excluded.stock_qty,
             stock_min = excluded.stock_min,
             is_active = excluded.is_active,
             image_url = excluded.image_url,
@@ -58,8 +51,9 @@ for sku, barcode, name, category, price, cost, stock, stock_min, active, image_u
         (sku, barcode, name, category, price, cost, stock, stock_min, active, image_url)
     )
 
-for customer_code, full_name, phone, email, customer_type, active in customers:
-    cursor.execute(
+ for customer_code, full_name, phone, email, customer_type, active in customers:
+    execute(
+        cursor,
         """
         INSERT INTO customers (customer_code, full_name, phone, email, customer_type, is_active)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -73,8 +67,5 @@ for customer_code, full_name, phone, email, customer_type, active in customers:
         (customer_code, full_name, phone, email, customer_type, active)
     )
 
-conn.commit()
-conn.close()
-
-print(f"Database created at {DB_PATH}")
+print('Database initialized: {}'.format('PostgreSQL' if is_postgres() else SQLITE_PATH))
 print("Menu products and customers initialized (no demo orders).")
