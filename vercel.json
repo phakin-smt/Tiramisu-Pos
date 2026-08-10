@@ -1,15 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["sin1"],
-  "functions": {
-    "server.py": {
-      "includeFiles": "{index.html,app.js,styles.css}"
-    }
-  },
   "rewrites": [
-    { "source": "/private_data/(.*)", "destination": "/server.py" },
-    { "source": "/assets/promptpay-qr.jpg", "destination": "/server.py" },
-    { "source": "/api/(.*)", "destination": "/server.py" },
-    { "source": "/", "destination": "/server.py" }
+    { "source": "/api/(.*)", "destination": "/server.py" }
   ]
 }

@@ -15,6 +15,7 @@ from database import ROOT, connect_db, execute, init_schema, is_postgres, transa
 from private_data.payment_qr import PAYMENT_QR_BASE64
 
 app = Flask(__name__, static_folder=None)
+PUBLIC_ROOT = ROOT / 'public'
 app.secret_key = os.getenv('SECRET_KEY') or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -271,13 +272,13 @@ def close_day():
  return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,orders=orders,menuSummary=menus)
 
 @app.get('/')
-def index(): return send_from_directory(ROOT,'index.html')
+def index(): return send_from_directory(PUBLIC_ROOT,'index.html')
 
 @app.get('/<path:filename>')
 def static_files(filename):
  if filename.startswith('api/'): return error('ไม่พบ API',404)
  if filename not in {'app.js','styles.css'}: return error('ไม่พบไฟล์',404)
- return send_from_directory(ROOT,filename)
+ return send_from_directory(PUBLIC_ROOT,filename)
 
 init_schema()
 
