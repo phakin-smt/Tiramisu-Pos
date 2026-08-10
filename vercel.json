@@ -1,7 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["sin1"],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/server.py" }
-  ]
+  "regions": ["sin1"]
 }
