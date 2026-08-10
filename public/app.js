@@ -24,6 +24,11 @@ const formatCurrency = (amount) => {
 
 const getProductById = (id) => products.find((p) => p.id === id);
 
+function setCartOpen(open) {
+  document.body.classList.toggle('cart-open', open);
+  document.getElementById('mobileCartBar').setAttribute('aria-expanded', String(open));
+}
+
 function showLogin(message = '') {
   document.getElementById('appShell').hidden = true;
   document.getElementById('loginOverlay').hidden = false;
@@ -369,11 +374,14 @@ function computeTotals() {
 
 function renderTotals() {
   const totals = computeTotals();
+  const itemCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
 
   document.getElementById('subtotalValue').textContent = formatCurrency(totals.subtotal);
   document.getElementById('vatValue').textContent = formatCurrency(totals.vat);
   document.getElementById('grandTotalValue').textContent = formatCurrency(totals.grandTotal);
+  document.getElementById('mobileCartCount').textContent = `${itemCount} ชิ้น`;
+  document.getElementById('mobileCartTotal').textContent = formatCurrency(totals.grandTotal);
 
 
   document.getElementById('promoHint').hidden = !(totals.bundleSets > 0 && !discountManual);
@@ -480,6 +488,7 @@ async function submitOrder() {
 
 
     closeQrModal();
+    setCartOpen(false);
     cart.splice(0, cart.length);
    pendingOrderKey = null;
     resetDiscount();
@@ -526,6 +535,8 @@ async function fetchDailySummary() {
 
 
 function showPage(pageId) {
+  setCartOpen(false);
+  document.getElementById('mobileCartBar').hidden = pageId !== 'sellPage';
   document.querySelectorAll('.page').forEach((page) => {
     page.hidden = page.id !== pageId;
   });
@@ -903,6 +914,12 @@ async function init() {
 
 
   document.getElementById('checkoutBtn').addEventListener('click', checkout);
+  document.getElementById('mobileCartBar').addEventListener('click', () => setCartOpen(true));
+  document.getElementById('closeCartBtn').addEventListener('click', () => setCartOpen(false));
+  document.getElementById('cartBackdrop').addEventListener('click', () => setCartOpen(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setCartOpen(false);
+  });
 
 
   document.getElementById('discountInput').addEventListener('input', () => {

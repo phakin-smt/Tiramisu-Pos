@@ -147,13 +147,14 @@
         </section>
 
 
-        <aside class="cart-panel panel">
+        <aside class="cart-panel panel" id="cartPanel">
           <div class="cart-header">
             <div>
               <div class="panel-title">ออเดอร์ปัจจุบัน</div>
               <div class="panel-subtitle" id="orderIdText">#POS-0001</div>
             </div>
             <button class="icon-button" id="clearCart">ล้าง</button>
+            <button class="icon-button mobile-cart-close" id="closeCartBtn" type="button" aria-label="ปิดตะกร้า">×</button>
           </div>
 
 
@@ -395,8 +396,16 @@
          </section>
        </div>
      </section>
-    </main>
-  </div>
+     </main>
+     <button class="mobile-cart-backdrop" id="cartBackdrop" type="button" aria-label="ปิดตะกร้า"></button>
+     <button class="mobile-cart-bar" id="mobileCartBar" type="button" aria-controls="cartPanel" aria-expanded="false">
+       <span>
+         <strong id="mobileCartCount">0 ชิ้น</strong>
+         <small>แตะเพื่อดูตะกร้า</small>
+       </span>
+       <strong id="mobileCartTotal">฿0.00</strong>
+     </button>
+   </div>
 
 
   <div class="toast" id="toast">บันทึกออเดอร์สำเร็จ</div>
