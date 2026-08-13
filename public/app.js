@@ -466,6 +466,7 @@ function checkout() {
 
 function openQrModal() {
   const totals = computeTotals();
+  setCartOpen(false);
   document.getElementById('qrAmountDue').textContent = formatCurrency(totals.grandTotal);
   const qr = document.getElementById('promptPayQr');
   if (!qr.src) qr.src = qr.dataset.src;

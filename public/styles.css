@@ -96,6 +96,36 @@ body {
   font-weight: 700;
 }
 
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-version {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-pill);
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.12);
+  font-family: var(--font-numeric);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.login-version {
+  width: fit-content;
+  margin: 6px auto 0;
+  border-color: var(--line);
+  color: var(--text-soft);
+  background: var(--panel-soft);
+}
+
 
 .brand-subtitle {
   margin-top: 4px;
@@ -1144,7 +1174,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 400;
   padding: 20px;
 }
 
@@ -1564,6 +1594,7 @@ input {
     padding: max(10px, env(safe-area-inset-top)) 12px 10px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    color: var(--text);
     background: rgba(250, 244, 237, 0.96);
     backdrop-filter: blur(12px);
   }
@@ -1582,31 +1613,56 @@ input {
     font-size: 17px;
   }
 
+  .app-version {
+    border-color: var(--line);
+    color: var(--text-soft);
+    background: var(--panel-soft);
+  }
+
   .brand-subtitle,
   .nav-label {
     display: none;
   }
 
   .nav {
-    display: flex;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
     margin-top: 10px;
     padding-bottom: 2px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: none;
+    overflow: visible;
   }
 
-  .nav::-webkit-scrollbar,
-  .category-tabs::-webkit-scrollbar {
+  .nav-link:not([data-page]) {
     display: none;
   }
 
   .nav-link {
-    flex: 0 0 auto;
-    min-height: 44px;
-    padding: 10px 14px;
-    white-space: nowrap;
+    min-width: 0;
+    min-height: 52px;
+    margin-top: 0;
+    padding: 7px 4px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    border-radius: var(--radius-md);
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+    color: var(--text-soft);
+    opacity: 1;
+  }
+
+  .nav-link.active,
+  .nav-link:hover {
+    color: var(--primary-dark);
+    background: var(--primary-soft);
+  }
+
+  .nav-icon {
+    width: auto;
+    line-height: 1;
   }
 
   .sidebar-card {
