@@ -23,6 +23,10 @@ const formatCurrency = (amount) => {
 
 
 const getProductById = (id) => products.find((p) => p.id === id);
+const cartQtyFor = (id) => {
+  const item = cart.find((cartItem) => cartItem.productId === id);
+  return item ? item.qty : 0;
+};
 
 function setCartOpen(open) {
   document.body.classList.toggle('cart-open', open);
@@ -210,6 +214,7 @@ function renderProductGrid() {
     const card = document.createElement('article');
     card.className = 'product-card';
     card.dataset.category = product.category;
+    card.dataset.productId = product.id;
 
 
     card.innerHTML = `
@@ -235,10 +240,34 @@ function renderProductGrid() {
 
 
   document.getElementById('catalogSummary').textContent = `${products.length} รายการ`;
+  syncProductCardAvailability();
+}
+
+
+function syncProductCardAvailability() {
+  document.querySelectorAll('.product-card').forEach((card) => {
+    const product = getProductById(Number(card.dataset.productId));
+    if (!product) return;
+
+    const remaining = product.stock - cartQtyFor(product.id);
+    const addButton = card.querySelector('.add-button');
+    if (!addButton) return;
+
+    addButton.disabled = remaining <= 0;
+    addButton.textContent = remaining <= 0
+      ? (product.stock <= 0 ? 'หมดสต็อก' : 'ครบสต็อกแล้ว')
+      : 'เพิ่มลงตะกร้า';
+  });
 }
 
 
 function addToCart(productId) {
+  const product = getProductById(productId);
+  if (!product || cartQtyFor(productId) + 1 > product.stock) {
+    showToast('สินค้าคงเหลือไม่พอ');
+    return;
+  }
+
   const existing = cart.find((item) => item.productId === productId);
 
 
@@ -266,6 +295,14 @@ function removeFromCart(productId) {
 function updateCartQty(productId, delta) {
   const item = cart.find((cartItem) => cartItem.productId === productId);
   if (!item) return;
+
+  if (delta > 0) {
+    const product = getProductById(productId);
+    if (product && item.qty + delta > product.stock) {
+      showToast('สินค้าคงเหลือไม่พอ');
+      return;
+    }
+  }
 
 
   item.qty += delta;
@@ -317,11 +354,7 @@ function renderCart() {
 
       const remove = document.createElement('button');
       remove.textContent = '×';
-      remove.style.border = 'none';
-      remove.style.background = 'transparent';
-      remove.style.color = '#a64a38';
-      remove.style.fontSize = '20px';
-      remove.style.cursor = 'pointer';
+      remove.className = 'cart-remove-btn';
       remove.addEventListener('click', () => removeFromCart(product.id));
 
 
@@ -329,7 +362,9 @@ function renderCart() {
 
 
       cartRow.querySelector('.qty-decrease').addEventListener('click', () => updateCartQty(product.id, -1));
-      cartRow.querySelector('.qty-increase').addEventListener('click', () => updateCartQty(product.id, 1));
+      const increaseBtn = cartRow.querySelector('.qty-increase');
+      increaseBtn.disabled = item.qty >= product.stock;
+      increaseBtn.addEventListener('click', () => updateCartQty(product.id, 1));
 
 
       cartItems.appendChild(cartRow);
@@ -337,6 +372,7 @@ function renderCart() {
   }
 
 
+  syncProductCardAvailability();
   renderTotals();
 }
 
@@ -549,6 +585,11 @@ function showPage(pageId) {
 
   if (pageId === 'stockPage') {
     fetchStockSummary();
+    fetchStockPlans();
+  }
+
+  if (pageId === 'ordersPage') {
+    fetchOrders(document.getElementById('ordersDateInput').value);
   }
 }
 
@@ -572,6 +613,7 @@ async function fetchStockSummary() {
     stockItems = summary.items || [];
     renderStockTable(stockItems);
     populateCategoryOptions(stockItems);
+    populatePlanProductSelect();
   } catch (error) {
     console.error(error);
     showToast('ไม่สามารถโหลดข้อมูลสต็อกได้');
@@ -668,6 +710,99 @@ function renderStockTable(items) {
   });
 }
 
+
+let stockPlans = [];
+
+function populatePlanProductSelect() {
+  const select = document.getElementById('planProductSelect');
+  select.innerHTML = stockItems.map((item) => `<option value="${item.productId}">${item.name}</option>`).join('');
+}
+
+async function fetchStockPlans() {
+  try {
+    const response = await apiFetch('/api/stock/plans');
+    if (!response.ok) {
+      throw new Error('Unable to fetch stock plans');
+    }
+
+    stockPlans = await response.json();
+    renderStockPlans();
+  } catch (error) {
+    console.error(error);
+    showToast('ไม่สามารถโหลดแผนเตรียมสต็อกได้');
+  }
+}
+
+function renderStockPlans() {
+  const tbody = document.getElementById('stockPlanTableBody');
+  tbody.innerHTML = '';
+
+  if (stockPlans.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="report-items-cell">ยังไม่มีแผนเตรียมสต็อกล่วงหน้า</td></tr>`;
+    return;
+  }
+
+  stockPlans.forEach((plan) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${plan.date}</td>
+      <td>${plan.name}</td>
+      <td class="stock-figure">${plan.quantity}</td>
+      <td><button class="stock-manage-btn delete">ยกเลิก</button></td>
+    `;
+    row.querySelector('.delete').addEventListener('click', () => cancelStockPlan(plan.id));
+    tbody.appendChild(row);
+  });
+}
+
+async function addStockPlan() {
+  const productId = Number(document.getElementById('planProductSelect').value);
+  const planDate = document.getElementById('planDateInput').value;
+  const quantity = Number(document.getElementById('planQtyInput').value);
+
+  if (!productId || !planDate || !quantity || quantity <= 0) {
+    showToast('กรอกเมนู วันที่ และจำนวนให้ครบ');
+    return;
+  }
+
+  try {
+    const response = await apiFetch('/api/stock/plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId, date: planDate, quantity })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'บันทึกแผนไม่สำเร็จ');
+    }
+
+    showToast('บันทึกแผนเตรียมสต็อกแล้ว');
+    document.getElementById('planQtyInput').value = 1;
+    await Promise.all([fetchStockPlans(), fetchStockSummary(), fetchProducts()]);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'บันทึกแผนไม่สำเร็จ');
+  }
+}
+
+async function cancelStockPlan(planId) {
+  try {
+    const response = await apiFetch(`/api/stock/plans/${planId}`, { method: 'DELETE' });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'ยกเลิกแผนไม่สำเร็จ');
+    }
+
+    showToast('ยกเลิกแผนแล้ว');
+    await fetchStockPlans();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'ยกเลิกแผนไม่สำเร็จ');
+  }
+}
 
 function openProductModal(item) {
   editingProductId = item ? item.productId : null;
@@ -822,7 +957,7 @@ async function closeDay() {
 
 
    const report = await response.json();
-   renderCloseDayReport(report);
+   renderCloseDayReport(report, 'report');
 
 
    document.getElementById('reportEmptyState').hidden = true;
@@ -837,17 +972,46 @@ async function closeDay() {
 }
 
 
-function renderCloseDayReport(report) {
- document.getElementById('reportTotalRevenue').textContent = formatCurrency(report.totalRevenue);
- document.getElementById('reportOrderCount').textContent = `${report.orderCount} ออเดอร์`;
- document.getElementById('reportCashTotal').textContent = formatCurrency(report.cashTotal);
- document.getElementById('reportTransferTotal').textContent = formatCurrency(report.transferTotal);
- document.getElementById('reportSubtotal').textContent = formatCurrency(report.subtotalAll);
- document.getElementById('reportDiscount').textContent = formatCurrency(report.discountAll);
- document.getElementById('reportOrdersSubtitle').textContent = `${report.orderCount} ออเดอร์`;
+async function openCloseDayModal() {
+ const closeDaySellBtn = document.getElementById('closeDaySellBtn');
+ closeDaySellBtn.disabled = true;
+
+ try {
+   const response = await apiFetch('/api/reports/close-day');
+   if (!response.ok) {
+     throw new Error('ไม่สามารถสรุปยอดขายได้');
+   }
+
+   const report = await response.json();
+   renderCloseDayReport(report, 'modalReport');
+   document.getElementById('closeDayModal').hidden = false;
+ } catch (error) {
+   console.error(error);
+   showToast(error.message || 'ไม่สามารถสรุปยอดขายได้');
+ } finally {
+   closeDaySellBtn.disabled = false;
+ }
+}
 
 
- const ordersBody = document.getElementById('reportOrdersBody');
+function closeCloseDayModal() {
+ document.getElementById('closeDayModal').hidden = true;
+}
+
+
+function renderCloseDayReport(report, prefix) {
+ document.getElementById(`${prefix}TotalRevenue`).textContent = formatCurrency(report.totalRevenue);
+ document.getElementById(`${prefix}OrderCount`).textContent = `${report.orderCount} ออเดอร์`;
+ document.getElementById(`${prefix}CashTotal`).textContent = formatCurrency(report.cashTotal);
+ document.getElementById(`${prefix}TransferTotal`).textContent = formatCurrency(report.transferTotal);
+ document.getElementById(`${prefix}Subtotal`).textContent = formatCurrency(report.subtotalAll);
+ document.getElementById(`${prefix}Discount`).textContent = formatCurrency(report.discountAll);
+ document.getElementById(`${prefix}CostTotal`).textContent = formatCurrency(report.costTotal);
+ document.getElementById(`${prefix}NetProfit`).textContent = formatCurrency(report.netProfit);
+ document.getElementById(`${prefix}OrdersSubtitle`).textContent = `${report.orderCount} ออเดอร์`;
+
+
+ const ordersBody = document.getElementById(`${prefix}OrdersBody`);
  ordersBody.innerHTML = '';
 
 
@@ -870,7 +1034,7 @@ function renderCloseDayReport(report) {
  }
 
 
- const menuBody = document.getElementById('reportMenuBody');
+ const menuBody = document.getElementById(`${prefix}MenuBody`);
  menuBody.innerHTML = '';
 
 
@@ -893,6 +1057,92 @@ function renderCloseDayReport(report) {
    `;
    menuBody.appendChild(row);
  });
+}
+
+
+const ORDER_STATUS_LABELS = {
+ completed: 'เสร็จสิ้น',
+ cancelled: 'ยกเลิกแล้ว'
+};
+
+
+let ordersList = [];
+
+
+async function fetchOrders(dateStr) {
+  try {
+    const response = await apiFetch(`/api/orders?date=${dateStr}`);
+    if (!response.ok) {
+      throw new Error('Unable to fetch orders');
+    }
+
+    const data = await response.json();
+    ordersList = data.orders || [];
+    renderOrdersTable();
+  } catch (error) {
+    console.error(error);
+    showToast('ไม่สามารถโหลดรายการออเดอร์ได้');
+  }
+}
+
+
+function renderOrdersTable() {
+  document.getElementById('ordersSubtitle').textContent = `${ordersList.length} ออเดอร์`;
+
+  const tbody = document.getElementById('ordersTableBody');
+  tbody.innerHTML = '';
+
+  if (ordersList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="report-items-cell">ยังไม่มีออเดอร์ในวันนี้</td></tr>`;
+    return;
+  }
+
+  ordersList.forEach((order) => {
+    const itemsText = order.items.map((item) => `${item.name} x${item.qty}`).join('<br />');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${formatTimeOnly(order.time)}</td>
+      <td>#${order.orderNumber}</td>
+      <td>${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</td>
+      <td class="report-items-cell">${itemsText}</td>
+      <td class="stock-figure">${formatCurrency(order.total)}</td>
+      <td><span class="status-badge ${order.status === 'cancelled' ? 'cancelled' : 'completed'}">${ORDER_STATUS_LABELS[order.status] || order.status}</span></td>
+      <td></td>
+    `;
+
+    const actionCell = row.lastElementChild;
+    if (order.status === 'completed') {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'stock-manage-btn delete';
+      cancelBtn.textContent = 'ยกเลิก';
+      cancelBtn.addEventListener('click', () => cancelOrder(order.id));
+      actionCell.appendChild(cancelBtn);
+    }
+
+    tbody.appendChild(row);
+  });
+}
+
+
+async function cancelOrder(orderId) {
+  if (!confirm('ต้องการยกเลิกออเดอร์นี้ใช่หรือไม่? สต็อกที่ตัดไปจะถูกคืนอัตโนมัติ')) {
+    return;
+  }
+
+  try {
+    const response = await apiFetch(`/api/orders/${orderId}/cancel`, { method: 'POST' });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'ยกเลิกออเดอร์ไม่สำเร็จ');
+    }
+
+    showToast('ยกเลิกออเดอร์แล้ว');
+    await Promise.all([fetchOrders(document.getElementById('ordersDateInput').value), fetchProducts()]);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'ยกเลิกออเดอร์ไม่สำเร็จ');
+  }
 }
 
 
@@ -957,6 +1207,22 @@ async function init() {
  document.getElementById('backToSellFromReportBtn').addEventListener('click', () => showPage('sellPage'));
  document.getElementById('closeDayBtn').addEventListener('click', closeDay);
 
+
+  document.getElementById('planDateInput').min = new Date().toISOString().slice(0, 10);
+  document.getElementById('planDateInput').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('addStockPlanBtn').addEventListener('click', addStockPlan);
+
+  document.getElementById('ordersDateInput').max = new Date().toISOString().slice(0, 10);
+  document.getElementById('ordersDateInput').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('ordersDateInput').addEventListener('change', (event) => {
+    fetchOrders(event.target.value);
+  });
+
+  document.getElementById('closeDaySellBtn').addEventListener('click', openCloseDayModal);
+  document.getElementById('closeDayModalClose').addEventListener('click', closeCloseDayModal);
+  document.getElementById('closeDayModal').addEventListener('click', (event) => {
+    if (event.target.id === 'closeDayModal') closeCloseDayModal();
+  });
 
   document.getElementById('addMenuBtn').addEventListener('click', () => openProductModal(null));
   document.getElementById('productModalSave').addEventListener('click', saveProduct);

@@ -81,7 +81,20 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+CREATE TABLE IF NOT EXISTS stock_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    plan_date TEXT NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'cancelled')),
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    applied_at TEXT,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_stock_plans_date ON stock_plans(plan_date);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);

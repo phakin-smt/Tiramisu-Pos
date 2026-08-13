@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sweetie POS</title>
+  <title>Bellies Buddy</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧁</text></svg>" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -11,7 +11,7 @@
   <div class="login-overlay" id="loginOverlay">
     <form class="login-card" id="loginForm">
       <div class="brand-icon">🧁</div>
-      <h1>Sweetie POS</h1>
+      <h1>Bellies Buddy</h1>
       <p>Enter your PIN to continue</p>
       <label for="pinInput">PIN</label>
       <input id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" required />
@@ -25,7 +25,7 @@
       <div class="brand">
         <div class="brand-icon">🧁</div>
         <div>
-          <div class="brand-name">Sweetie POS</div>
+          <div class="brand-name">Bellies Buddy</div>
           <div class="brand-subtitle">ระบบขายของหวาน</div>
         </div>
       </div>
@@ -41,7 +41,7 @@
           <span class="nav-icon">⌘</span>
           <span>จัดการสต็อก</span>
         </a>
-        <a href="#" class="nav-link">
+        <a href="#" class="nav-link" data-page="ordersPage">
           <span class="nav-icon">◫</span>
           <span>ออเดอร์</span>
         </a>
@@ -79,7 +79,7 @@
         </div>
         <div class="top-actions">
           <button class="btn btn-light" id="goToStockBtn">📥 จัดการสต็อก</button>
-          <button class="btn btn-primary">+ สร้างออเดอร์</button>
+          <button class="btn btn-primary" id="closeDaySellBtn">🔒 ปิดการขายวันนี้</button>
         </div>
       </header>
 
@@ -284,6 +284,45 @@
             </table>
           </div>
         </section>
+
+        <section class="panel stock-plan-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">วางแผนเตรียมสต็อกล่วงหน้า 🗓️</div>
+              <div class="panel-subtitle">ตั้งจำนวนที่จะเตรียมขายในวันข้างหน้า ระบบจะเติมสต็อกให้อัตโนมัติเมื่อถึงวันที่ตั้งไว้</div>
+            </div>
+          </div>
+
+          <div class="stock-plan-form">
+            <label class="modal-field">
+              <span>เมนู</span>
+              <select id="planProductSelect"></select>
+            </label>
+            <label class="modal-field">
+              <span>วันที่เตรียม</span>
+              <input type="date" id="planDateInput" />
+            </label>
+            <label class="modal-field">
+              <span>จำนวน</span>
+              <input type="number" id="planQtyInput" min="1" step="1" value="1" />
+            </label>
+            <button class="btn btn-primary" id="addStockPlanBtn">+ เพิ่มแผน</button>
+          </div>
+
+          <div class="stock-table-wrap">
+            <table class="stock-table" id="stockPlanTable">
+              <thead>
+                <tr>
+                  <th>วันที่เตรียม</th>
+                  <th>เมนู</th>
+                  <th>จำนวน</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="stockPlanTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
 
@@ -340,6 +379,18 @@
              <div class="metric-value" id="reportDiscount">฿0</div>
              <div class="metric-subtitle">รวมทุกออเดอร์</div>
            </article>
+
+           <article class="metric-card">
+             <div class="metric-title">ต้นทุนรวม</div>
+             <div class="metric-value" id="reportCostTotal">฿0</div>
+             <div class="metric-subtitle">ต้นทุน/ชิ้น x จำนวนที่ขาย</div>
+           </article>
+
+           <article class="metric-card highlight">
+             <div class="metric-title">กำไรขั้นต้น</div>
+             <div class="metric-value" id="reportNetProfit">฿0</div>
+             <div class="metric-subtitle">ยอดขาย − ต้นทุนรวม</div>
+           </article>
          </section>
 
 
@@ -395,6 +446,47 @@
            </div>
          </section>
        </div>
+     </section>
+
+     <section id="ordersPage" class="page" hidden>
+       <header class="topbar">
+         <div>
+           <div class="page-kicker">รายการออเดอร์ 🧾</div>
+           <h1>ออเดอร์</h1>
+         </div>
+         <div class="top-actions">
+           <label class="date-filter" for="ordersDateInput">
+             <span>วันที่</span>
+             <input type="date" id="ordersDateInput" />
+           </label>
+         </div>
+       </header>
+
+       <section class="panel report-panel">
+         <div class="panel-header">
+           <div>
+             <div class="panel-title">รายการออเดอร์ 🧾</div>
+             <div class="panel-subtitle" id="ordersSubtitle">0 ออเดอร์</div>
+           </div>
+         </div>
+
+         <div class="stock-table-wrap">
+           <table class="stock-table" id="ordersTable">
+             <thead>
+               <tr>
+                 <th>เวลา</th>
+                 <th>เลขออเดอร์</th>
+                 <th>วิธีชำระ</th>
+                 <th>รายการ</th>
+                 <th>ยอดสุทธิ</th>
+                 <th>สถานะ</th>
+                 <th>จัดการ</th>
+               </tr>
+             </thead>
+             <tbody id="ordersTableBody"></tbody>
+           </table>
+         </div>
+       </section>
      </section>
      </main>
      <button class="mobile-cart-backdrop" id="cartBackdrop" type="button" aria-label="ปิดตะกร้า"></button>
@@ -505,6 +597,111 @@
       <div class="modal-actions">
         <button class="btn btn-outline" id="qrModalCancel">ยกเลิก</button>
         <button class="btn btn-primary" id="qrModalConfirm">✓ ยืนยันว่าโอนแล้ว</button>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="modal-overlay" id="closeDayModal" hidden>
+    <div class="modal-card close-day-modal-card">
+      <div class="modal-header">
+        <h2>สรุปยอดขายวันนี้</h2>
+        <button class="icon-button" id="closeDayModalClose">×</button>
+      </div>
+
+      <div class="modal-body close-day-modal-body">
+        <section class="metrics-grid" id="modalReportMetrics">
+          <article class="metric-card highlight">
+            <div class="metric-title">ยอดขายรวมวันนี้</div>
+            <div class="metric-value" id="modalReportTotalRevenue">฿0</div>
+            <div class="metric-subtitle" id="modalReportOrderCount">0 ออเดอร์</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-title">เงินสด</div>
+            <div class="metric-value" id="modalReportCashTotal">฿0</div>
+            <div class="metric-subtitle">รับเงินสดวันนี้</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-title">เงินโอน</div>
+            <div class="metric-value" id="modalReportTransferTotal">฿0</div>
+            <div class="metric-subtitle">โอน / พร้อมเพย์วันนี้</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-title">ยอดขายก่อนหักส่วนลด</div>
+            <div class="metric-value" id="modalReportSubtotal">฿0</div>
+            <div class="metric-subtitle">รวมทุกออเดอร์</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-title">ส่วนลดรวม</div>
+            <div class="metric-value" id="modalReportDiscount">฿0</div>
+            <div class="metric-subtitle">รวมทุกออเดอร์</div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-title">ต้นทุนรวม</div>
+            <div class="metric-value" id="modalReportCostTotal">฿0</div>
+            <div class="metric-subtitle">ต้นทุน/ชิ้น x จำนวนที่ขาย</div>
+          </article>
+
+          <article class="metric-card highlight">
+            <div class="metric-title">กำไรขั้นต้น</div>
+            <div class="metric-value" id="modalReportNetProfit">฿0</div>
+            <div class="metric-subtitle">ยอดขาย − ต้นทุนรวม</div>
+          </article>
+        </section>
+
+        <section class="panel report-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">รายการออเดอร์วันนี้ 🧾</div>
+              <div class="panel-subtitle" id="modalReportOrdersSubtitle">0 ออเดอร์</div>
+            </div>
+          </div>
+
+          <div class="stock-table-wrap">
+            <table class="stock-table" id="modalReportOrdersTable">
+              <thead>
+                <tr>
+                  <th>เวลา</th>
+                  <th>เลขออเดอร์</th>
+                  <th>วิธีชำระ</th>
+                  <th>รายการ</th>
+                  <th>ส่วนลด</th>
+                  <th>ยอดสุทธิ</th>
+                </tr>
+              </thead>
+              <tbody id="modalReportOrdersBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel report-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">สรุปยอดขายแต่ละเมนู 🍮</div>
+              <div class="panel-subtitle">เมนูที่เปิดขายหรือมีความเคลื่อนไหววันนี้</div>
+            </div>
+          </div>
+
+          <div class="stock-table-wrap">
+            <table class="stock-table" id="modalReportMenuTable">
+              <thead>
+                <tr>
+                  <th>เมนู</th>
+                  <th>ขายได้</th>
+                  <th>แถม</th>
+                  <th>เสีย</th>
+                  <th>คงเหลือ</th>
+                </tr>
+              </thead>
+              <tbody id="modalReportMenuBody"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   </div>
