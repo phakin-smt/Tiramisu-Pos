@@ -1,6 +1,5 @@
 import os
 import uuid
-import base64
 import hmac
 import secrets
 import threading
@@ -11,8 +10,10 @@ from datetime import timedelta
 from decimal import Decimal
 
 from flask import Flask, jsonify, request, send_file, send_from_directory, session
+import qrcode
+from qrcode.constants import ERROR_CORRECT_M
 from database import ROOT, connect_db, execute, init_schema, is_postgres, transaction
-from private_data.payment_qr import PAYMENT_QR_BASE64
+from promptpay_qr import PromptPayError, generate_promptpay_payload
 
 app = Flask(__name__, static_folder=None)
 PUBLIC_ROOT = ROOT / 'public'
@@ -95,12 +96,26 @@ def logout():
 
 @app.get('/api/payment-qr')
 def payment_qr():
+ promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
+ if not promptpay_id:
+  return error('ระบบพร้อมเพย์ยังไม่ได้ตั้งค่า',503)
+ try:
+  payload=generate_promptpay_payload(promptpay_id,request.args.get('amount'))
+ except PromptPayError:
+  return error('ยอดชำระหรือเลขพร้อมเพย์ไม่ถูกต้อง')
+ qr=qrcode.QRCode(version=None,error_correction=ERROR_CORRECT_M,box_size=10,border=4)
+ qr.add_data(payload)
+ qr.make(fit=True)
+ image=qr.make_image(fill_color='black',back_color='white')
+ output=BytesIO()
+ image.save(output,format='PNG')
+ output.seek(0)
  response=send_file(
-  BytesIO(base64.b64decode(PAYMENT_QR_BASE64,validate=True)),
-  mimetype='image/jpeg',
-  conditional=True,
+  output,
+  mimetype='image/png',
  )
  response.headers['Cache-Control']='private, no-store'
+ response.headers['X-Content-Type-Options']='nosniff'
  return response
 
 def rows(query,params=()):

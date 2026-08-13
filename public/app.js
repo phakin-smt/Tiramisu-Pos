@@ -469,7 +469,24 @@ function openQrModal() {
   setCartOpen(false);
   document.getElementById('qrAmountDue').textContent = formatCurrency(totals.grandTotal);
   const qr = document.getElementById('promptPayQr');
-  if (!qr.src) qr.src = qr.dataset.src;
+  const status = document.getElementById('qrStatus');
+  const confirm = document.getElementById('qrModalConfirm');
+  qr.hidden = true;
+  confirm.disabled = true;
+  status.textContent = 'กำลังสร้าง QR ตามยอด...';
+  status.classList.remove('is-error');
+  qr.onload = () => {
+    qr.hidden = false;
+    confirm.disabled = false;
+    status.textContent = 'QR นี้ใส่ยอดให้แล้ว กรุณาตรวจชื่อผู้รับก่อนโอน';
+  };
+  qr.onerror = () => {
+    qr.hidden = true;
+    confirm.disabled = true;
+    status.textContent = 'สร้าง QR ไม่สำเร็จ กรุณาตรวจการตั้งค่าพร้อมเพย์';
+    status.classList.add('is-error');
+  };
+  qr.src = `/api/payment-qr?amount=${encodeURIComponent(totals.grandTotal.toFixed(2))}&t=${Date.now()}`;
   document.getElementById('qrModal').hidden = false;
 }
 
