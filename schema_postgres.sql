@@ -34,9 +34,16 @@ CREATE TABLE IF NOT EXISTS stock_movements (
  quantity INTEGER NOT NULL CHECK (quantity <> 0), reference_type TEXT, reference_id TEXT, note TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS stock_plans (
+ id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES products(id),
+ plan_date DATE NOT NULL, quantity INTEGER NOT NULL CHECK (quantity > 0),
+ status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','applied','cancelled')),
+ note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, applied_at TIMESTAMPTZ
+);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_plans_date ON stock_plans(plan_date);

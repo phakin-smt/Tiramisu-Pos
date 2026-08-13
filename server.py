@@ -108,6 +108,17 @@ def rows(query,params=()):
  try: return execute(connection.cursor(),query,params).fetchall()
  finally: connection.close()
 
+def apply_due_stock_plans(cursor,today):
+ due=execute(cursor,"SELECT id,product_id,quantity FROM stock_plans WHERE status='pending' AND plan_date<=?",(today,)).fetchall()
+ for plan in due:
+  execute(cursor,'UPDATE products SET stock_qty=stock_qty+?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(plan['quantity'],plan['product_id']))
+  execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_in',?,'daily_prep',?,'แผนเตรียมล่วงหน้า')",(plan['product_id'],plan['quantity'],str(plan['id'])))
+  execute(cursor,"UPDATE stock_plans SET status='applied',applied_at=CURRENT_TIMESTAMP WHERE id=?",(plan['id'],))
+
+def ensure_daily_plans_applied():
+ with transaction() as (_,cursor):
+  apply_due_stock_plans(cursor,date.today().isoformat())
+
 def movement_summary(connection,report_date):
  result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE date(created_at)=? GROUP BY product_id,movement_type,reference_type',(report_date,)).fetchall()
  summary={}
@@ -133,6 +144,7 @@ def health():
 
 @app.get('/api/products')
 def products():
+ ensure_daily_plans_applied()
  result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE is_active=1 ORDER BY category,name')
  return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON)} for r in result])
 
@@ -216,6 +228,34 @@ def create_order():
   execute(cursor,'INSERT INTO payments (order_id,payment_method,paid_amount,change_amount,payment_reference) VALUES (?,?,?,0,?)',(order_id,payment,total,order_number))
  return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment)
 
+@app.post('/api/orders/<int:order_id>/cancel')
+def cancel_order(order_id):
+ with transaction() as (_,cursor):
+  order=execute(cursor,'SELECT id,status,order_number FROM orders WHERE id=?',(order_id,)).fetchone()
+  if not order: return error('ไม่พบออเดอร์นี้',404)
+  if order['status']!='completed': return error('ออเดอร์นี้ถูกยกเลิกไปแล้ว')
+  items=execute(cursor,'SELECT product_id,quantity FROM order_items WHERE order_id=?',(order_id,)).fetchall()
+  for item in items:
+   execute(cursor,'UPDATE products SET stock_qty=stock_qty+?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(item['quantity'],item['product_id']))
+   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'sale',?,'order',?,'ยกเลิกออเดอร์')",(item['product_id'],item['quantity'],order['order_number']))
+  execute(cursor,"UPDATE orders SET status='cancelled' WHERE id=?",(order_id,))
+ return jsonify(id=order_id,cancelled=True)
+
+@app.get('/api/orders')
+def list_orders():
+ report_date=request.args.get('date') or date.today().isoformat()
+ if report_date>date.today().isoformat(): return error('เลือกวันที่ไม่เกินวันนี้')
+ connection=connect_db()
+ try:
+  cursor=connection.cursor()
+  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total,status FROM orders WHERE order_date=? ORDER BY created_at',(report_date,)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? ORDER BY oi.id',(report_date,)).fetchall()
+ finally: connection.close()
+ grouped={}
+ for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
+ orders=[{'id':r['id'],'orderNumber':r['order_number'],'time':r['created_at'].isoformat() if hasattr(r['created_at'],'isoformat') else r['created_at'],'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'status':r['status'],'items':grouped.get(r['id'],[])} for r in order_rows]
+ return jsonify(date=report_date,orders=orders)
+
 @app.post('/api/stock/adjust')
 def adjust_stock():
  payload=request.get_json(silent=True) or {}; reason=payload.get('reason')
@@ -253,8 +293,41 @@ def stock_data(report_date):
 
 @app.get('/api/stock/daily-summary')
 def stock_summary():
+ ensure_daily_plans_applied()
  report_date=request.args.get('date') or date.today().isoformat()
  return jsonify(date=report_date,items=stock_data(report_date))
+
+@app.get('/api/stock/plans')
+def stock_plans():
+ result=rows("SELECT sp.id,sp.product_id,sp.plan_date,sp.quantity,p.name,p.sku FROM stock_plans sp JOIN products p ON p.id=sp.product_id WHERE sp.status='pending' ORDER BY sp.plan_date,p.name")
+ return jsonify([{'id':r['id'],'productId':r['product_id'],'date':r['plan_date'],'quantity':r['quantity'],'name':r['name'],'code':r['sku']} for r in result])
+
+@app.post('/api/stock/plans')
+def create_stock_plan():
+ payload=request.get_json(silent=True) or {}
+ try: quantity=int(payload.get('quantity',0))
+ except (TypeError,ValueError): return error('จำนวนไม่ถูกต้อง')
+ if quantity<=0: return error('จำนวนต้องมากกว่า 0')
+ plan_date=str(payload.get('date','')).strip()
+ today=date.today().isoformat()
+ if not plan_date or plan_date<today: return error('เลือกวันที่ตั้งแต่วันนี้เป็นต้นไป')
+ with transaction() as (_,cursor):
+  product=execute(cursor,'SELECT id FROM products WHERE id=?',(payload.get('productId'),)).fetchone()
+  if not product: return error('ไม่พบสินค้า',404)
+  query='INSERT INTO stock_plans (product_id,plan_date,quantity,note) VALUES (?,?,?,?)'+(' RETURNING id' if is_postgres() else '')
+  result=execute(cursor,query,(product['id'],plan_date,quantity,payload.get('note')))
+  plan_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
+  apply_due_stock_plans(cursor,today)
+ return jsonify(id=plan_id)
+
+@app.delete('/api/stock/plans/<int:plan_id>')
+def cancel_stock_plan(plan_id):
+ with transaction() as (_,cursor):
+  plan=execute(cursor,'SELECT status FROM stock_plans WHERE id=?',(plan_id,)).fetchone()
+  if not plan: return error('ไม่พบแผนนี้',404)
+  if plan['status']!='pending': return error('แผนนี้ถูกเติมสต็อกไปแล้ว ยกเลิกไม่ได้')
+  execute(cursor,"UPDATE stock_plans SET status='cancelled' WHERE id=?",(plan_id,))
+ return jsonify(id=plan_id,cancelled=True)
 
 @app.get('/api/reports/close-day')
 def close_day():
@@ -263,13 +336,15 @@ def close_day():
   cursor=connection.cursor()
   order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE order_date=? AND status=\'completed\' ORDER BY created_at',(report_date,)).fetchall()
   item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(report_date,)).fetchall()
+  cost_rows=execute(cursor,'SELECT oi.quantity,p.cost_price FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.order_date=? AND o.status=\'completed\'',(report_date,)).fetchall()
  finally: connection.close()
  grouped={}
  for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
  orders=[{'orderNumber':r['order_number'],'time':r['created_at'].isoformat() if hasattr(r['created_at'],'isoformat') else r['created_at'],'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
  cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
+ cost_total=sum(r['quantity']*number(r['cost_price'] or 0) for r in cost_rows)
  menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
- return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,orders=orders,menuSummary=menus)
+ return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,costTotal=cost_total,netProfit=(cash+transfer)-cost_total,orders=orders,menuSummary=menus)
 
 @app.get('/')
 def index(): return send_from_directory(PUBLIC_ROOT,'index.html')
