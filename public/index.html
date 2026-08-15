@@ -69,7 +69,10 @@
         <div class="date-row">
           <span id="dateText">08/08/2026</span>
         </div>
-        <button class="btn btn-light logout-button" id="logoutButton" type="button">Log out</button>
+        <button class="btn logout-button" id="logoutButton" type="button">
+          <span class="logout-icon" aria-hidden="true">↪</span>
+          <span>ออกจากระบบ</span>
+        </button>
       </div>
     </aside>
 
@@ -82,13 +85,14 @@
           <h1>วันนี้ขายอะไรดี 🍰</h1>
         </div>
         <div class="top-actions">
+          <button class="btn btn-light metrics-toggle" id="toggleSalesMetrics" type="button" aria-expanded="true" aria-controls="salesMetrics">▴ ซ่อนสรุป</button>
           <button class="btn btn-light" id="goToStockBtn">📥 จัดการสต็อก</button>
           <button class="btn btn-primary" id="closeDaySellBtn">🔒 ปิดการขายวันนี้</button>
         </div>
       </header>
 
 
-      <section class="metrics-grid">
+      <section class="metrics-grid sales-metrics" id="salesMetrics">
         <article class="metric-card">
           <div class="metric-title">ยอดขายวันนี้</div>
           <div class="metric-value" id="todaySales">฿0</div>
@@ -201,16 +205,28 @@
 
           <div class="payment-row">
             <label class="form-label">วิธีชำระ</label>
-            <select id="paymentMethod">
-              <option value="cash">เงินสด</option>
-              <option value="transfer">โอน / พร้อมเพย์</option>
-            </select>
+            <input type="hidden" id="paymentMethod" value="cash" />
+            <div class="payment-options" role="group" aria-label="เลือกวิธีชำระเงิน">
+              <button class="payment-option is-active" type="button" data-payment-method="cash" aria-pressed="true">
+                <span class="payment-option-icon" aria-hidden="true">฿</span>
+                <span class="payment-option-text">
+                  <strong>เงินสด</strong>
+                  <small>รับชำระหน้าเคาน์เตอร์</small>
+                </span>
+              </button>
+              <button class="payment-option" type="button" data-payment-method="transfer" aria-pressed="false">
+                <span class="payment-option-icon payment-option-icon-qr" aria-hidden="true">▦</span>
+                <span class="payment-option-text">
+                  <strong>QR พร้อมเพย์</strong>
+                  <small>สแกนเพื่อโอนเงิน</small>
+                </span>
+              </button>
+            </div>
           </div>
 
 
           <div class="cart-actions">
             <button class="btn btn-outline" id="holdOrder">พักออเดอร์</button>
-            <button class="btn btn-primary btn-wide" id="checkoutBtn">ชำระเงิน</button>
           </div>
         </aside>
       </section>

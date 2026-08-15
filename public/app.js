@@ -12,6 +12,24 @@ const BUNDLE_UNIT_PRICE = 69;
 const BUNDLE_QTY = 3;
 const BUNDLE_PRICE = 200;
 const BUNDLE_DISCOUNT_PER_SET = BUNDLE_UNIT_PRICE * BUNDLE_QTY - BUNDLE_PRICE;
+const APP_TIME_ZONE = 'Asia/Bangkok';
+
+
+function bangkokDateParts() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+
+function bangkokDateISO() {
+  const { year, month, day } = bangkokDateParts();
+  return `${year}-${month}-${day}`;
+}
 
 
 const formatCurrency = (amount) => {
@@ -215,24 +233,28 @@ function renderProductGrid() {
     card.className = 'product-card';
     card.dataset.category = product.category;
     card.dataset.productId = product.id;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `เพิ่ม ${product.name} ลงตะกร้า`);
 
 
     card.innerHTML = `
-      <div class="top">
-        <span class="tag">${product.category}</span>
-        <span>#${product.code}</span>
-      </div>
       <div class="image">${product.icon || '📦'}</div>
       <h3>${product.name}</h3>
-      <div class="product-meta">รหัส ${product.code}</div>
       <div class="product-price">${formatCurrency(product.price)}</div>
       <div class="product-stock">คงเหลือ ${product.stock} ชิ้น</div>
-      <button class="add-button">เพิ่มลงตะกร้า</button>
     `;
 
 
-    const addButton = card.querySelector('.add-button');
-    addButton.addEventListener('click', () => addToCart(product.id));
+    card.addEventListener('click', () => {
+      if (!card.classList.contains('is-unavailable')) addToCart(product.id);
+    });
+    card.addEventListener('keydown', (event) => {
+      if ((event.key === 'Enter' || event.key === ' ') && !card.classList.contains('is-unavailable')) {
+        event.preventDefault();
+        addToCart(product.id);
+      }
+    });
 
 
     grid.appendChild(card);
@@ -250,13 +272,10 @@ function syncProductCardAvailability() {
     if (!product) return;
 
     const remaining = product.stock - cartQtyFor(product.id);
-    const addButton = card.querySelector('.add-button');
-    if (!addButton) return;
-
-    addButton.disabled = remaining <= 0;
-    addButton.textContent = remaining <= 0
-      ? (product.stock <= 0 ? 'หมดสต็อก' : 'ครบสต็อกแล้ว')
-      : 'เพิ่มลงตะกร้า';
+    const unavailable = remaining <= 0;
+    card.classList.toggle('is-unavailable', unavailable);
+    card.setAttribute('aria-disabled', String(unavailable));
+    card.querySelector('.product-stock').textContent = `คงเหลือ ${Math.max(remaining, 0)} ชิ้น`;
   });
 }
 
@@ -506,13 +525,13 @@ async function submitOrder() {
  if (orderSubmitting) return;
   const paymentMethod = document.getElementById('paymentMethod').value;
   const customerType = document.getElementById('customerSelect').value;
-  const checkoutBtn = document.getElementById('checkoutBtn');
+  const paymentButtons = document.querySelectorAll('.payment-option');
  const qrConfirmBtn = document.getElementById('qrModalConfirm');
   const totals = computeTotals();
 
 
  orderSubmitting = true;
-  checkoutBtn.disabled = true;
+  paymentButtons.forEach((button) => { button.disabled = true; });
  qrConfirmBtn.disabled = true;
  pendingOrderKey = pendingOrderKey || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -555,7 +574,7 @@ async function submitOrder() {
     showToast(error.message || 'บันทึกออเดอร์ไม่สำเร็จ');
   } finally {
    orderSubmitting = false;
-    checkoutBtn.disabled = false;
+    paymentButtons.forEach((button) => { button.disabled = false; });
    qrConfirmBtn.disabled = false;
   }
 }
@@ -1172,6 +1191,26 @@ async function init() {
   initCategories();
   renderCart();
 
+  document.querySelectorAll('.payment-option').forEach((option) => {
+    option.addEventListener('click', () => {
+      document.getElementById('paymentMethod').value = option.dataset.paymentMethod;
+      document.querySelectorAll('.payment-option').forEach((item) => {
+        const selected = item === option;
+        item.classList.toggle('is-active', selected);
+        item.setAttribute('aria-pressed', String(selected));
+      });
+      checkout();
+    });
+  });
+
+  document.getElementById('toggleSalesMetrics').addEventListener('click', (event) => {
+    const metrics = document.getElementById('salesMetrics');
+    const collapsed = !metrics.hidden;
+    metrics.hidden = collapsed;
+    event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
+    event.currentTarget.textContent = collapsed ? '▾ แสดงสรุป' : '▴ ซ่อนสรุป';
+  });
+
 
   document.getElementById('clearCart').addEventListener('click', () => {
     cart.splice(0, cart.length);
@@ -1181,7 +1220,6 @@ async function init() {
   });
 
 
-  document.getElementById('checkoutBtn').addEventListener('click', checkout);
   document.getElementById('mobileCartBar').addEventListener('click', () => setCartOpen(true));
   document.getElementById('closeCartBtn').addEventListener('click', () => setCartOpen(false));
   document.getElementById('cartBackdrop').addEventListener('click', () => setCartOpen(false));
@@ -1226,12 +1264,13 @@ async function init() {
  document.getElementById('closeDayBtn').addEventListener('click', closeDay);
 
 
-  document.getElementById('planDateInput').min = new Date().toISOString().slice(0, 10);
-  document.getElementById('planDateInput').value = new Date().toISOString().slice(0, 10);
+  const todayBangkok = bangkokDateISO();
+  document.getElementById('planDateInput').min = todayBangkok;
+  document.getElementById('planDateInput').value = todayBangkok;
   document.getElementById('addStockPlanBtn').addEventListener('click', addStockPlan);
 
-  document.getElementById('ordersDateInput').max = new Date().toISOString().slice(0, 10);
-  document.getElementById('ordersDateInput').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('ordersDateInput').max = todayBangkok;
+  document.getElementById('ordersDateInput').value = todayBangkok;
   document.getElementById('ordersDateInput').addEventListener('change', (event) => {
     fetchOrders(event.target.value);
   });
@@ -1256,8 +1295,8 @@ async function init() {
   await fetchDailySummary();
 
 
-  const today = new Date();
-  const dateText = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  const { year, month, day } = bangkokDateParts();
+  const dateText = `${day}/${month}/${year}`;
   document.getElementById('dateText').textContent = dateText;
 }
 

@@ -6,8 +6,11 @@ import threading
 import time
 from io import BytesIO
 from datetime import date
+from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request, send_file, send_from_directory, session
 import qrcode
@@ -17,6 +20,7 @@ from promptpay_qr import PromptPayError, generate_promptpay_payload
 
 app = Flask(__name__, static_folder=None)
 PUBLIC_ROOT = ROOT / 'public'
+BANGKOK_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Bangkok'))
 app.secret_key = os.getenv('SECRET_KEY') or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -41,6 +45,23 @@ STOCK_REASONS = {
 
 def number(value): return float(value) if isinstance(value, Decimal) else value
 def error(message,status=400): return jsonify(error=message),status
+
+def bangkok_today():
+ return datetime.now(BANGKOK_TZ).date()
+
+def local_day_bounds(report_date):
+ start=datetime.combine(date.fromisoformat(report_date),datetime.min.time(),tzinfo=BANGKOK_TZ)
+ end=start+timedelta(days=1)
+ if is_postgres(): return start.astimezone(timezone.utc),end.astimezone(timezone.utc)
+ return start.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),end.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+def local_timestamp(value):
+ if isinstance(value,datetime): parsed=value
+ else:
+  try: parsed=datetime.fromisoformat(str(value))
+  except (TypeError,ValueError): return str(value)
+ if parsed.tzinfo is None: parsed=parsed.replace(tzinfo=timezone.utc)
+ return parsed.astimezone(BANGKOK_TZ).isoformat()
 
 def auth_configured():
  return bool(os.getenv('POS_PIN')) and bool(os.getenv('SECRET_KEY'))
@@ -132,10 +153,11 @@ def apply_due_stock_plans(cursor,today):
 
 def ensure_daily_plans_applied():
  with transaction() as (_,cursor):
-  apply_due_stock_plans(cursor,date.today().isoformat())
+  apply_due_stock_plans(cursor,bangkok_today().isoformat())
 
 def movement_summary(connection,report_date):
- result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE date(created_at)=? GROUP BY product_id,movement_type,reference_type',(report_date,)).fetchall()
+ start,end=local_day_bounds(report_date)
+ result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE created_at>=? AND created_at<? GROUP BY product_id,movement_type,reference_type',(start,end)).fetchall()
  summary={}
  for row in result:
   bucket=summary.setdefault(row['product_id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0})
@@ -229,7 +251,7 @@ def create_order():
    if qty>product['stock_qty']: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
    line_total=qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,line_total))
   if discount>subtotal: return error('ส่วนลดมากกว่ายอดรวม')
-  total=subtotal-discount; today=date.today().isoformat()
+  total=subtotal-discount; today=bangkok_today().isoformat()
   day_code=today.replace('-',''); order_number='{}-{}'.format(day_code,uuid.uuid4().hex[:8].upper())
   customer=execute(cursor,'SELECT id FROM customers WHERE customer_type=? AND is_active=1 LIMIT 1',(payload.get('customerType','walkin'),)).fetchone()
   query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
@@ -258,8 +280,8 @@ def cancel_order(order_id):
 
 @app.get('/api/orders')
 def list_orders():
- report_date=request.args.get('date') or date.today().isoformat()
- if report_date>date.today().isoformat(): return error('เลือกวันที่ไม่เกินวันนี้')
+ report_date=request.args.get('date') or bangkok_today().isoformat()
+ if report_date>bangkok_today().isoformat(): return error('เลือกวันที่ไม่เกินวันนี้')
  connection=connect_db()
  try:
   cursor=connection.cursor()
@@ -268,7 +290,7 @@ def list_orders():
  finally: connection.close()
  grouped={}
  for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
- orders=[{'id':r['id'],'orderNumber':r['order_number'],'time':r['created_at'].isoformat() if hasattr(r['created_at'],'isoformat') else r['created_at'],'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'status':r['status'],'items':grouped.get(r['id'],[])} for r in order_rows]
+ orders=[{'id':r['id'],'orderNumber':r['order_number'],'time':local_timestamp(r['created_at']),'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'status':r['status'],'items':grouped.get(r['id'],[])} for r in order_rows]
  return jsonify(date=report_date,orders=orders)
 
 @app.post('/api/stock/adjust')
@@ -290,7 +312,7 @@ def adjust_stock():
 
 @app.get('/api/reports/daily-summary')
 def daily_summary():
- report_date=request.args.get('date') or date.today().isoformat()
+ report_date=request.args.get('date') or bangkok_today().isoformat()
  result=rows('SELECT payment_method,COUNT(*) order_count,COALESCE(SUM(total),0) amount FROM orders WHERE order_date=? AND status=\'completed\' GROUP BY payment_method',(report_date,))
  cash=sum(number(r['amount']) for r in result if r['payment_method']=='cash'); transfer=sum(number(r['amount']) for r in result if r['payment_method']!='cash')
  return jsonify(date=report_date,orderCount=sum(r['order_count'] for r in result),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer)
@@ -309,7 +331,7 @@ def stock_data(report_date):
 @app.get('/api/stock/daily-summary')
 def stock_summary():
  ensure_daily_plans_applied()
- report_date=request.args.get('date') or date.today().isoformat()
+ report_date=request.args.get('date') or bangkok_today().isoformat()
  return jsonify(date=report_date,items=stock_data(report_date))
 
 @app.get('/api/stock/plans')
@@ -324,7 +346,7 @@ def create_stock_plan():
  except (TypeError,ValueError): return error('จำนวนไม่ถูกต้อง')
  if quantity<=0: return error('จำนวนต้องมากกว่า 0')
  plan_date=str(payload.get('date','')).strip()
- today=date.today().isoformat()
+ today=bangkok_today().isoformat()
  if not plan_date or plan_date<today: return error('เลือกวันที่ตั้งแต่วันนี้เป็นต้นไป')
  with transaction() as (_,cursor):
   product=execute(cursor,'SELECT id FROM products WHERE id=?',(payload.get('productId'),)).fetchone()
@@ -346,7 +368,7 @@ def cancel_stock_plan(plan_id):
 
 @app.get('/api/reports/close-day')
 def close_day():
- report_date=request.args.get('date') or date.today().isoformat(); connection=connect_db()
+ report_date=request.args.get('date') or bangkok_today().isoformat(); connection=connect_db()
  try:
   cursor=connection.cursor()
   order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE order_date=? AND status=\'completed\' ORDER BY created_at',(report_date,)).fetchall()
@@ -355,7 +377,7 @@ def close_day():
  finally: connection.close()
  grouped={}
  for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
- orders=[{'orderNumber':r['order_number'],'time':r['created_at'].isoformat() if hasattr(r['created_at'],'isoformat') else r['created_at'],'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
+ orders=[{'orderNumber':r['order_number'],'time':local_timestamp(r['created_at']),'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
  cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
  cost_total=sum(r['quantity']*number(r['cost_price'] or 0) for r in cost_rows)
  menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
