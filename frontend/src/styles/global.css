@@ -60,6 +60,48 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .page-header h1 { margin: 0; font-size: 28px; letter-spacing: 0; }
 .mobile-header, .mobile-navigation { display: none; }
 
+.data-page { width: 100%; max-width: 1500px; margin: 0 auto; }
+.page-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 20px 0; }
+.surface { min-width: 0; margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.surface > h2, .section-heading h2 { margin: 0; font-size: 18px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; }
+.surface .section-heading { margin-top: 0; }
+.section-heading span { display: block; margin-top: 4px; color: var(--text-soft); font-size: 13px; }
+.loading-state, .error-state, .empty-state { min-height: 120px; display: grid; place-items: center; padding: 24px; color: var(--text-soft); text-align: center; }
+.error-state { color: var(--danger); }
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.metric { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.metric span { display: block; color: var(--text-soft); font-size: 12px; }
+.metric strong { display: block; overflow-wrap: anywhere; margin-top: 5px; font-size: 20px; }
+.report-workspace { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 20px; }
+.report-days-panel { align-self: start; }
+.report-day-list { display: grid; gap: 8px; margin-top: 14px; }
+.report-day-button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); color: var(--text); background: #fff; text-align: left; }
+.report-day-button[aria-pressed="true"] { border-color: var(--primary); background: var(--panel-soft); }
+.report-day-button span, .compact-list span, .ranked-list span { min-width: 0; }
+.report-day-button small, td small, .compact-list small, .ranked-list small { display: block; margin-top: 3px; color: var(--text-soft); font-size: 11px; }
+.report-day-value { flex: 0 0 auto; text-align: right; }
+.table-scroll { max-width: 100%; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
+.segmented-control { display: inline-grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.segmented-control button { min-width: 72px; padding: 8px 12px; color: var(--text-soft); background: transparent; }
+.segmented-control button[aria-pressed="true"] { color: #fff; background: var(--primary); }
+.date-control { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
+.date-control input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: #fff; }
+.read-only-label { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-soft); font-size: 12px; }
+.content-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ranked-list { margin: 12px 0 0; padding-left: 24px; }
+.ranked-list li, .compact-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.sales-chart { display: flex; min-height: 260px; align-items: stretch; gap: 8px; margin-top: 16px; overflow-x: auto; }
+.chart-column { display: grid; min-width: 64px; flex: 1 0 64px; grid-template-rows: 24px 180px 34px; gap: 5px; text-align: center; }
+.chart-value { overflow: hidden; color: var(--text-soft); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.chart-track { display: flex; align-items: end; border-bottom: 1px solid var(--line); background: #f8f3ee; }
+.chart-track span { width: 100%; background: var(--accent); }
+.chart-column small { font-size: 10px; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+
 @media (min-width: 768px) and (max-width: 1199px) {
   .sidebar { flex-basis: 112px; padding: 22px 12px; }
   .sidebar .shell-brand { justify-content: center; }
@@ -67,6 +109,8 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .sidebar-navigation { margin-top: 34px; }
   .navigation-link { flex-direction: column; gap: 4px; padding: 9px 4px; text-align: center; }
   .navigation-label-short { display: block; font-size: 11px; }
+  .report-workspace { grid-template-columns: 250px minmax(0, 1fr); }
+  .content-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {
@@ -83,4 +127,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .mobile-navigation-link { display: flex; min-width: 0; min-height: 54px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 5px 2px; border-radius: 8px; color: var(--text-soft); font-size: 9px; font-weight: 700; white-space: nowrap; }
   .mobile-navigation-link .navigation-marker { width: 22px; height: 22px; flex-basis: 22px; }
   .mobile-navigation-link[aria-current="page"] { color: var(--primary-dark); background: var(--panel-soft); }
+  .page-toolbar { align-items: stretch; flex-direction: column; }
+  .segmented-control { width: 100%; }
+  .segmented-control button { min-width: 0; }
+  .report-workspace, .content-grid { grid-template-columns: 1fr; }
+  .report-days-panel { padding: 14px; }
+  .report-day-button { align-items: flex-start; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric { padding: 12px; }
+  .metric strong { font-size: 17px; }
+  .surface { padding: 14px; }
 }

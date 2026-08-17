@@ -3,6 +3,9 @@ import { AppShell } from '../components/AppShell';
 import { PageHeader } from '../components/PageHeader';
 import { navigationItems } from '../components/navigation';
 import { AuthGate } from '../features/auth/AuthContext';
+import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
+import { ReportsPage } from '../features/reports/ReportsPage';
+import { StockPage } from '../features/stock/StockPage';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -23,13 +26,16 @@ export function AppRoutes() {
         )}
       >
         <Route index element={<Navigate to="/sell" replace />} />
-        {navigationItems.map((item) => (
+        {navigationItems.filter((item) => !['/stock', '/reports', '/analytics'].includes(item.path)).map((item) => (
           <Route
             key={item.path}
             path={item.path.slice(1)}
             element={<Placeholder title={item.label} />}
           />
         ))}
+        <Route path="stock" element={<StockPage />} />
+        <Route path="reports" element={<ReportsPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="*" element={<Navigate to="/sell" replace />} />
       </Route>
     </Routes>
