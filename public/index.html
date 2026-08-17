@@ -53,7 +53,7 @@
           <span class="nav-icon">◌</span>
           <span>รายงาน</span>
         </a>
-        <a href="#" class="nav-link">
+        <a href="#" class="nav-link" data-page="settingsPage">
           <span class="nav-icon">☰</span>
           <span>ตั้งค่า</span>
         </a>
@@ -235,54 +235,16 @@
 
 
       <section id="stockPage" class="page" hidden>
-        <header class="topbar">
-          <div>
-            <div class="page-kicker">คลังของหวาน 📦</div>
-            <h1>จัดการสต็อกรายวัน</h1>
-          </div>
-          <div class="top-actions">
-            <button class="btn btn-light" id="backToSellBtn">← กลับไปขายสินค้า</button>
-          </div>
-        </header>
-
-
-        <section class="metrics-grid" id="stockMetrics">
-          <article class="metric-card">
-            <div class="metric-title">เตรียมวันนี้</div>
-            <div class="metric-value" id="preparedTotal">0</div>
-            <div class="metric-subtitle">ชิ้น ทุกเมนูรวมกัน</div>
-          </article>
-
-
-          <article class="metric-card highlight">
-            <div class="metric-title">ขายวันนี้</div>
-            <div class="metric-value" id="soldTotal">0</div>
-            <div class="metric-subtitle">ชิ้น</div>
-          </article>
-
-
-          <article class="metric-card">
-            <div class="metric-title">แถมวันนี้</div>
-            <div class="metric-value" id="giveawayTotal">0</div>
-            <div class="metric-subtitle">ชิ้น</div>
-          </article>
-
-
-          <article class="metric-card">
-            <div class="metric-title">เสียวันนี้</div>
-            <div class="metric-value" id="wasteTotal">0</div>
-            <div class="metric-subtitle">ชิ้น</div>
-          </article>
-        </section>
-
-
         <section class="panel stock-panel">
           <div class="panel-header">
             <div>
-              <div class="panel-title">สต็อกรายเมนู 🍮</div>
-              <div class="panel-subtitle">บันทึกจำนวนเตรียม / แถม / เสีย ของวันนี้ หรือจัดการเมนู</div>
+              <div class="panel-title">จำนวนคงเหลือรายเมนู 🍮</div>
+              <div class="panel-subtitle" id="stockDateHint">เพิ่มหรือลดยอดเตรียม แถม และเสียของวันนี้</div>
             </div>
-            <button class="btn btn-primary" id="addMenuBtn">+ เพิ่มเมนูใหม่</button>
+            <label class="date-filter stock-date-filter" for="stockDateInput">
+              <span>ดูวันที่</span>
+              <input type="date" id="stockDateInput" />
+            </label>
           </div>
 
 
@@ -291,14 +253,7 @@
               <thead>
                 <tr>
                   <th>เมนู</th>
-                  <th>คงเหลือตอนนี้</th>
-                  <th>เตรียม</th>
-                  <th>ขาย</th>
-                  <th>แถม</th>
-                  <th>เสีย</th>
-                  <th>Sell-through</th>
-                  <th>บันทึกวันนี้</th>
-                  <th>จัดการเมนู</th>
+                  <th>ปรับจำนวน</th>
                 </tr>
               </thead>
               <tbody id="stockTableBody"></tbody>
@@ -306,44 +261,6 @@
           </div>
         </section>
 
-        <section class="panel stock-plan-panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">วางแผนเตรียมสต็อกล่วงหน้า 🗓️</div>
-              <div class="panel-subtitle">ตั้งจำนวนที่จะเตรียมขายในวันข้างหน้า ระบบจะเติมสต็อกให้อัตโนมัติเมื่อถึงวันที่ตั้งไว้</div>
-            </div>
-          </div>
-
-          <div class="stock-plan-form">
-            <label class="modal-field">
-              <span>เมนู</span>
-              <select id="planProductSelect"></select>
-            </label>
-            <label class="modal-field">
-              <span>วันที่เตรียม</span>
-              <input type="date" id="planDateInput" />
-            </label>
-            <label class="modal-field">
-              <span>จำนวน</span>
-              <input type="number" id="planQtyInput" min="1" step="1" value="1" />
-            </label>
-            <button class="btn btn-primary" id="addStockPlanBtn">+ เพิ่มแผน</button>
-          </div>
-
-          <div class="stock-table-wrap">
-            <table class="stock-table" id="stockPlanTable">
-              <thead>
-                <tr>
-                  <th>วันที่เตรียม</th>
-                  <th>เมนู</th>
-                  <th>จำนวน</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="stockPlanTableBody"></tbody>
-            </table>
-          </div>
-        </section>
       </section>
 
 
@@ -507,6 +424,39 @@
              <tbody id="ordersTableBody"></tbody>
            </table>
          </div>
+       </section>
+     </section>
+
+     <section id="settingsPage" class="page" hidden>
+       <section class="panel settings-menu-panel">
+         <div class="panel-header">
+           <div>
+             <div class="panel-title">เมนูทั้งหมด 🍮</div>
+             <div class="panel-subtitle" id="settingsMenuSubtitle">กำลังโหลดรายการเมนู</div>
+           </div>
+           <button class="btn btn-primary" id="addMenuBtn" type="button">+ เพิ่มเมนูใหม่</button>
+         </div>
+         <div class="settings-menu-filters">
+           <label class="settings-search-field">
+             <span>ค้นหาเมนู</span>
+             <input type="search" id="settingsMenuSearch" placeholder="ชื่อหรือรหัสเมนู" autocomplete="off" />
+           </label>
+           <label>
+             <span>สถานะ</span>
+             <select id="settingsStatusFilter">
+               <option value="all">ทั้งหมด</option>
+               <option value="active">เปิดขาย</option>
+               <option value="inactive">พักขาย</option>
+             </select>
+           </label>
+           <label>
+             <span>หมวดหมู่</span>
+             <select id="settingsCategoryFilter">
+               <option value="all">ทุกหมวดหมู่</option>
+             </select>
+           </label>
+         </div>
+         <div class="settings-menu-list" id="settingsMenuList"></div>
        </section>
      </section>
      </main>

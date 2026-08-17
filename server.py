@@ -39,8 +39,11 @@ CATEGORY_ICONS = {'Tiramisu':'🍮', 'Cheesecake':'🍰', 'Doughnut':'🍩'}
 DEFAULT_ICON = '🧁'
 STOCK_REASONS = {
  'prepare':('stock_in','daily_prep',1,'เตรียมขายวันนี้'),
+ 'undo_prepare':('stock_in','daily_prep',-1,'ยกเลิกเตรียมขายวันนี้'),
  'giveaway':('stock_out','giveaway',-1,'แถมลูกค้า'),
+ 'undo_giveaway':('stock_out','giveaway',1,'ยกเลิกแถมลูกค้า'),
  'waste':('stock_out','waste',-1,'ของเสีย/หมดอายุ'),
+ 'undo_waste':('stock_out','waste',1,'ยกเลิกของเสีย'),
  'correction':('adjust','correction',None,'ปรับยอดสต็อก')}
 
 def number(value): return float(value) if isinstance(value, Decimal) else value
@@ -219,6 +222,15 @@ def update_product(product_id):
   execute(cursor,'UPDATE products SET sku=?,name=?,category=?,unit_price=?,cost_price=?,stock_qty=?,stock_min=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active'],product_id))
  return jsonify(id=product_id,code=data['sku'])
 
+@app.patch('/api/products/<int:product_id>/active')
+def update_product_active(product_id):
+ payload=request.get_json(silent=True) or {}
+ if not isinstance(payload.get('active'),bool): return error('สถานะเปิดขายไม่ถูกต้อง')
+ with transaction() as (_,cursor):
+  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  execute(cursor,'UPDATE products SET is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(1 if payload['active'] else 0,product_id))
+ return jsonify(id=product_id,active=payload['active'])
+
 @app.delete('/api/products/<int:product_id>')
 def delete_product(product_id):
  with transaction() as (_,cursor):
@@ -304,6 +316,13 @@ def adjust_stock():
  with transaction() as (_,cursor):
   product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
+  if reason=='undo_prepare':
+   prepared=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type='daily_prep' AND date(created_at)=?",(product['id'],bangkok_today().isoformat())).fetchone()['total']
+   if prepared<abs(quantity): return error('ไม่มียอดเตรียมของวันนี้ให้ยกเลิก')
+  if reason in {'undo_giveaway','undo_waste'}:
+   reference_type='giveaway' if reason=='undo_giveaway' else 'waste'
+   movement_total=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type=? AND date(created_at)=?",(product['id'],reference_type,bangkok_today().isoformat())).fetchone()['total']
+   if -movement_total<abs(quantity): return error('ไม่มีรายการของวันนี้ให้ยกเลิก')
   new_stock=product['stock_qty']+delta
   if new_stock<0: return error('{} มีสต็อกไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
   execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_stock,product['id']))
@@ -332,6 +351,11 @@ def stock_data(report_date):
 def stock_summary():
  ensure_daily_plans_applied()
  report_date=request.args.get('date') or bangkok_today().isoformat()
+ try:
+  selected_date=date.fromisoformat(report_date)
+ except ValueError:
+  return error('รูปแบบวันที่ไม่ถูกต้อง')
+ if selected_date>bangkok_today(): return error('ไม่สามารถดูข้อมูลของวันข้างหน้าได้')
  return jsonify(date=report_date,items=stock_data(report_date))
 
 @app.get('/api/stock/plans')
