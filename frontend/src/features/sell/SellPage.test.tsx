@@ -237,4 +237,15 @@ describe('SellPage', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/payment-qr'))).toBe(false);
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
   });
+
+  it('holds an order as an informational local action without clearing or calling an API', async () => {
+    const fetchMock = mockSell();
+    await renderSell();
+    add('Original', 2);
+    const callsBeforeHold = fetchMock.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'พักออเดอร์' }));
+    expect(screen.getByText(/พักออเดอร์แล้ว/)).toHaveAttribute('role', 'status');
+    expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('2');
+    expect(fetchMock.mock.calls).toHaveLength(callsBeforeHold);
+  });
 });

@@ -42,6 +42,7 @@ export function SellPage() {
   const [qrImageError, setQrImageError] = useState('');
   const [validationError, setValidationError] = useState('');
   const [stockNotice, setStockNotice] = useState('');
+  const [holdNotice, setHoldNotice] = useState('');
   const mobile = useIsMobile();
   const checkout = useCheckout();
   const closeDay = useCloseDay(dailySummary.refresh);
@@ -68,6 +69,11 @@ export function SellPage() {
   }, [productsQuery.data]);
 
   useEffect(() => { if (!mobile) setCartOpen(false); }, [mobile]);
+  useEffect(() => {
+    if (!holdNotice) return;
+    const timer = window.setTimeout(() => setHoldNotice(''), 2600);
+    return () => window.clearTimeout(timer);
+  }, [holdNotice]);
   useEffect(() => {
     if (!mobile || !cartOpen) return;
     document.body.classList.add('sell-cart-open');
@@ -168,7 +174,7 @@ export function SellPage() {
           {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} onAdd={(product) => updateCart(addToCart(cart, product))} />}
         </div>
       </section>
-      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} paymentDisabled={checkout.pending || promptPayOpen} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} />
+      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} paymentDisabled={checkout.pending || promptPayOpen} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
     </div>
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />

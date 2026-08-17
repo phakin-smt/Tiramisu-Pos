@@ -1,8 +1,10 @@
+import { useRef } from 'react';
 import { Outlet } from 'react-router-dom';
 
 import { useAuth } from '../features/auth/AuthContext';
 import { MobileNavigation } from './MobileNavigation';
 import { SidebarNavigation } from './SidebarNavigation';
+import { useTabletSwipeNavigation } from './useTabletSwipeNavigation';
 
 function Brand() {
   return (
@@ -21,6 +23,8 @@ function Brand() {
 
 export function AppShell() {
   const { logout, submitting } = useAuth();
+  const mainContent = useRef<HTMLElement>(null);
+  useTabletSwipeNavigation(mainContent);
 
   return (
     <div className="app-shell">
@@ -42,7 +46,7 @@ export function AppShell() {
         </button>
       </header>
 
-      <main className="main-content">
+      <main ref={mainContent} className="main-content">
         <Outlet />
       </main>
       <MobileNavigation />

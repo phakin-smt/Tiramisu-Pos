@@ -9,12 +9,14 @@ interface CartProps {
   products: readonly CatalogProduct[]; cart: readonly CartItemModel[]; totals: Totals; discountState: DiscountState;
   totalQuantity: number; paidQuantity: number; customerType: CustomerType; paymentMethod: PaymentMethod; mobile: boolean; open: boolean;
   paymentDisabled: boolean;
+  holdNotice: string;
   onClose(): void; onClear(): void; onQuantityChange(product: CatalogProduct, delta: number): void;
   onGiveawayChange(productId: number, delta: number): void; onRemove(productId: number): void;
   onDiscountChange(value: number): void; onCustomerChange(value: CustomerType): void; onPaymentActivate(value: PaymentMethod): void;
+  onHold(): void;
 }
 
-export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, paymentDisabled, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate }: CartProps) {
+export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, paymentDisabled, holdNotice, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate, onHold }: CartProps) {
   return <aside id="sell-cart" className={`sell-cart${open ? ' is-open' : ''}`} aria-label="ออเดอร์ปัจจุบัน" role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-hidden={mobile ? !open : undefined} inert={mobile && !open}>
     <header className="sell-cart-header">
       <div><h2>ออเดอร์ปัจจุบัน</h2><span>{totalQuantity} ชิ้น</span></div>
@@ -31,5 +33,9 @@ export function Cart({ products, cart, totals, discountState, totalQuantity, pai
     </div>
     <CartTotals totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} onDiscountChange={onDiscountChange} />
     <PaymentSelector value={paymentMethod} disabled={paymentDisabled} onActivate={onPaymentActivate} />
+    <div className="hold-order-controls">
+      <button type="button" className="secondary-button" onClick={onHold}>พักออเดอร์</button>
+      {holdNotice && <span role="status">{holdNotice}</span>}
+    </div>
   </aside>;
 }

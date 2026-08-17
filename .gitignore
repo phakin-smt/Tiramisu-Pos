@@ -15,6 +15,9 @@ env/
 .vercel/
 frontend/node_modules/
 frontend/dist/
+frontend/.playwright/
+frontend/playwright-report/
+frontend/test-results/
 
 .env
 .env.*
