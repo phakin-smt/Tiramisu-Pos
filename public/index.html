@@ -136,15 +136,6 @@
               <div class="panel-title">เมนูของหวาน 🍮</div>
               <div class="panel-subtitle" id="catalogSummary">12 รายการ</div>
             </div>
-            <div class="filter-area">
-              <label class="search-label">
-                <span>ค้นหา</span>
-                <input type="text" id="searchInput" placeholder="ค้นหาสินค้า" />
-              </label>
-              <select id="categoryFilter">
-                <option value="ทั้งหมด">ทั้งหมด</option>
-              </select>
-            </div>
           </div>
 
 
@@ -168,11 +159,21 @@
 
           <div class="customer-row">
             <label class="form-label">ลูกค้า</label>
-            <select id="customerSelect">
-              <option value="walkin">ลูกค้า walk-in</option>
-              <option value="member">สมาชิก</option>
-              <option value="store">ร้านค้า</option>
-            </select>
+            <input type="hidden" id="customerSelect" value="walkin" />
+            <div class="customer-options" role="group" aria-label="เลือกประเภทลูกค้า">
+              <button class="customer-option is-active" type="button" data-customer-type="walkin" aria-pressed="true">
+                <span aria-hidden="true">👤</span>
+                <strong>Walk-in</strong>
+              </button>
+              <button class="customer-option" type="button" data-customer-type="member" aria-pressed="false">
+                <span aria-hidden="true">⭐</span>
+                <strong>สมาชิก</strong>
+              </button>
+              <button class="customer-option" type="button" data-customer-type="store" aria-pressed="false">
+                <span aria-hidden="true">🏪</span>
+                <strong>ร้านค้า</strong>
+              </button>
+            </div>
           </div>
 
 

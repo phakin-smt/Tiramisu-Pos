@@ -137,54 +137,11 @@ async function fetchProducts() {
     products = await response.json();
     renderProductGrid();
     renderCategoryTabs();
-    renderCategoriesFilter();
     renderStockCount();
   } catch (error) {
     console.error(error);
     showToast('ไม่สามารถโหลด master menu ได้');
   }
-}
-
-
-async function fetchCategories() {
-  try {
-    const response = await apiFetch('/api/products/categories');
-    if (!response.ok) {
-      throw new Error('Unable to fetch categories');
-    }
-
-
-    const data = await response.json();
-    const filter = document.getElementById('categoryFilter');
-    filter.innerHTML = '<option value="ทั้งหมด">ทั้งหมด</option>';
-
-
-    (data.categories || []).forEach((category) => {
-      const option = document.createElement('option');
-      option.value = category;
-      option.textContent = category;
-      filter.appendChild(option);
-    });
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-
-function renderCategoriesFilter() {
-  const filter = document.getElementById('categoryFilter');
-  const existing = [...new Set(products.map((item) => item.category))];
-
-
-  filter.innerHTML = '<option value="ทั้งหมด">ทั้งหมด</option>';
-
-
-  existing.forEach((category) => {
-    const option = document.createElement('option');
-    option.value = category;
-    option.textContent = category;
-    filter.appendChild(option);
-  });
 }
 
 
@@ -200,8 +157,6 @@ function renderCategoryTabs() {
     button.textContent = category;
     button.addEventListener('click', () => {
       selectedCategory = category;
-      const filter = document.getElementById('categoryFilter');
-      filter.value = category;
       renderProductGrid();
       renderCategoryTabs();
     });
@@ -213,14 +168,12 @@ function renderCategoryTabs() {
 
 
 function renderProductGrid() {
-  const search = document.getElementById('searchInput').value.trim().toLowerCase();
   const categoryFilter = selectedCategory;
 
 
   const filtered = products.filter((p) => {
     const matchesCategory = categoryFilter === 'ทั้งหมด' || p.category === categoryFilter;
-    const matchesText = p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search);
-    return matchesCategory && matchesText;
+    return matchesCategory;
   });
 
 
@@ -452,16 +405,6 @@ function showToast(message) {
   setTimeout(() => {
     toast.classList.remove('show');
   }, 2200);
-}
-
-
-function initCategories() {
-  const categoryFilter = document.getElementById('categoryFilter');
-  categoryFilter.addEventListener('change', (event) => {
-    selectedCategory = event.target.value || 'ทั้งหมด';
-    renderCategoryTabs();
-    renderProductGrid();
-  });
 }
 
 
@@ -908,7 +851,7 @@ async function saveProduct() {
 
     showToast(isEditing ? 'แก้ไขเมนูแล้ว' : 'เพิ่มเมนูใหม่แล้ว');
     closeProductModal();
-    await Promise.all([fetchStockSummary(), fetchProducts(), fetchCategories()]);
+    await Promise.all([fetchStockSummary(), fetchProducts()]);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'บันทึกเมนูไม่สำเร็จ');
@@ -933,7 +876,7 @@ async function deleteProduct(item) {
 
 
     showToast(data.message || 'ลบเมนูแล้ว');
-    await Promise.all([fetchStockSummary(), fetchProducts(), fetchCategories()]);
+    await Promise.all([fetchStockSummary(), fetchProducts()]);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'ลบเมนูไม่สำเร็จ');
@@ -1188,8 +1131,18 @@ async function init() {
   document.getElementById('logoutButton').addEventListener('click', logout);
   if (!(await checkAuthentication())) return;
 
-  initCategories();
   renderCart();
+
+  document.querySelectorAll('.customer-option').forEach((option) => {
+    option.addEventListener('click', () => {
+      document.getElementById('customerSelect').value = option.dataset.customerType;
+      document.querySelectorAll('.customer-option').forEach((item) => {
+        const selected = item === option;
+        item.classList.toggle('is-active', selected);
+        item.setAttribute('aria-pressed', String(selected));
+      });
+    });
+  });
 
   document.querySelectorAll('.payment-option').forEach((option) => {
     option.addEventListener('click', () => {
@@ -1247,9 +1200,6 @@ async function init() {
   });
 
 
-  document.getElementById('searchInput').addEventListener('input', renderProductGrid);
-
-
   document.querySelectorAll('.nav-link[data-page]').forEach((link) => {
     link.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1290,7 +1240,6 @@ async function init() {
   });
 
 
-  await fetchCategories();
   await fetchProducts();
   await fetchDailySummary();
 

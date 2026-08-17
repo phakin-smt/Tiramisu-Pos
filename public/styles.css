@@ -63,6 +63,8 @@ body {
 
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   width: 280px;
   background: linear-gradient(180deg, #4a3327, #6b4a34 65%, #a8622f);
   padding: 36px 24px;
@@ -177,7 +179,7 @@ body {
 
 
 .sidebar-card {
-  margin-top: 78px;
+  margin-top: auto;
   padding: 18px;
   border-radius: var(--radius-lg);
   background: rgba(255,255,255,0.12);
@@ -557,6 +559,8 @@ body {
   margin-top: 20px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 14px;
 }
 
@@ -747,6 +751,52 @@ body {
 
 .customer-row {
   margin-top: 20px;
+}
+
+.customer-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+
+.customer-option {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 5px;
+  border: 0;
+  border-radius: 9px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--text-soft);
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.customer-option:hover {
+  color: var(--primary-dark);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.customer-option.is-active {
+  color: var(--primary-dark);
+  background: white;
+  box-shadow: 0 3px 10px rgba(61, 43, 34, 0.12);
+}
+
+.customer-option strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 
@@ -2173,28 +2223,120 @@ input {
 }
 
 @media (min-width: 768px) {
+  #sellPage {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
   .workspace {
+    flex: 1;
+    min-height: 0;
     grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
     gap: 16px;
+    overflow: hidden;
+  }
+
+  .catalog-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .cart-panel {
+    display: flex;
+    flex-direction: column;
+    position: static;
+    align-self: start;
+    height: 100%;
     max-width: none;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .cart-panel .cart-header,
+  .cart-panel .customer-row,
+  .cart-panel .totals,
+  .cart-panel .payment-row,
+  .cart-panel .cart-actions {
+    flex: 0 0 auto;
+  }
+
+  .cart-panel .customer-row {
+    margin-top: 12px;
+  }
+
+  .cart-panel .cart-items {
+    flex: 1 1 auto;
+    min-height: 64px;
+    max-height: none;
+    margin-top: 8px;
+    padding-right: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .cart-panel .totals {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .cart-panel .line-row {
+    margin-bottom: 6px;
+  }
+
+  .cart-panel .payment-row,
+  .cart-panel .cart-actions {
+    margin-top: 8px;
+  }
+
+  .cart-panel .payment-option {
+    min-height: 60px;
+    padding: 8px;
+  }
+
+  .cart-panel .payment-option-icon {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
   }
 
   .product-grid {
+    flex: 1;
+    min-height: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 }
 
-@media (min-width: 768px) and (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .app-shell {
     flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
     width: 100%;
+    height: auto;
     padding: 16px 22px;
+    overflow: visible;
   }
 
   .nav {
@@ -2202,6 +2344,8 @@ input {
     gap: 8px;
     margin-top: 14px;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
   }
 
   .nav-label,
@@ -2215,11 +2359,50 @@ input {
   }
 
   .main-content {
+    width: 100%;
+    height: auto;
     padding: 22px;
+    overflow: visible;
+  }
+
+  #sellPage {
+    height: calc(100dvh - 182px);
+  }
+
+  .topbar {
+    top: 132px;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .top-actions {
+    flex-wrap: wrap;
+  }
+
+  .sales-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  }
+
+  .cart-panel {
+    max-height: none;
+  }
+
+  .stock-table-wrap {
+    max-width: calc(100vw - 44px);
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 960px) and (max-width: 1199px) {
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
   .app-shell {
     flex-direction: row;
     align-items: flex-start;
@@ -2249,6 +2432,10 @@ input {
     scrollbar-gutter: stable;
   }
 
+  #sellPage {
+    height: 100%;
+  }
+
   .sales-metrics {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
@@ -2256,9 +2443,42 @@ input {
   .workspace {
     grid-template-columns: minmax(0, 1fr) 340px;
   }
+
+  .cart-panel {
+    max-height: none;
+  }
 }
 
-@media (min-width: 1300px) {
+@media (min-width: 1200px) and (max-width: 1366px) {
+  .sidebar {
+    width: 220px;
+    padding: 26px 18px;
+  }
+
+  .main-content {
+    padding: 20px;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .top-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 1367px) {
   .sidebar {
     width: 280px;
   }
@@ -2271,12 +2491,6 @@ input {
     grid-template-columns: minmax(0, 1fr) 380px;
   }
 
-  .product-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1100px) and (max-width: 1299px) {
   .product-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
