@@ -1,10 +1,15 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { StockSummaryResponse } from '../../types/stock';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppRoutes } from '../../app/router';
+import { AuthProvider } from '../auth/AuthContext';
+import type { StockPlan, StockSummaryResponse } from '../../types/stock';
 import { StockPage } from './StockPage';
 
-const stock: StockSummaryResponse = { date: '2026-08-17', items: [{ productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 }] };
+const TODAY = '2026-08-17';
+const stock: StockSummaryResponse = { date: TODAY, items: [{ productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 }] };
+const plan: StockPlan = { id: 9, productId: 1, date: '2026-08-20', quantity: 12, name: 'Original', code: 'ORI' };
 
 function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body } as Response;
@@ -16,57 +21,157 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function mockStockRoutes(handler?: (url: string, init: RequestInit) => Response | Promise<Response> | undefined) {
+  const fetchMock = vi.fn((input: string | URL | Request, init: RequestInit = {}) => {
+    const url = String(input);
+    const custom = handler?.(url, init);
+    if (custom) return Promise.resolve(custom);
+    if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json({ ...stock, date: new URL(url, 'http://test').searchParams.get('date') ?? TODAY }));
+    if (url === '/api/stock/plans') return Promise.resolve(json([]));
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 describe('StockPage', () => {
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date('2026-08-16T18:30:00Z')); });
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  it('defaults to the Bangkok business date near UTC rollover', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-16T18:30:00Z'));
-    const fetchMock = vi.fn().mockResolvedValue(json(stock));
-    vi.stubGlobal('fetch', fetchMock);
+  it('defaults to the Bangkok business date and exposes current-day controls', async () => {
+    const fetchMock = mockStockRoutes();
     render(<StockPage />);
-    expect(screen.getByLabelText('วันที่สต็อก')).toHaveValue('2026-08-17');
-    expect(screen.getByLabelText('วันที่สต็อก')).toHaveAttribute('max', '2026-08-17');
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stock/daily-summary?date=2026-08-17', expect.anything()));
+    expect(screen.getByLabelText('วันที่สต็อก')).toHaveValue(TODAY);
+    expect(screen.getByLabelText('วันที่สต็อก')).toHaveAttribute('max', TODAY);
+    expect(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' })).toBeEnabled();
+    expect(screen.getByLabelText('วันที่เตรียม')).toHaveAttribute('min', TODAY);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/stock/daily-summary?date=${TODAY}`, expect.anything());
   });
 
-  it('requests a selected date and renders all movement values without mutation controls', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(json(stock));
-    vi.stubGlobal('fetch', fetchMock);
+  it('renders historical movement values without any mutation controls', async () => {
+    mockStockRoutes();
     render(<StockPage />);
     fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stock/daily-summary?date=2026-08-15', expect.anything()));
     const row = (await screen.findByText('Original')).closest('tr');
     expect(row).toHaveTextContent('15');
     expect(row).toHaveTextContent('5');
-    expect(row).toHaveTextContent('1');
-    expect(row).toHaveTextContent('8');
     expect(row).toHaveTextContent('40%');
     expect(screen.getByText('อ่านอย่างเดียว')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
   });
 
-  it('renders empty and API error states', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ date: '2026-08-17', items: [] })));
+  it.each([
+    ['เพิ่มเตรียมวันนี้ Original', 'prepare'],
+    ['เพิ่มแถมวันนี้ Original', 'giveaway'],
+    ['เพิ่มเสียวันนี้ Original', 'waste'],
+  ])('submits %s once and refetches confirmed stock', async (buttonName, reason) => {
+    let summaryCalls = 0;
+    const fetchMock = mockStockRoutes((url, init) => {
+      if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return json(stock); }
+      if (url === '/api/stock/adjust' && init.method === 'POST') return json({ productId: 1, stock: 9 });
+    });
     render(<StockPage />);
-    expect(await screen.findByText('ไม่มีข้อมูลสต็อกสำหรับวันที่เลือก')).toBeInTheDocument();
-    cleanup();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'โหลดสต็อกไม่ได้' }, 500)));
-    render(<StockPage />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('โหลดสต็อกไม่ได้');
+    fireEvent.click(await screen.findByRole('button', { name: buttonName }));
+    await vi.waitFor(() => expect(summaryCalls).toBe(2));
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ productId: 1, reason, quantity: 1 });
   });
 
-  it('does not allow a stale date response to replace the latest result', async () => {
-    const first = deferred<Response>();
-    const latest = deferred<Response>();
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => url.includes('date=2026-08-15') ? latest.promise : first.promise));
+  it('retains confirmed stock and shows a failed adjustment', async () => {
+    mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ error: 'สต็อกไม่พอ' }, 400) : undefined);
     render(<StockPage />);
-    fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
-    latest.resolve(json({ date: '2026-08-15', items: [{ ...stock.items[0], name: 'Latest stock' }] }));
-    expect(await screen.findByText('Latest stock')).toBeInTheDocument();
-    first.resolve(json({ date: '2026-08-17', items: [{ ...stock.items[0], name: 'Stale stock' }] }));
-    await Promise.resolve();
-    expect(screen.queryByText('Stale stock')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'เพิ่มแถมวันนี้ Original' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('สต็อกไม่พอ');
+    expect(screen.getByText('Original').closest('tr')).toHaveTextContent('8');
+  });
+
+  it('prevents double submission while an adjustment is pending', async () => {
+    const pending = deferred<Response>();
+    const fetchMock = mockStockRoutes((url) => url === '/api/stock/adjust' ? pending.promise : undefined);
+    render(<StockPage />);
+    const button = await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' });
+    fireEvent.click(button); fireEvent.click(button);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/adjust')).toHaveLength(1);
+    expect(button).toBeDisabled();
+    pending.resolve(json({ productId: 1, stock: 9 }));
+    expect(await screen.findByRole('status')).toHaveTextContent('เตรียมเพิ่ม');
+  });
+
+  it('supports valid undo', async () => {
+    const fetchMock = mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ productId: 1, stock: 9 }) : undefined);
+    render(<StockPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'ลดแถมวันนี้ Original' }));
+    await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/adjust')).toHaveLength(1));
+    expect(JSON.parse(String(fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust')?.[1]?.body)).reason).toBe('undo_giveaway');
+  });
+
+  it('shows an undo rejection and preserves confirmed data', async () => {
+    mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ error: 'ไม่มีรายการของวันนี้ให้ยกเลิก' }, 400) : undefined);
+    render(<StockPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'ลดแถมวันนี้ Original' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('ไม่มีรายการของวันนี้ให้ยกเลิก');
+    expect(screen.getByText('Original').closest('tr')).toHaveTextContent('8');
+  });
+
+  it('loads pending plans and can cancel one with a refresh', async () => {
+    let planLoads = 0;
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    const fetchMock = mockStockRoutes((url, init) => {
+      if (url === '/api/stock/plans' && !init.method) { planLoads += 1; return json(planLoads === 1 ? [plan] : []); }
+      if (url === '/api/stock/plans/9' && init.method === 'DELETE') return json({ id: 9, cancelled: true });
+    });
+    render(<StockPage />);
+    expect(await screen.findByText('รอดำเนินการ')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิกแผน Original' }));
+    await vi.waitFor(() => expect(planLoads).toBe(2));
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/plans/9')).toHaveLength(1);
+  });
+
+  it('creates one future plan and refreshes plans and stock', async () => {
+    const pending = deferred<Response>();
+    let summaryLoads = 0; let planLoads = 0;
+    const fetchMock = mockStockRoutes((url, init) => {
+      if (url.startsWith('/api/stock/daily-summary')) { summaryLoads += 1; return json(stock); }
+      if (url === '/api/stock/plans' && init.method === 'POST') return pending.promise;
+      if (url === '/api/stock/plans') { planLoads += 1; return json([]); }
+    });
+    render(<StockPage />);
+    const submit = await screen.findByRole('button', { name: 'เพิ่มแผน' });
+    await vi.waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.change(screen.getByLabelText('จำนวน'), { target: { value: '5' } });
+    fireEvent.click(submit); fireEvent.click(submit);
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/stock/plans' && init?.method === 'POST')).toHaveLength(1);
+    pending.resolve(json({ id: 10 }));
+    await vi.waitFor(() => { expect(summaryLoads).toBe(2); expect(planLoads).toBe(2); });
+    const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/stock/plans' && init?.method === 'POST');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ productId: 1, date: '2026-08-18', quantity: 5 });
+  });
+
+  it('shows an applied-plan cancellation rejection and retains the plan', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    mockStockRoutes((url, init) => {
+      if (url === '/api/stock/plans' && !init.method) return json([plan]);
+      if (url === '/api/stock/plans/9') return json({ error: 'แผนนี้ถูกเติมสต็อกไปแล้ว ยกเลิกไม่ได้' }, 400);
+    });
+    render(<StockPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'ยกเลิกแผน Original' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('ถูกเติมสต็อกไปแล้ว');
+    expect(screen.getByText('รอดำเนินการ')).toBeInTheDocument();
+  });
+
+  it('routes an adjustment 401 through auth expiry', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
+      if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json(stock));
+      if (url === '/api/stock/plans') return Promise.resolve(json([]));
+      if (url === '/api/stock/adjust' && init.method === 'POST') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AuthProvider><MemoryRouter initialEntries={['/stock']}><AppRoutes /></MemoryRouter></AuthProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' }));
+    expect(await screen.findByLabelText('PIN')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Session expired');
   });
 });

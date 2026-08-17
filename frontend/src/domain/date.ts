@@ -26,3 +26,11 @@ export function formatTime(value: string | null): string {
   const match = /\d{2}:\d{2}/.exec(value ?? '');
   return match?.[0] ?? '-';
 }
+
+export function addDaysISO(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day + days));
+  return [result.getUTCFullYear(), result.getUTCMonth() + 1, result.getUTCDate()]
+    .map((part, index) => index === 0 ? String(part) : String(part).padStart(2, '0'))
+    .join('-');
+}
