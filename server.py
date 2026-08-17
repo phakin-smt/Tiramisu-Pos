@@ -50,6 +50,11 @@ STOCK_REASONS = {
 def number(value): return float(value) if isinstance(value, Decimal) else value
 def error(message,status=400): return jsonify(error=message),status
 
+def iso_date(value):
+ if isinstance(value,datetime): return value.date().isoformat()
+ if isinstance(value,date): return value.isoformat()
+ return str(value)
+
 def bangkok_today():
  return datetime.now(BANGKOK_TZ).date()
 
@@ -354,9 +359,10 @@ def daily_summary():
 def report_days():
  order_days=rows("SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) total_revenue FROM orders WHERE status='completed' GROUP BY order_date ORDER BY order_date DESC")
  closure_days=rows('SELECT report_date,closed_at FROM daily_closures ORDER BY report_date DESC')
- days={r['order_date']:{'date':r['order_date'],'orderCount':r['order_count'],'totalRevenue':number(r['total_revenue']),'closedAt':None} for r in order_days}
+ days={iso_date(r['order_date']):{'date':iso_date(r['order_date']),'orderCount':r['order_count'],'totalRevenue':number(r['total_revenue']),'closedAt':None} for r in order_days}
  for closure in closure_days:
-  item=days.setdefault(closure['report_date'],{'date':closure['report_date'],'orderCount':0,'totalRevenue':0,'closedAt':None})
+  closure_date=iso_date(closure['report_date'])
+  item=days.setdefault(closure_date,{'date':closure_date,'orderCount':0,'totalRevenue':0,'closedAt':None})
   item['closedAt']=local_timestamp(closure['closed_at'])
  for item in days.values():
   menu_items=stock_data(item['date'])
@@ -393,7 +399,7 @@ def analytics():
   loss_rows=execute(cursor,"SELECT p.id,p.name,p.sku,COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0) giveaway_qty,COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0) waste_qty FROM stock_movements sm JOIN products p ON p.id=sm.product_id WHERE sm.created_at>=? AND sm.created_at<? AND sm.reference_type IN ('giveaway','waste') GROUP BY p.id,p.name,p.sku HAVING COALESCE(SUM(CASE WHEN sm.reference_type IN ('giveaway','waste') THEN -sm.quantity ELSE 0 END),0)>0 ORDER BY (COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0)+COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0)) DESC LIMIT 5",(movement_start,movement_end)).fetchall()
   low_rows=execute(cursor,'SELECT id,name,sku,stock_qty,stock_min FROM products WHERE is_active=1 AND stock_qty<=stock_min ORDER BY stock_qty,stock_min DESC,name LIMIT 8').fetchall()
  finally: connection.close()
- daily_map={r['order_date']:r for r in daily_rows}
+ daily_map={iso_date(r['order_date']):r for r in daily_rows}
  daily=[]
  for offset in range(days):
   day=(start_date+timedelta(days=offset)).isoformat(); row=daily_map.get(day)
@@ -438,7 +444,7 @@ def stock_summary():
 @app.get('/api/stock/plans')
 def stock_plans():
  result=rows("SELECT sp.id,sp.product_id,sp.plan_date,sp.quantity,p.name,p.sku FROM stock_plans sp JOIN products p ON p.id=sp.product_id WHERE sp.status='pending' ORDER BY sp.plan_date,p.name")
- return jsonify([{'id':r['id'],'productId':r['product_id'],'date':r['plan_date'],'quantity':r['quantity'],'name':r['name'],'code':r['sku']} for r in result])
+ return jsonify([{'id':r['id'],'productId':r['product_id'],'date':iso_date(r['plan_date']),'quantity':r['quantity'],'name':r['name'],'code':r['sku']} for r in result])
 
 @app.post('/api/stock/plans')
 def create_stock_plan():

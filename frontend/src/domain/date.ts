@@ -13,13 +13,25 @@ export function bangkokDateISO(now = new Date()): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-export function formatThaiDate(date: string): string {
-  const [year, month, day] = date.split('-').map(Number);
+export function formatThaiDate(value: unknown): string {
+  if (typeof value !== 'string' || !value) return '—';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) return value;
   return new Intl.DateTimeFormat('th-TH', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-  }).format(new Date(Date.UTC(year, month - 1, day)));
+  }).format(parsed);
 }
 
 export function formatTime(value: string | null): string {

@@ -122,9 +122,24 @@ describe('StockPage', () => {
     });
     render(<StockPage />);
     expect(await screen.findByText('รอดำเนินการ')).toBeInTheDocument();
+    expect(screen.getByText(/20.*2569/, { exact: false })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ยกเลิกแผน Original' }));
     await vi.waitFor(() => expect(planLoads).toBe(2));
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/plans/9')).toHaveLength(1);
+  });
+
+  it.each([
+    'Tue, 18 Aug 2026 00:00:00 GMT',
+    'not-a-date',
+  ])('keeps StockPage rendered when a plan has an unexpected date: %s', async (planDate) => {
+    mockStockRoutes((url) => url === '/api/stock/plans'
+      ? json([{ ...plan, date: planDate }])
+      : undefined);
+
+    render(<StockPage />);
+
+    expect(await screen.findByText(planDate, { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'แผนเตรียมสต็อก' })).toBeInTheDocument();
   });
 
   it('creates one future plan and refreshes plans and stock', async () => {

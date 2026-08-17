@@ -2,9 +2,9 @@ import atexit
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 _import_db_file = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
@@ -305,6 +305,33 @@ class StockAdjustmentCharacterizationTests(PosApiTestCase):
 
 
 class StockPlanningCharacterizationTests(PosApiTestCase):
+    def test_date_only_contract_matches_for_sqlite_strings_and_python_dates(self):
+        self.assertEqual(server.iso_date("2026-08-18"), "2026-08-18")
+        self.assertEqual(server.iso_date(date(2026, 8, 18)), "2026-08-18")
+
+    def test_postgresql_style_stock_plan_date_matches_sqlite_api_json(self):
+        sqlite_row = {
+            "id": 7,
+            "product_id": 3,
+            "plan_date": "2026-08-18",
+            "quantity": 4,
+            "name": "Original",
+            "sku": "ORI",
+        }
+
+        with patch.object(server, "rows", return_value=[sqlite_row]):
+            sqlite_json = self.client.get("/api/stock/plans").get_json()
+        with patch.object(
+            server,
+            "rows",
+            return_value=[{**sqlite_row, "plan_date": date(2026, 8, 18)}],
+        ):
+            postgres_response = self.client.get("/api/stock/plans")
+
+        self.assertEqual(postgres_response.status_code, 200)
+        self.assertEqual(postgres_response.get_json(), sqlite_json)
+        self.assertEqual(postgres_response.get_json()[0]["date"], "2026-08-18")
+
     def test_future_plan_is_pending_and_can_be_cancelled(self):
         product_id = self.add_product(stock=5)
         plan_date = (server.bangkok_today() + timedelta(days=2)).isoformat()
@@ -343,6 +370,61 @@ class StockPlanningCharacterizationTests(PosApiTestCase):
 
 
 class ReportsCharacterizationTests(PosApiTestCase):
+    def test_report_days_normalize_postgresql_date_columns(self):
+        order_days = [{
+            "order_date": date(2026, 8, 18),
+            "order_count": 1,
+            "total_revenue": 69,
+        }]
+        closure_days = [{
+            "report_date": date(2026, 8, 18),
+            "closed_at": datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
+        }]
+
+        with (
+            patch.object(server, "rows", side_effect=[order_days, closure_days]),
+            patch.object(server, "stock_data", return_value=[]) as stock_data,
+        ):
+            response = self.client.get("/api/reports/days")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["days"][0]["date"], "2026-08-18")
+        stock_data.assert_called_once_with("2026-08-18")
+
+    def test_analytics_matches_postgresql_date_rows_to_iso_business_dates(self):
+        connection = MagicMock()
+        def fetchone(value):
+            result = MagicMock()
+            result.fetchone.return_value = value
+            return result
+
+        def fetchall(value):
+            result = MagicMock()
+            result.fetchall.return_value = value
+            return result
+
+        query_results = [
+            fetchone({"order_count": 1, "revenue": 69, "discount": 0}),
+            fetchone({"cost_total": 20}),
+            fetchall([{"order_date": date(2026, 8, 18), "order_count": 1, "revenue": 69}]),
+            fetchall([]),
+            fetchall([]),
+            fetchall([]),
+        ]
+
+        with (
+            patch.object(server, "bangkok_today", return_value=date(2026, 8, 18)),
+            patch.object(server, "connect_db", return_value=connection),
+            patch.object(server, "execute", side_effect=query_results),
+        ):
+            response = self.client.get("/api/analytics?days=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["daily"],
+            [{"date": "2026-08-18", "orderCount": 1, "revenue": 69}],
+        )
+
     def test_reports_separate_payment_totals_and_reflect_discounts(self):
         product_id = self.add_product(price=100, stock=5)
         self.create_order([{"productId": product_id, "qty": 1}], key="cash", discount=10)
