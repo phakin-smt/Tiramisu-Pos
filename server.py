@@ -11,14 +11,16 @@ from datetime import timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, jsonify, redirect, request, send_file, send_from_directory, session
 import qrcode
 from qrcode.constants import ERROR_CORRECT_M
+from werkzeug.exceptions import NotFound
 from database import ROOT, connect_db, execute, init_schema, is_postgres, transaction
 from promptpay_qr import PromptPayError, generate_promptpay_payload
 
 app = Flask(__name__, static_folder=None)
 PUBLIC_ROOT = ROOT / 'public'
+REACT_ROOT = ROOT / 'frontend' / 'dist'
 BANGKOK_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Bangkok'))
 app.secret_key = os.getenv('SECRET_KEY') or secrets.token_hex(32)
 app.config.update(
@@ -484,6 +486,23 @@ def close_day():
 
 @app.get('/')
 def index(): return send_from_directory(PUBLIC_ROOT,'index.html')
+
+@app.get('/next')
+def react_index_redirect(): return redirect('/next/',code=308)
+
+@app.get('/next/assets/<path:filename>')
+def react_asset(filename):
+ try: response=send_from_directory(REACT_ROOT / 'assets',filename)
+ except NotFound: return '',404
+ response.headers['Cache-Control']='public, max-age=31536000, immutable'
+ return response
+
+@app.get('/next/')
+@app.get('/next/<path:route>')
+def react_index(route=None):
+ response=send_from_directory(REACT_ROOT,'index.html')
+ response.headers['Cache-Control']='no-cache'
+ return response
 
 @app.get('/<path:filename>')
 def static_files(filename):
