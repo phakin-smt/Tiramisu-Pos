@@ -326,12 +326,14 @@ def adjust_stock():
  with transaction() as (_,cursor):
   product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
+  if reason.startswith('undo_'):
+   day_start,day_end=local_day_bounds(bangkok_today().isoformat())
   if reason=='undo_prepare':
-   prepared=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type='daily_prep' AND date(created_at)=?",(product['id'],bangkok_today().isoformat())).fetchone()['total']
+   prepared=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type='daily_prep' AND created_at>=? AND created_at<?",(product['id'],day_start,day_end)).fetchone()['total']
    if prepared<abs(quantity): return error('ไม่มียอดเตรียมของวันนี้ให้ยกเลิก')
   if reason in {'undo_giveaway','undo_waste'}:
    reference_type='giveaway' if reason=='undo_giveaway' else 'waste'
-   movement_total=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type=? AND date(created_at)=?",(product['id'],reference_type,bangkok_today().isoformat())).fetchone()['total']
+   movement_total=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type=? AND created_at>=? AND created_at<?",(product['id'],reference_type,day_start,day_end)).fetchone()['total']
    if -movement_total<abs(quantity): return error('ไม่มีรายการของวันนี้ให้ยกเลิก')
   new_stock=product['stock_qty']+delta
   if new_stock<0: return error('{} มีสต็อกไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
