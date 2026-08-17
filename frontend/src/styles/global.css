@@ -1,0 +1,24 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1f2933;
+  background: #f7f7f5;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  padding: 24px;
+}
+
+.app-shell nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.app-shell main {
+  margin-top: 32px;
+}
