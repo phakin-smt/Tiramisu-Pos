@@ -75,10 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({ phase: 'authenticated', message: '' });
       return true;
     } catch (error) {
-      setState({
-        phase: 'unauthenticated',
+      setState((current) => ({
+        phase: current.phase === 'expired' ? 'expired' : 'unauthenticated',
         message: error instanceof Error ? error.message : 'Login failed',
-      });
+      }));
       return false;
     } finally {
       setSubmitting(false);
@@ -161,6 +161,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (phase !== 'authenticated') return <LoginForm />;
-  return children;
+  if (phase !== 'authenticated' && phase !== 'expired') return <LoginForm />;
+  return <>
+    <div hidden={phase === 'expired'} inert={phase === 'expired'}>{children}</div>
+    {phase === 'expired' && <LoginForm />}
+  </>;
 }

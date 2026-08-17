@@ -225,10 +225,9 @@ describe('SellPage', () => {
     expect(document.body).not.toHaveClass('sell-cart-open');
   });
 
-  it('never submits an order or requests PromptPay during any Phase 5A interaction', async () => {
+  it('does not submit or request PromptPay from render, rerender, or non-payment interactions', async () => {
     const fetchMock = mockSell(); const view = await renderSell();
     add('Original');
-    fireEvent.click(screen.getByRole('button', { name: /QR พร้อมเพย์/ }));
     fireEvent.click(screen.getByRole('button', { name: 'สมาชิก' }));
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'รีเฟรชสินค้า' }));

@@ -8,12 +8,13 @@ import { PaymentSelector, type PaymentMethod } from './PaymentSelector';
 interface CartProps {
   products: readonly CatalogProduct[]; cart: readonly CartItemModel[]; totals: Totals; discountState: DiscountState;
   totalQuantity: number; paidQuantity: number; customerType: CustomerType; paymentMethod: PaymentMethod; mobile: boolean; open: boolean;
+  paymentDisabled: boolean;
   onClose(): void; onClear(): void; onQuantityChange(product: CatalogProduct, delta: number): void;
   onGiveawayChange(productId: number, delta: number): void; onRemove(productId: number): void;
-  onDiscountChange(value: number): void; onCustomerChange(value: CustomerType): void; onPaymentChange(value: PaymentMethod): void;
+  onDiscountChange(value: number): void; onCustomerChange(value: CustomerType): void; onPaymentActivate(value: PaymentMethod): void;
 }
 
-export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentChange }: CartProps) {
+export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, paymentDisabled, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate }: CartProps) {
   return <aside id="sell-cart" className={`sell-cart${open ? ' is-open' : ''}`} aria-label="ออเดอร์ปัจจุบัน" role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-hidden={mobile ? !open : undefined} inert={mobile && !open}>
     <header className="sell-cart-header">
       <div><h2>ออเดอร์ปัจจุบัน</h2><span>{totalQuantity} ชิ้น</span></div>
@@ -29,6 +30,6 @@ export function Cart({ products, cart, totals, discountState, totalQuantity, pai
       })}
     </div>
     <CartTotals totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} onDiscountChange={onDiscountChange} />
-    <PaymentSelector value={paymentMethod} onChange={onPaymentChange} />
+    <PaymentSelector value={paymentMethod} disabled={paymentDisabled} onActivate={onPaymentActivate} />
   </aside>;
 }

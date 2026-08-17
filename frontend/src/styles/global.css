@@ -288,6 +288,18 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .cart-totals .grand-total { min-height: 44px; margin-top: 7px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 15px; }
 .cart-totals .grand-total strong { font-size: 21px; }
 .payment-fieldset { border-top: 1px solid var(--line); border-bottom: 0; }
+.promptpay-overlay { position: fixed; z-index: 80; inset: 0; display: grid; padding: 20px; place-items: center; overflow-y: auto; background: rgba(31, 24, 20, 0.58); }
+.promptpay-modal { width: min(100%, 460px); overflow: hidden; border-radius: 8px; background: var(--panel); box-shadow: 0 18px 54px rgba(35, 25, 20, 0.28); }
+.promptpay-modal > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.promptpay-modal h2 { margin: 0; font-size: 19px; }
+.promptpay-modal header span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 13px; }
+.promptpay-content { display: grid; min-height: 300px; padding: 18px; place-items: center; }
+.promptpay-content img { display: block; width: min(100%, 290px); aspect-ratio: 1; object-fit: contain; }
+.qr-status { width: 100%; padding: 10px 12px; color: var(--text-soft); text-align: center; font-size: 13px; }
+.qr-status.is-error { color: var(--danger); background: #fae9e6; border-radius: 8px; }
+.promptpay-modal footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.promptpay-modal footer button { min-width: 132px; }
+body.promptpay-open { overflow: hidden; }
 
 @media (min-width: 768px) and (max-width: 1199px) {
   .sell-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
@@ -317,4 +329,8 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .mobile-cart-bar small { margin-top: 2px; font-size: 11px; font-weight: 500; }
   .sell-cart-items { min-height: 110px; }
   .customer-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .promptpay-overlay { padding: 0; place-items: end center; }
+  .promptpay-modal { max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 8px 8px 0 0; }
+  .promptpay-content { min-height: 280px; }
+  .promptpay-modal footer button { min-width: 0; flex: 1; }
 }

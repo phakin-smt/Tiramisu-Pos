@@ -1,4 +1,6 @@
-export type CustomerType = 'walkin' | 'member' | 'store';
+import type { CustomerType } from '../../types/checkout';
+
+export type { CustomerType } from '../../types/checkout';
 
 interface CustomerSelectorProps { value: CustomerType; onChange(value: CustomerType): void; }
 const options: Array<{ value: CustomerType; label: string }> = [

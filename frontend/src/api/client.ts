@@ -65,6 +65,30 @@ export async function apiRequest<T>(
   return body as T;
 }
 
+export async function apiBlobRequest(
+  path: string,
+  { notifyUnauthorized = true, headers, ...init }: ApiRequestOptions = {},
+): Promise<Blob> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: 'same-origin',
+    headers: { Accept: 'image/png', ...headers },
+  });
+
+  if (!response.ok) {
+    const body = await parseJson(response);
+    const errorBody = body && typeof body === 'object' ? (body as ApiErrorBody) : null;
+    if (response.status === 401 && notifyUnauthorized) publishUnauthorized();
+    throw new ApiError(
+      errorBody?.error || `Request failed with status ${response.status}`,
+      response.status,
+      errorBody,
+    );
+  }
+
+  return response.blob();
+}
+
 export function postJson<TResponse, TBody>(
   path: string,
   body: TBody,
