@@ -1,5 +1,9 @@
 import { apiRequest } from './client';
-import type { CloseDayReport, ReportDaysResponse } from '../types/reports';
+import type { CloseDayReport, DailySummaryResponse, ReportDaysResponse } from '../types/reports';
+
+export function getDailySummary(signal?: AbortSignal): Promise<DailySummaryResponse> {
+  return apiRequest('/api/reports/daily-summary', { signal });
+}
 
 export function getReportDays(signal?: AbortSignal): Promise<ReportDaysResponse> {
   return apiRequest('/api/reports/days', { signal });

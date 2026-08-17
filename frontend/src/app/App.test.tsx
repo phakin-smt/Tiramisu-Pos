@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { apiRequest } from '../api/client';
 import { AuthProvider } from '../features/auth/AuthContext';
 import { AppRoutes } from './router';
 
@@ -114,6 +113,8 @@ describe('authentication and application shell', () => {
   it('logs out and removes access to the shell with one mutation', async () => {
     const fetchMock = mockResponses(
       { body: { authenticated: true, configured: true } },
+      { body: [] },
+      { body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } },
       { body: { authenticated: false, configured: true } },
     );
     renderApplication('/sell');
@@ -125,13 +126,15 @@ describe('authentication and application shell', () => {
   });
 
   it('returns to login when an ordinary JSON API request receives 401', async () => {
-    mockResponses(
-      { body: { authenticated: true, configured: true } },
-      { status: 401, body: { error: 'กรุณาเข้าสู่ระบบใหม่' } },
-    );
-    renderApplication('/orders');
-    await screen.findByRole('heading', { name: 'ออเดอร์' });
-    await expect(apiRequest('/api/products')).rejects.toThrow('กรุณาเข้าสู่ระบบใหม่');
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/auth/status') return Promise.resolve(response({ body: { authenticated: true, configured: true } }));
+      if (url === '/api/products') return Promise.resolve(response({ status: 401, body: { error: 'กรุณาเข้าสู่ระบบใหม่' } }));
+      if (url === '/api/reports/daily-summary') return Promise.resolve(response({ body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } }));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderApplication('/sell');
     expect(await screen.findByRole('alert')).toHaveTextContent('Session expired. Please log in again.');
   });
 

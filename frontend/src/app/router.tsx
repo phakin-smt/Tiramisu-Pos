@@ -7,6 +7,8 @@ import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { StockPage } from '../features/stock/StockPage';
 import { ProductsAdminPage } from '../features/products-admin/ProductsAdminPage';
+import { OrdersPage } from '../features/orders/OrdersPage';
+import { SellPage } from '../features/sell/SellPage';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -27,14 +29,16 @@ export function AppRoutes() {
         )}
       >
         <Route index element={<Navigate to="/sell" replace />} />
-        {navigationItems.filter((item) => !['/stock', '/reports', '/analytics', '/settings'].includes(item.path)).map((item) => (
+        {navigationItems.filter((item) => !['/sell', '/stock', '/orders', '/reports', '/analytics', '/settings'].includes(item.path)).map((item) => (
           <Route
             key={item.path}
             path={item.path.slice(1)}
             element={<Placeholder title={item.label} />}
           />
         ))}
+        <Route path="sell" element={<SellPage />} />
         <Route path="stock" element={<StockPage />} />
+        <Route path="orders" element={<OrdersPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="settings" element={<ProductsAdminPage />} />

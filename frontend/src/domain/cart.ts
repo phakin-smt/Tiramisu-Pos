@@ -1,6 +1,11 @@
 import { calculateTotals } from './promotion';
 import type { CartItem, CartTotals, DiscountState, Product } from '../types/domain';
 
+export interface CartReconciliation {
+  cart: CartItem[];
+  adjustedProductIds: number[];
+}
+
 function findItem(cart: readonly CartItem[], productId: number): CartItem | undefined {
   return cart.find((item) => item.productId === productId);
 }
@@ -51,8 +56,42 @@ export function cartQuantity(cart: readonly CartItem[], productId: number): numb
   return findItem(cart, productId)?.qty ?? 0;
 }
 
+export function totalCartQuantity(cart: readonly CartItem[]): number {
+  return cart.reduce((sum, item) => sum + item.qty, 0);
+}
+
+export function paidCartQuantity(cart: readonly CartItem[]): number {
+  return cart.reduce((sum, item) => sum + item.qty - item.giveawayQty, 0);
+}
+
+export function removeFromCart(cart: readonly CartItem[], productId: number): CartItem[] {
+  return cart.filter((item) => item.productId !== productId);
+}
+
 export function remainingStock(product: Product, cart: readonly CartItem[]): number {
-  return product.stock - cartQuantity(cart, product.id);
+  return Math.max(0, product.stock - cartQuantity(cart, product.id));
+}
+
+export function reconcileCartWithStock(
+  cart: readonly CartItem[],
+  products: readonly Product[],
+): CartReconciliation {
+  const adjustedProductIds: number[] = [];
+  const reconciled = cart.flatMap((item) => {
+    const product = products.find((candidate) => candidate.id === item.productId);
+    const nextQuantity = product ? Math.min(item.qty, Math.max(0, product.stock)) : 0;
+    const nextGiveawayQuantity = Math.min(item.giveawayQty, nextQuantity);
+
+    if (!product || nextQuantity !== item.qty || nextGiveawayQuantity !== item.giveawayQty) {
+      adjustedProductIds.push(item.productId);
+    }
+
+    return nextQuantity > 0
+      ? [{ ...item, qty: nextQuantity, giveawayQty: nextGiveawayQuantity }]
+      : [];
+  });
+
+  return { cart: reconciled, adjustedProductIds };
 }
 
 export function calculateCartTotals(

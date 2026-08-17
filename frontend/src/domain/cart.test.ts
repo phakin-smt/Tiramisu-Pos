@@ -5,6 +5,7 @@ import {
   calculateCartTotals,
   changeGiveawayQuantity,
   changeQuantity,
+  reconcileCartWithStock,
   remainingStock,
 } from './cart';
 import type { CartItem, Product } from '../types/domain';
@@ -52,5 +53,18 @@ describe('current cart invariants', () => {
     const totals = calculateCartTotals([product], cart);
     expect(totals.subtotal).toBe(69);
     expect(remainingStock(product, cart)).toBe(0);
+  });
+
+  it('reconciles quantity and giveaways when refreshed backend stock is lower', () => {
+    const cart: CartItem[] = [{ productId: 1, qty: 3, giveawayQty: 3 }];
+    expect(reconcileCartWithStock(cart, [{ ...product, stock: 2 }])).toEqual({
+      cart: [{ productId: 1, qty: 2, giveawayQty: 2 }],
+      adjustedProductIds: [1],
+    });
+  });
+
+  it('removes cart lines no longer present in the active backend catalog', () => {
+    const cart: CartItem[] = [{ productId: 1, qty: 1, giveawayQty: 0 }];
+    expect(reconcileCartWithStock(cart, [])).toEqual({ cart: [], adjustedProductIds: [1] });
   });
 });

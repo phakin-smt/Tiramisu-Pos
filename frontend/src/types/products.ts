@@ -9,6 +9,20 @@ export interface ProductPayload {
   active: boolean;
 }
 
+export interface CatalogProduct {
+  id: number;
+  code: string;
+  barcode: string | null;
+  name: string;
+  category: string;
+  price: number;
+  cost: number;
+  stock: number;
+  minStock: number;
+  active: boolean;
+  icon: string;
+}
+
 export interface ProductMutationResponse {
   id: number;
   code: string;

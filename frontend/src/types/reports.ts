@@ -12,6 +12,14 @@ export interface ReportDaysResponse {
   days: ReportDay[];
 }
 
+export interface DailySummaryResponse {
+  date: string;
+  orderCount: number;
+  cashTotal: number;
+  transferTotal: number;
+  totalRevenue: number;
+}
+
 export interface ReportOrderItem {
   name: string;
   code: string;

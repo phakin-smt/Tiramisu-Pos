@@ -1,5 +1,9 @@
 import { apiRequest, postJson } from './client';
-import type { DeleteProductResponse, ProductActiveResponse, ProductMutationResponse, ProductPayload } from '../types/products';
+import type { CatalogProduct, DeleteProductResponse, ProductActiveResponse, ProductMutationResponse, ProductPayload } from '../types/products';
+
+export function getProducts(signal?: AbortSignal): Promise<CatalogProduct[]> {
+  return apiRequest('/api/products', { signal });
+}
 
 export function createProduct(payload: ProductPayload): Promise<ProductMutationResponse> {
   return postJson('/api/products', payload);
