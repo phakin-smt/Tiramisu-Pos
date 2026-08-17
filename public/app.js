@@ -1,5 +1,6 @@
 let products = [];
 let stockItems = [];
+let settingsMenuItems = [];
 let editingProductId = null;
 let discountManual = false;
 const cart = [];
@@ -13,6 +14,7 @@ const BUNDLE_QTY = 3;
 const BUNDLE_PRICE = 200;
 const BUNDLE_DISCOUNT_PER_SET = BUNDLE_UNIT_PRICE * BUNDLE_QTY - BUNDLE_PRICE;
 const APP_TIME_ZONE = 'Asia/Bangkok';
+const PAGE_ORDER = ['sellPage', 'stockPage', 'ordersPage', 'reportPage', 'analyticsPage', 'settingsPage'];
 
 
 function bangkokDateParts() {
@@ -29,6 +31,15 @@ function bangkokDateParts() {
 function bangkokDateISO() {
   const { year, month, day } = bangkokDateParts();
   return `${year}-${month}-${day}`;
+}
+
+function formatThaiDate(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Intl.DateTimeFormat('th-TH', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 
@@ -137,54 +148,11 @@ async function fetchProducts() {
     products = await response.json();
     renderProductGrid();
     renderCategoryTabs();
-    renderCategoriesFilter();
     renderStockCount();
   } catch (error) {
     console.error(error);
     showToast('ไม่สามารถโหลด master menu ได้');
   }
-}
-
-
-async function fetchCategories() {
-  try {
-    const response = await apiFetch('/api/products/categories');
-    if (!response.ok) {
-      throw new Error('Unable to fetch categories');
-    }
-
-
-    const data = await response.json();
-    const filter = document.getElementById('categoryFilter');
-    filter.innerHTML = '<option value="ทั้งหมด">ทั้งหมด</option>';
-
-
-    (data.categories || []).forEach((category) => {
-      const option = document.createElement('option');
-      option.value = category;
-      option.textContent = category;
-      filter.appendChild(option);
-    });
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-
-function renderCategoriesFilter() {
-  const filter = document.getElementById('categoryFilter');
-  const existing = [...new Set(products.map((item) => item.category))];
-
-
-  filter.innerHTML = '<option value="ทั้งหมด">ทั้งหมด</option>';
-
-
-  existing.forEach((category) => {
-    const option = document.createElement('option');
-    option.value = category;
-    option.textContent = category;
-    filter.appendChild(option);
-  });
 }
 
 
@@ -200,8 +168,6 @@ function renderCategoryTabs() {
     button.textContent = category;
     button.addEventListener('click', () => {
       selectedCategory = category;
-      const filter = document.getElementById('categoryFilter');
-      filter.value = category;
       renderProductGrid();
       renderCategoryTabs();
     });
@@ -213,14 +179,12 @@ function renderCategoryTabs() {
 
 
 function renderProductGrid() {
-  const search = document.getElementById('searchInput').value.trim().toLowerCase();
   const categoryFilter = selectedCategory;
 
 
   const filtered = products.filter((p) => {
     const matchesCategory = categoryFilter === 'ทั้งหมด' || p.category === categoryFilter;
-    const matchesText = p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search);
-    return matchesCategory && matchesText;
+    return matchesCategory;
   });
 
 
@@ -293,7 +257,7 @@ function addToCart(productId) {
   if (existing) {
     existing.qty += 1;
   } else {
-    cart.push({ productId, qty: 1 });
+    cart.push({ productId, qty: 1, giveawayQty: 0 });
   }
 
 
@@ -325,6 +289,7 @@ function updateCartQty(productId, delta) {
 
 
   item.qty += delta;
+  item.giveawayQty = Math.min(item.giveawayQty || 0, item.qty);
 
 
   if (item.qty <= 0) {
@@ -332,6 +297,13 @@ function updateCartQty(productId, delta) {
   } else {
     renderCart();
   }
+}
+
+function updateGiveawayQty(productId, delta) {
+  const item = cart.find((cartItem) => cartItem.productId === productId);
+  if (!item) return;
+  item.giveawayQty = Math.min(item.qty, Math.max(0, (item.giveawayQty || 0) + delta));
+  renderCart();
 }
 
 
@@ -359,15 +331,21 @@ function renderCart() {
           <div class="cart-img">${product.icon || '📦'}</div>
           <div>
             <div class="cart-name">${product.name}</div>
-            <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}</div>
+            <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}${item.giveawayQty ? ` · แถม ${item.giveawayQty}` : ''}</div>
             <div class="qty-box">
               <button class="qty-decrease">−</button>
               <span>${item.qty}</span>
               <button class="qty-increase">+</button>
             </div>
+            <div class="giveaway-control">
+              <span>🎁 แถม</span>
+              <button class="giveaway-decrease" type="button" aria-label="ลดจำนวนแถม">−</button>
+              <strong>${item.giveawayQty || 0}</strong>
+              <button class="giveaway-increase" type="button" aria-label="เพิ่มจำนวนแถม">+</button>
+            </div>
           </div>
         </div>
-        <div class="item-total">${formatCurrency(product.price * item.qty)}</div>
+        <div class="item-total">${formatCurrency(product.price * (item.qty - (item.giveawayQty || 0)))}</div>
       `;
 
 
@@ -384,6 +362,12 @@ function renderCart() {
       const increaseBtn = cartRow.querySelector('.qty-increase');
       increaseBtn.disabled = item.qty >= product.stock;
       increaseBtn.addEventListener('click', () => updateCartQty(product.id, 1));
+      const giveawayDecrease = cartRow.querySelector('.giveaway-decrease');
+      const giveawayIncrease = cartRow.querySelector('.giveaway-increase');
+      giveawayDecrease.disabled = !item.giveawayQty;
+      giveawayIncrease.disabled = (item.giveawayQty || 0) >= item.qty;
+      giveawayDecrease.addEventListener('click', () => updateGiveawayQty(product.id, -1));
+      giveawayIncrease.addEventListener('click', () => updateGiveawayQty(product.id, 1));
 
 
       cartItems.appendChild(cartRow);
@@ -399,13 +383,13 @@ function renderCart() {
 function computeTotals() {
   const subtotal = cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product ? sum + product.price * item.qty : sum;
+    return product ? sum + product.price * (item.qty - (item.giveawayQty || 0)) : sum;
   }, 0);
 
 
   const eligibleQty = cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty : sum;
+    return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty - (item.giveawayQty || 0) : sum;
   }, 0);
   const bundleSets = Math.floor(eligibleQty / BUNDLE_QTY);
   const autoDiscount = bundleSets * BUNDLE_DISCOUNT_PER_SET;
@@ -452,16 +436,6 @@ function showToast(message) {
   setTimeout(() => {
     toast.classList.remove('show');
   }, 2200);
-}
-
-
-function initCategories() {
-  const categoryFilter = document.getElementById('categoryFilter');
-  categoryFilter.addEventListener('change', (event) => {
-    selectedCategory = event.target.value || 'ทั้งหมด';
-    renderCategoryTabs();
-    renderProductGrid();
-  });
 }
 
 
@@ -541,7 +515,7 @@ async function submitOrder() {
       method: 'POST',
      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': pendingOrderKey },
       body: JSON.stringify({
-        items: cart.map((item) => ({ productId: item.productId, qty: item.qty })),
+        items: cart.map((item) => ({ productId: item.productId, qty: item.qty, giveawayQty: item.giveawayQty || 0 })),
         paymentMethod,
         customerType,
         discount: totals.discount
@@ -622,38 +596,186 @@ function showPage(pageId) {
 
   if (pageId === 'stockPage') {
     fetchStockSummary();
-    fetchStockPlans();
+  }
+
+  if (pageId === 'settingsPage') {
+    fetchMenuSettings();
   }
 
   if (pageId === 'ordersPage') {
     fetchOrders(document.getElementById('ordersDateInput').value);
+  }
+
+  if (pageId === 'reportPage') {
+    fetchReportDays();
+  }
+
+  if (pageId === 'analyticsPage') {
+    fetchAnalytics();
   }
 }
 
 
 const STOCK_ACTION_LABELS = {
   prepare: 'เตรียมเพิ่ม',
+  undo_prepare: 'ยกเลิกเตรียม',
   giveaway: 'บันทึกแถม',
-  waste: 'บันทึกของเสีย'
+  undo_giveaway: 'ยกเลิกแถม',
+  waste: 'บันทึกของเสีย',
+  undo_waste: 'ยกเลิกของเสีย',
+  correction: 'ปรับสต็อก'
 };
 
 
-async function fetchStockSummary() {
+async function fetchStockSummary(date = document.getElementById('stockDateInput')?.value || bangkokDateISO()) {
   try {
-    const response = await apiFetch('/api/stock/daily-summary');
+    const response = await apiFetch(`/api/stock/daily-summary?date=${encodeURIComponent(date)}`);
     if (!response.ok) {
       throw new Error('Unable to fetch stock summary');
     }
 
 
     const summary = await response.json();
-    stockItems = summary.items || [];
-    renderStockTable(stockItems);
+    stockItems = (summary.items || []).filter((item) => item.active);
+    const isToday = summary.date === bangkokDateISO();
+    document.getElementById('stockDateHint').textContent = isToday
+      ? 'เพิ่มหรือลดยอดเตรียม แถม และเสียของวันนี้'
+      : `ประวัติประจำวันที่ ${formatThaiDate(summary.date)} · ดูย้อนหลังอย่างเดียว`;
+    renderStockTable(stockItems, isToday);
     populateCategoryOptions(stockItems);
-    populatePlanProductSelect();
   } catch (error) {
     console.error(error);
     showToast('ไม่สามารถโหลดข้อมูลสต็อกได้');
+  }
+}
+
+function enablePageSwipe() {
+  const mainContent = document.querySelector('.main-content');
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  mainContent.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1 || event.target.closest('input, select, textarea, button, .modal-overlay, .sales-chart, .stock-table-wrap')) {
+      touchStartX = 0;
+      touchStartY = 0;
+      return;
+    }
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+  }, { passive: true });
+
+  mainContent.addEventListener('touchend', (event) => {
+    if (!touchStartX || event.changedTouches.length !== 1 || !window.matchMedia('(min-width: 768px) and (max-width: 1199px)').matches) return;
+
+    const deltaX = event.changedTouches[0].clientX - touchStartX;
+    const deltaY = event.changedTouches[0].clientY - touchStartY;
+    touchStartX = 0;
+    touchStartY = 0;
+
+    if (Math.abs(deltaX) < 80 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+
+    const currentPage = document.querySelector('.page:not([hidden])');
+    const currentIndex = PAGE_ORDER.indexOf(currentPage?.id);
+    if (currentIndex < 0) return;
+
+    const nextIndex = deltaX < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < PAGE_ORDER.length) showPage(PAGE_ORDER[nextIndex]);
+  }, { passive: true });
+}
+
+async function fetchMenuSettings() {
+  try {
+    const response = await apiFetch(`/api/stock/daily-summary?date=${bangkokDateISO()}`);
+    if (!response.ok) throw new Error('Unable to fetch menu settings');
+    const summary = await response.json();
+    settingsMenuItems = summary.items || [];
+    populateSettingsCategoryFilter(settingsMenuItems);
+    applyMenuSettingsFilters();
+    populateCategoryOptions(settingsMenuItems);
+  } catch (error) {
+    console.error(error);
+    showToast('ไม่สามารถโหลดรายการเมนูได้');
+  }
+}
+
+function populateSettingsCategoryFilter(items) {
+  const select = document.getElementById('settingsCategoryFilter');
+  const previousValue = select.value;
+  const categories = [...new Set(items.map((item) => item.category))].sort((a, b) => a.localeCompare(b, 'th'));
+  select.innerHTML = '<option value="all">ทุกหมวดหมู่</option>'
+    + categories.map((category) => `<option value="${category}">${category}</option>`).join('');
+  select.value = categories.includes(previousValue) ? previousValue : 'all';
+}
+
+function applyMenuSettingsFilters() {
+  const query = document.getElementById('settingsMenuSearch').value.trim().toLocaleLowerCase('th');
+  const status = document.getElementById('settingsStatusFilter').value;
+  const category = document.getElementById('settingsCategoryFilter').value;
+  const filteredItems = settingsMenuItems.filter((item) => {
+    const matchesQuery = !query || item.name.toLocaleLowerCase('th').includes(query)
+      || item.code.toLocaleLowerCase('th').includes(query);
+    const matchesStatus = status === 'all' || (status === 'active' ? item.active : !item.active);
+    const matchesCategory = category === 'all' || item.category === category;
+    return matchesQuery && matchesStatus && matchesCategory;
+  });
+  renderMenuSettings(filteredItems, settingsMenuItems.length);
+}
+
+function renderMenuSettings(items, totalCount = items.length) {
+  const list = document.getElementById('settingsMenuList');
+  const openCount = settingsMenuItems.filter((item) => item.active).length;
+  document.getElementById('settingsMenuSubtitle').textContent = items.length === totalCount
+    ? `${totalCount} เมนู · เปิดขาย ${openCount} เมนู`
+    : `พบ ${items.length} จาก ${totalCount} เมนู · เปิดขายทั้งหมด ${openCount} เมนู`;
+  list.innerHTML = '';
+
+  if (!items.length) {
+    list.innerHTML = '<div class="settings-menu-empty">ไม่พบเมนูที่ตรงกับตัวกรอง</div>';
+    return;
+  }
+
+  items.forEach((item) => {
+    const card = document.createElement('article');
+    card.className = `settings-menu-item${item.active ? '' : ' is-inactive'}`;
+    card.innerHTML = `
+      <div class="stock-menu-icon">${item.icon || '🧁'}</div>
+      <div class="settings-menu-info">
+        <strong>${item.name}</strong>
+        <span>${item.code} · ${item.category} · ${formatCurrency(item.price)}</span>
+      </div>
+      <label class="menu-active-switch">
+        <input type="checkbox" ${item.active ? 'checked' : ''} aria-label="เปิดขาย ${item.name}">
+        <span>${item.active ? 'เปิดขาย' : 'พักขาย'}</span>
+      </label>
+      <div class="settings-menu-actions">
+        <button class="btn btn-light edit-menu-btn" type="button">แก้ไข</button>
+        <button class="btn btn-danger delete-menu-btn" type="button">ลบ</button>
+      </div>
+    `;
+
+    const activeInput = card.querySelector('.menu-active-switch input');
+    activeInput.addEventListener('change', () => setMenuActive(item, activeInput.checked));
+    card.querySelector('.edit-menu-btn').addEventListener('click', () => openProductModal(item));
+    card.querySelector('.delete-menu-btn').addEventListener('click', () => deleteProduct(item));
+    list.appendChild(card);
+  });
+}
+
+async function setMenuActive(item, active) {
+  try {
+    const response = await apiFetch(`/api/products/${item.productId}/active`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'เปลี่ยนสถานะเมนูไม่สำเร็จ');
+    showToast(active ? `เปิดขาย ${item.name} แล้ว` : `พักขาย ${item.name} แล้ว`);
+    await Promise.all([fetchMenuSettings(), fetchProducts()]);
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || 'เปลี่ยนสถานะเมนูไม่สำเร็จ');
+    await fetchMenuSettings();
   }
 }
 
@@ -665,181 +787,82 @@ function populateCategoryOptions(items) {
 }
 
 
-function renderStockTable(items) {
-  const totals = items.reduce(
-    (acc, item) => {
-      acc.prepared += item.prepared;
-      acc.sold += item.sold;
-      acc.giveaway += item.giveaway;
-      acc.waste += item.waste;
-      return acc;
-    },
-    { prepared: 0, sold: 0, giveaway: 0, waste: 0 }
-  );
-
-
-  document.getElementById('preparedTotal').textContent = totals.prepared;
-  document.getElementById('soldTotal').textContent = totals.sold;
-  document.getElementById('giveawayTotal').textContent = totals.giveaway;
-  document.getElementById('wasteTotal').textContent = totals.waste;
-
-
+function renderStockTable(items, editable = true) {
   const tbody = document.getElementById('stockTableBody');
   tbody.innerHTML = '';
 
 
   items.forEach((item) => {
     const row = document.createElement('tr');
-    const sellThroughText = item.sellThrough === null ? '—' : `${Math.round(item.sellThrough * 100)}%`;
-
-
     row.innerHTML = `
       <td>
         <div class="stock-menu-cell">
           <div class="stock-menu-icon">${item.icon || '🧁'}</div>
           <div>
             <div class="stock-menu-name">${item.name}</div>
-            <div class="stock-menu-meta">${item.code}${item.active ? '' : ' · พักขาย'}</div>
+            <div class="stock-menu-meta">${item.code} · คงเหลือ ${item.stockNow} ชิ้น${item.active ? '' : ' · พักขาย'}</div>
           </div>
         </div>
       </td>
-      <td class="stock-figure">${item.stockNow}</td>
-      <td class="stock-figure">${item.prepared}</td>
-      <td class="stock-figure">${item.sold}</td>
-      <td class="stock-figure giveaway">${item.giveaway}</td>
-      <td class="stock-figure waste">${item.waste}</td>
-      <td>${sellThroughText}</td>
       <td>
-        <div class="stock-actions">
-          <input type="number" class="stock-qty-input" min="1" value="1" />
-          <button class="stock-action-btn prepare" data-reason="prepare">+ เตรียม</button>
-          <button class="stock-action-btn giveaway" data-reason="giveaway">แถม</button>
-          <button class="stock-action-btn waste" data-reason="waste">เสีย</button>
-        </div>
-      </td>
-      <td>
-        <div class="stock-manage-actions">
-          <button class="stock-manage-btn edit">แก้ไข</button>
-          <button class="stock-manage-btn delete">ลบ</button>
+        <div class="stock-counter-groups" aria-label="ปรับจำนวน ${item.name}">
+          <div class="stock-counter-group prepared">
+            <span>เตรียม${editable ? 'วันนี้' : ''}</span>
+            <div><button type="button" data-reason="undo_prepare" data-quantity="1" ${!editable || item.prepared <= 0 || item.stockNow <= 0 ? 'disabled' : ''}>−</button><input class="stock-counter-input" type="number" min="0" step="1" inputmode="numeric" value="${item.prepared}" data-value="${item.prepared}" data-increase-reason="prepare" data-decrease-reason="undo_prepare" aria-label="จำนวนเตรียม ${item.name}" ${editable ? '' : 'readonly'}><button type="button" data-reason="prepare" data-quantity="1" ${editable ? '' : 'disabled'}>+</button></div>
+          </div>
+          <div class="stock-counter-group giveaway">
+            <span>แถม${editable ? 'วันนี้' : ''}</span>
+            <div><button type="button" data-reason="undo_giveaway" data-quantity="1" ${!editable || item.giveaway <= 0 ? 'disabled' : ''}>−</button><input class="stock-counter-input" type="number" min="0" step="1" inputmode="numeric" value="${item.giveaway}" data-value="${item.giveaway}" data-increase-reason="giveaway" data-decrease-reason="undo_giveaway" aria-label="จำนวนแถม ${item.name}" ${editable ? '' : 'readonly'}><button type="button" data-reason="giveaway" data-quantity="1" ${!editable || item.stockNow <= 0 ? 'disabled' : ''}>+</button></div>
+          </div>
+          <div class="stock-counter-group waste">
+            <span>เสีย${editable ? 'วันนี้' : ''}</span>
+            <div><button type="button" data-reason="undo_waste" data-quantity="1" ${!editable || item.waste <= 0 ? 'disabled' : ''}>−</button><input class="stock-counter-input" type="number" min="0" step="1" inputmode="numeric" value="${item.waste}" data-value="${item.waste}" data-increase-reason="waste" data-decrease-reason="undo_waste" aria-label="จำนวนเสีย ${item.name}" ${editable ? '' : 'readonly'}><button type="button" data-reason="waste" data-quantity="1" ${!editable || item.stockNow <= 0 ? 'disabled' : ''}>+</button></div>
+          </div>
         </div>
       </td>
     `;
 
+    row.querySelectorAll('.stock-counter-group button').forEach((button) => {
+      button.addEventListener('click', () => {
+        submitStockAdjustment(item.productId, button.dataset.reason, Number(button.dataset.quantity));
+      });
+    });
 
-    const qtyInput = row.querySelector('.stock-qty-input');
-    row.querySelectorAll('.stock-action-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const qty = Number(qtyInput.value);
-        if (!qty || qty <= 0) {
-          showToast('กรอกจำนวนให้ถูกต้อง');
+    row.querySelectorAll('.stock-counter-input:not([readonly])').forEach((input) => {
+      let submitted = false;
+      const submitTypedValue = () => {
+        if (submitted) return;
+
+        const previousValue = Number(input.dataset.value);
+        const nextValue = Number(input.value);
+        if (!Number.isInteger(nextValue) || nextValue < 0) {
+          input.value = previousValue;
+          showToast('กรุณากรอกจำนวนเต็มตั้งแต่ 0 ขึ้นไป');
           return;
         }
-        submitStockAdjustment(item.productId, btn.dataset.reason, qty);
+
+        const difference = nextValue - previousValue;
+        if (difference === 0) return;
+
+        submitted = true;
+        const reason = difference > 0 ? input.dataset.increaseReason : input.dataset.decreaseReason;
+        submitStockAdjustment(item.productId, reason, Math.abs(difference));
+      };
+
+      input.addEventListener('change', submitTypedValue);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          input.blur();
+        }
       });
     });
 
 
-    row.querySelector('.stock-manage-btn.edit').addEventListener('click', () => openProductModal(item));
-    row.querySelector('.stock-manage-btn.delete').addEventListener('click', () => deleteProduct(item));
-
-
     tbody.appendChild(row);
   });
 }
 
-
-let stockPlans = [];
-
-function populatePlanProductSelect() {
-  const select = document.getElementById('planProductSelect');
-  select.innerHTML = stockItems.map((item) => `<option value="${item.productId}">${item.name}</option>`).join('');
-}
-
-async function fetchStockPlans() {
-  try {
-    const response = await apiFetch('/api/stock/plans');
-    if (!response.ok) {
-      throw new Error('Unable to fetch stock plans');
-    }
-
-    stockPlans = await response.json();
-    renderStockPlans();
-  } catch (error) {
-    console.error(error);
-    showToast('ไม่สามารถโหลดแผนเตรียมสต็อกได้');
-  }
-}
-
-function renderStockPlans() {
-  const tbody = document.getElementById('stockPlanTableBody');
-  tbody.innerHTML = '';
-
-  if (stockPlans.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="report-items-cell">ยังไม่มีแผนเตรียมสต็อกล่วงหน้า</td></tr>`;
-    return;
-  }
-
-  stockPlans.forEach((plan) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${plan.date}</td>
-      <td>${plan.name}</td>
-      <td class="stock-figure">${plan.quantity}</td>
-      <td><button class="stock-manage-btn delete">ยกเลิก</button></td>
-    `;
-    row.querySelector('.delete').addEventListener('click', () => cancelStockPlan(plan.id));
-    tbody.appendChild(row);
-  });
-}
-
-async function addStockPlan() {
-  const productId = Number(document.getElementById('planProductSelect').value);
-  const planDate = document.getElementById('planDateInput').value;
-  const quantity = Number(document.getElementById('planQtyInput').value);
-
-  if (!productId || !planDate || !quantity || quantity <= 0) {
-    showToast('กรอกเมนู วันที่ และจำนวนให้ครบ');
-    return;
-  }
-
-  try {
-    const response = await apiFetch('/api/stock/plans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId, date: planDate, quantity })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'บันทึกแผนไม่สำเร็จ');
-    }
-
-    showToast('บันทึกแผนเตรียมสต็อกแล้ว');
-    document.getElementById('planQtyInput').value = 1;
-    await Promise.all([fetchStockPlans(), fetchStockSummary(), fetchProducts()]);
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'บันทึกแผนไม่สำเร็จ');
-  }
-}
-
-async function cancelStockPlan(planId) {
-  try {
-    const response = await apiFetch(`/api/stock/plans/${planId}`, { method: 'DELETE' });
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'ยกเลิกแผนไม่สำเร็จ');
-    }
-
-    showToast('ยกเลิกแผนแล้ว');
-    await fetchStockPlans();
-  } catch (error) {
-    console.error(error);
-    showToast(error.message || 'ยกเลิกแผนไม่สำเร็จ');
-  }
-}
 
 function openProductModal(item) {
   editingProductId = item ? item.productId : null;
@@ -908,7 +931,7 @@ async function saveProduct() {
 
     showToast(isEditing ? 'แก้ไขเมนูแล้ว' : 'เพิ่มเมนูใหม่แล้ว');
     closeProductModal();
-    await Promise.all([fetchStockSummary(), fetchProducts(), fetchCategories()]);
+    await Promise.all([fetchStockSummary(), fetchProducts(), fetchMenuSettings()]);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'บันทึกเมนูไม่สำเร็จ');
@@ -933,7 +956,7 @@ async function deleteProduct(item) {
 
 
     showToast(data.message || 'ลบเมนูแล้ว');
-    await Promise.all([fetchStockSummary(), fetchProducts(), fetchCategories()]);
+    await Promise.all([fetchStockSummary(), fetchProducts(), fetchMenuSettings()]);
   } catch (error) {
     console.error(error);
     showToast(error.message || 'ลบเมนูไม่สำเร็จ');
@@ -981,30 +1004,74 @@ function formatTimeOnly(datetimeStr) {
 }
 
 
-async function closeDay() {
- const closeDayBtn = document.getElementById('closeDayBtn');
- closeDayBtn.disabled = true;
-
-
+async function fetchReportDays() {
  try {
-   const response = await apiFetch('/api/reports/close-day');
-   if (!response.ok) {
-     throw new Error('ไม่สามารถสรุปยอดขายได้');
-   }
-
-
-   const report = await response.json();
-   renderCloseDayReport(report, 'report');
-
-
-   document.getElementById('reportEmptyState').hidden = true;
-   document.getElementById('reportContent').hidden = false;
-   showToast('สรุปยอดขายวันนี้เรียบร้อยแล้ว');
+  const response = await apiFetch('/api/reports/days');
+  if (!response.ok) throw new Error('ไม่สามารถโหลดรายการรายงานได้');
+  const data = await response.json();
+  const days = data.days || [];
+  const list = document.getElementById('reportDaysList');
+  document.getElementById('reportDaysSubtitle').textContent = `${days.length} วัน`;
+  list.innerHTML = '';
+  if (!days.length) {
+   list.innerHTML = '<div class="settings-menu-empty">ยังไม่มีข้อมูลการขาย</div>';
+   return days;
+  }
+  days.forEach((day) => {
+   const button = document.createElement('button');
+   button.className = 'report-day-item';
+   button.type = 'button';
+   button.innerHTML = `
+    <span>
+     <strong>${formatThaiDate(day.date)}</strong>
+     <small>${day.orderCount} ออเดอร์</small>
+     <small class="report-day-stock">ขาย ${day.soldQty} · แถม ${day.giveawayQty} · เหลือ ${day.remainingQty} ชิ้น</small>
+    </span>
+    <strong>${formatCurrency(day.totalRevenue)}</strong>
+    <span class="status-badge ${day.closedAt ? 'completed' : ''}">${day.closedAt ? 'ปิดยอดแล้ว' : 'ยังไม่ปิดยอด'}</span>
+    <span aria-hidden="true">›</span>
+   `;
+   button.addEventListener('click', () => loadReportDate(day.date));
+   list.appendChild(button);
+  });
+  return days;
  } catch (error) {
-   console.error(error);
-   showToast(error.message || 'ไม่สามารถสรุปยอดขายได้');
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดรายการรายงานได้');
+  return [];
+ }
+}
+
+async function loadReportDate(reportDate) {
+ try {
+  const response = await apiFetch(`/api/reports/close-day?date=${encodeURIComponent(reportDate)}`);
+  if (!response.ok) throw new Error('ไม่สามารถโหลดรายงานได้');
+  const report = await response.json();
+  renderCloseDayReport(report, 'report');
+  document.getElementById('selectedReportDate').textContent = `รายละเอียดวันที่ ${formatThaiDate(report.date)}`;
+  document.getElementById('reportContent').hidden = false;
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดรายงานได้');
+ }
+}
+
+async function confirmCloseDay() {
+ const button = document.getElementById('confirmCloseDayBtn');
+ button.disabled = true;
+ try {
+  const response = await apiFetch('/api/reports/close-day', { method: 'POST' });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'ปิดการขายไม่สำเร็จ');
+  document.getElementById('closeDayStatusText').textContent = `ปิดยอดแล้ว ${formatTimeOnly(data.closedAt)}`;
+  button.textContent = '✓ ปิดยอดแล้ว';
+  showToast('ปิดการขายวันนี้แล้ว และยังสามารถรับออเดอร์เพิ่มได้');
+  await fetchReportDays();
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ปิดการขายไม่สำเร็จ');
  } finally {
-   closeDayBtn.disabled = false;
+  button.disabled = false;
  }
 }
 
@@ -1021,6 +1088,13 @@ async function openCloseDayModal() {
 
    const report = await response.json();
    renderCloseDayReport(report, 'modalReport');
+   const daysResponse = await apiFetch('/api/reports/days');
+   const days = daysResponse.ok ? (await daysResponse.json()).days || [] : [];
+   const todayStatus = days.find((day) => day.date === bangkokDateISO());
+   document.getElementById('closeDayStatusText').textContent = todayStatus?.closedAt
+     ? `ปิดยอดล่าสุด ${formatTimeOnly(todayStatus.closedAt)} · ยังรับออเดอร์เพิ่มได้`
+     : 'ตรวจสอบยอดก่อนปิดการขาย';
+   document.getElementById('confirmCloseDayBtn').textContent = todayStatus?.closedAt ? 'ปิดยอดอีกครั้ง' : '🔒 ปิดการขายวันนี้';
    document.getElementById('closeDayModal').hidden = false;
  } catch (error) {
    console.error(error);
@@ -1056,7 +1130,7 @@ function renderCloseDayReport(report, prefix) {
    ordersBody.innerHTML = `<tr><td colspan="6" class="report-items-cell">ยังไม่มีออเดอร์วันนี้</td></tr>`;
  } else {
    report.orders.forEach((order) => {
-     const itemsText = order.items.map((item) => `${item.name} x${item.qty}`).join('<br />');
+     const itemsText = order.items.map((item) => `${item.name} x${item.qty}${item.giveawayQty ? ` (แถม ${item.giveawayQty})` : ''}`).join('<br />');
      const row = document.createElement('tr');
      row.innerHTML = `
        <td>${formatTimeOnly(order.time)}</td>
@@ -1096,6 +1170,64 @@ function renderCloseDayReport(report, prefix) {
  });
 }
 
+async function fetchAnalytics() {
+ const days = Number(document.getElementById('analyticsRange').value || 7);
+ try {
+  const response = await apiFetch(`/api/analytics?days=${days}`);
+  if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลวิเคราะห์ได้');
+  renderAnalytics(await response.json(), days);
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดข้อมูลวิเคราะห์ได้');
+ }
+}
+
+function renderAnalytics(data, days) {
+ const overview = data.overview || {};
+ document.getElementById('analyticsPeriodText').textContent = days === 1
+  ? `ข้อมูลวันนี้ ${formatThaiDate(data.endDate)}`
+  : `ข้อมูล ${days} วัน · ${formatThaiDate(data.startDate)} – ${formatThaiDate(data.endDate)}`;
+ document.getElementById('analyticsRevenue').textContent = formatCurrency(overview.revenue || 0);
+ document.getElementById('analyticsOrders').textContent = overview.orderCount || 0;
+ document.getElementById('analyticsAverage').textContent = formatCurrency(overview.averageTicket || 0);
+ document.getElementById('analyticsProfit').textContent = formatCurrency(overview.grossProfit || 0);
+
+ const daily = data.daily || [];
+ const maxRevenue = Math.max(...daily.map((item) => item.revenue), 1);
+ const chart = document.getElementById('analyticsSalesChart');
+ chart.classList.toggle('is-month', days === 30);
+ chart.innerHTML = daily.map((item, index) => `
+  <div class="sales-chart-item" title="${formatThaiDate(item.date)} · ${formatCurrency(item.revenue)}">
+   <strong>${formatCurrency(item.revenue)}</strong>
+   <div><span style="height:${Math.max(item.revenue ? 8 : 2, (item.revenue / maxRevenue) * 100)}%"></span></div>
+   <small>${days === 30 && index % 5 !== 0 && index !== daily.length - 1 ? '' : `${item.date.slice(8,10)}/${item.date.slice(5,7)}`}</small>
+  </div>
+ `).join('');
+
+ renderAnalyticsList('analyticsTopProducts', data.topProducts || [], (item, index) => `
+  <span class="analytics-rank">${index + 1}</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>${item.soldQty} ชิ้น</strong><small>${formatCurrency(item.revenue)}</small></span>
+ `);
+ renderAnalyticsList('analyticsLosses', data.losses || [], (item) => `
+  <span class="analytics-rank">🎁</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>แถม ${item.giveawayQty}</strong><small>เสีย ${item.wasteQty} ชิ้น</small></span>
+ `);
+ renderAnalyticsList('analyticsLowStock', data.lowStock || [], (item) => `
+  <span class="analytics-rank">!</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>เหลือ ${item.stock}</strong><small>ขั้นต่ำ ${item.minStock} ชิ้น</small></span>
+ `);
+}
+
+function renderAnalyticsList(elementId, items, template) {
+ const element = document.getElementById(elementId);
+ element.innerHTML = items.length
+  ? items.map((item, index) => `<div class="analytics-list-item">${template(item, index)}</div>`).join('')
+  : '<div class="analytics-empty">ยังไม่มีข้อมูลในช่วงนี้</div>';
+}
+
 
 const ORDER_STATUS_LABELS = {
  completed: 'เสร็จสิ้น',
@@ -1130,20 +1262,31 @@ function renderOrdersTable() {
   tbody.innerHTML = '';
 
   if (ordersList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="report-items-cell">ยังไม่มีออเดอร์ในวันนี้</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="report-items-cell">ยังไม่มีออเดอร์ในวันนี้</td></tr>`;
     return;
   }
 
   ordersList.forEach((order) => {
-    const itemsText = order.items.map((item) => `${item.name} x${item.qty}`).join('<br />');
+    const itemCount = order.items.reduce((sum, item) => sum + item.qty, 0);
+    const itemsText = order.items.map((item) => `
+      <div class="order-item-detail">
+        <span>${item.name} × ${item.qty}</span>
+        ${item.giveawayQty ? `<span class="giveaway-badge">🎁 แถม ${item.giveawayQty} ชิ้น</span>` : ''}
+      </div>
+    `).join('');
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${formatTimeOnly(order.time)}</td>
-      <td>#${order.orderNumber}</td>
-      <td>${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</td>
-      <td class="report-items-cell">${itemsText}</td>
       <td class="stock-figure">${formatCurrency(order.total)}</td>
-      <td><span class="status-badge ${order.status === 'cancelled' ? 'cancelled' : 'completed'}">${ORDER_STATUS_LABELS[order.status] || order.status}</span></td>
+      <td>${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</td>
+      <td class="stock-figure">${itemCount}</td>
+      <td class="report-items-cell">
+        <div class="order-detail-heading">
+          <strong>#${order.orderNumber}</strong>
+          <span class="status-badge ${order.status === 'cancelled' ? 'cancelled' : 'completed'}">${ORDER_STATUS_LABELS[order.status] || order.status}</span>
+        </div>
+        ${itemsText}
+      </td>
       <td></td>
     `;
 
@@ -1188,8 +1331,18 @@ async function init() {
   document.getElementById('logoutButton').addEventListener('click', logout);
   if (!(await checkAuthentication())) return;
 
-  initCategories();
   renderCart();
+
+  document.querySelectorAll('.customer-option').forEach((option) => {
+    option.addEventListener('click', () => {
+      document.getElementById('customerSelect').value = option.dataset.customerType;
+      document.querySelectorAll('.customer-option').forEach((item) => {
+        const selected = item === option;
+        item.classList.toggle('is-active', selected);
+        item.setAttribute('aria-pressed', String(selected));
+      });
+    });
+  });
 
   document.querySelectorAll('.payment-option').forEach((option) => {
     option.addEventListener('click', () => {
@@ -1247,9 +1400,6 @@ async function init() {
   });
 
 
-  document.getElementById('searchInput').addEventListener('input', renderProductGrid);
-
-
   document.querySelectorAll('.nav-link[data-page]').forEach((link) => {
     link.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1257,18 +1407,24 @@ async function init() {
     });
   });
 
+  enablePageSwipe();
+
 
   document.getElementById('goToStockBtn').addEventListener('click', () => showPage('stockPage'));
-  document.getElementById('backToSellBtn').addEventListener('click', () => showPage('sellPage'));
+  document.getElementById('addMenuBtn').addEventListener('click', () => openProductModal(null));
+  document.getElementById('settingsMenuSearch').addEventListener('input', applyMenuSettingsFilters);
+  document.getElementById('settingsStatusFilter').addEventListener('change', applyMenuSettingsFilters);
+  document.getElementById('settingsCategoryFilter').addEventListener('change', applyMenuSettingsFilters);
+  document.getElementById('analyticsRange').addEventListener('change', fetchAnalytics);
  document.getElementById('backToSellFromReportBtn').addEventListener('click', () => showPage('sellPage'));
- document.getElementById('closeDayBtn').addEventListener('click', closeDay);
 
 
   const todayBangkok = bangkokDateISO();
-  document.getElementById('planDateInput').min = todayBangkok;
-  document.getElementById('planDateInput').value = todayBangkok;
-  document.getElementById('addStockPlanBtn').addEventListener('click', addStockPlan);
-
+  document.getElementById('stockDateInput').max = todayBangkok;
+  document.getElementById('stockDateInput').value = todayBangkok;
+  document.getElementById('stockDateInput').addEventListener('change', (event) => {
+    if (event.target.value) fetchStockSummary(event.target.value);
+  });
   document.getElementById('ordersDateInput').max = todayBangkok;
   document.getElementById('ordersDateInput').value = todayBangkok;
   document.getElementById('ordersDateInput').addEventListener('change', (event) => {
@@ -1276,12 +1432,12 @@ async function init() {
   });
 
   document.getElementById('closeDaySellBtn').addEventListener('click', openCloseDayModal);
+  document.getElementById('confirmCloseDayBtn').addEventListener('click', confirmCloseDay);
   document.getElementById('closeDayModalClose').addEventListener('click', closeCloseDayModal);
   document.getElementById('closeDayModal').addEventListener('click', (event) => {
     if (event.target.id === 'closeDayModal') closeCloseDayModal();
   });
 
-  document.getElementById('addMenuBtn').addEventListener('click', () => openProductModal(null));
   document.getElementById('productModalSave').addEventListener('click', saveProduct);
   document.getElementById('productModalCancel').addEventListener('click', closeProductModal);
   document.getElementById('productModalClose').addEventListener('click', closeProductModal);
@@ -1290,7 +1446,6 @@ async function init() {
   });
 
 
-  await fetchCategories();
   await fetchProducts();
   await fetchDailySummary();
 

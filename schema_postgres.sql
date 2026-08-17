@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
  id BIGSERIAL PRIMARY KEY, order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
  product_id BIGINT NOT NULL REFERENCES products(id), product_name TEXT NOT NULL, sku TEXT NOT NULL,
- quantity INTEGER NOT NULL CHECK (quantity > 0), unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
+ quantity INTEGER NOT NULL CHECK (quantity > 0), giveaway_qty INTEGER NOT NULL DEFAULT 0 CHECK (giveaway_qty >= 0 AND giveaway_qty <= quantity), unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
  discount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (discount >= 0), line_total NUMERIC(12,2) NOT NULL CHECK (line_total >= 0)
 );
 CREATE TABLE IF NOT EXISTS payments (
@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS stock_movements (
  movement_type TEXT NOT NULL CHECK (movement_type IN ('sale','stock_in','stock_out','adjust')),
  quantity INTEGER NOT NULL CHECK (quantity <> 0), reference_type TEXT, reference_id TEXT, note TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS daily_closures (
+ report_date DATE PRIMARY KEY, closed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS stock_plans (
  id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES products(id),
