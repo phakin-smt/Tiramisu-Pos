@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS stock_movements (
  quantity INTEGER NOT NULL CHECK (quantity <> 0), reference_type TEXT, reference_id TEXT, note TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS daily_closures (
+ report_date DATE PRIMARY KEY, closed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS stock_plans (
  id BIGSERIAL PRIMARY KEY, product_id BIGINT NOT NULL REFERENCES products(id),
  plan_date DATE NOT NULL, quantity INTEGER NOT NULL CHECK (quantity > 0),

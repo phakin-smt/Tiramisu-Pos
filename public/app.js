@@ -14,7 +14,7 @@ const BUNDLE_QTY = 3;
 const BUNDLE_PRICE = 200;
 const BUNDLE_DISCOUNT_PER_SET = BUNDLE_UNIT_PRICE * BUNDLE_QTY - BUNDLE_PRICE;
 const APP_TIME_ZONE = 'Asia/Bangkok';
-const PAGE_ORDER = ['sellPage', 'stockPage', 'ordersPage', 'reportPage', 'settingsPage'];
+const PAGE_ORDER = ['sellPage', 'stockPage', 'ordersPage', 'reportPage', 'analyticsPage', 'settingsPage'];
 
 
 function bangkokDateParts() {
@@ -605,6 +605,14 @@ function showPage(pageId) {
   if (pageId === 'ordersPage') {
     fetchOrders(document.getElementById('ordersDateInput').value);
   }
+
+  if (pageId === 'reportPage') {
+    fetchReportDays();
+  }
+
+  if (pageId === 'analyticsPage') {
+    fetchAnalytics();
+  }
 }
 
 
@@ -647,7 +655,7 @@ function enablePageSwipe() {
   let touchStartY = 0;
 
   mainContent.addEventListener('touchstart', (event) => {
-    if (event.touches.length !== 1 || event.target.closest('input, select, textarea, button, .modal-overlay')) {
+    if (event.touches.length !== 1 || event.target.closest('input, select, textarea, button, .modal-overlay, .sales-chart, .stock-table-wrap')) {
       touchStartX = 0;
       touchStartY = 0;
       return;
@@ -657,7 +665,7 @@ function enablePageSwipe() {
   }, { passive: true });
 
   mainContent.addEventListener('touchend', (event) => {
-    if (!touchStartX || event.changedTouches.length !== 1 || !window.matchMedia('(max-width: 1199px)').matches) return;
+    if (!touchStartX || event.changedTouches.length !== 1 || !window.matchMedia('(min-width: 768px) and (max-width: 1199px)').matches) return;
 
     const deltaX = event.changedTouches[0].clientX - touchStartX;
     const deltaY = event.changedTouches[0].clientY - touchStartY;
@@ -996,30 +1004,74 @@ function formatTimeOnly(datetimeStr) {
 }
 
 
-async function closeDay() {
- const closeDayBtn = document.getElementById('closeDayBtn');
- closeDayBtn.disabled = true;
-
-
+async function fetchReportDays() {
  try {
-   const response = await apiFetch('/api/reports/close-day');
-   if (!response.ok) {
-     throw new Error('ไม่สามารถสรุปยอดขายได้');
-   }
-
-
-   const report = await response.json();
-   renderCloseDayReport(report, 'report');
-
-
-   document.getElementById('reportEmptyState').hidden = true;
-   document.getElementById('reportContent').hidden = false;
-   showToast('สรุปยอดขายวันนี้เรียบร้อยแล้ว');
+  const response = await apiFetch('/api/reports/days');
+  if (!response.ok) throw new Error('ไม่สามารถโหลดรายการรายงานได้');
+  const data = await response.json();
+  const days = data.days || [];
+  const list = document.getElementById('reportDaysList');
+  document.getElementById('reportDaysSubtitle').textContent = `${days.length} วัน`;
+  list.innerHTML = '';
+  if (!days.length) {
+   list.innerHTML = '<div class="settings-menu-empty">ยังไม่มีข้อมูลการขาย</div>';
+   return days;
+  }
+  days.forEach((day) => {
+   const button = document.createElement('button');
+   button.className = 'report-day-item';
+   button.type = 'button';
+   button.innerHTML = `
+    <span>
+     <strong>${formatThaiDate(day.date)}</strong>
+     <small>${day.orderCount} ออเดอร์</small>
+     <small class="report-day-stock">ขาย ${day.soldQty} · แถม ${day.giveawayQty} · เหลือ ${day.remainingQty} ชิ้น</small>
+    </span>
+    <strong>${formatCurrency(day.totalRevenue)}</strong>
+    <span class="status-badge ${day.closedAt ? 'completed' : ''}">${day.closedAt ? 'ปิดยอดแล้ว' : 'ยังไม่ปิดยอด'}</span>
+    <span aria-hidden="true">›</span>
+   `;
+   button.addEventListener('click', () => loadReportDate(day.date));
+   list.appendChild(button);
+  });
+  return days;
  } catch (error) {
-   console.error(error);
-   showToast(error.message || 'ไม่สามารถสรุปยอดขายได้');
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดรายการรายงานได้');
+  return [];
+ }
+}
+
+async function loadReportDate(reportDate) {
+ try {
+  const response = await apiFetch(`/api/reports/close-day?date=${encodeURIComponent(reportDate)}`);
+  if (!response.ok) throw new Error('ไม่สามารถโหลดรายงานได้');
+  const report = await response.json();
+  renderCloseDayReport(report, 'report');
+  document.getElementById('selectedReportDate').textContent = `รายละเอียดวันที่ ${formatThaiDate(report.date)}`;
+  document.getElementById('reportContent').hidden = false;
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดรายงานได้');
+ }
+}
+
+async function confirmCloseDay() {
+ const button = document.getElementById('confirmCloseDayBtn');
+ button.disabled = true;
+ try {
+  const response = await apiFetch('/api/reports/close-day', { method: 'POST' });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'ปิดการขายไม่สำเร็จ');
+  document.getElementById('closeDayStatusText').textContent = `ปิดยอดแล้ว ${formatTimeOnly(data.closedAt)}`;
+  button.textContent = '✓ ปิดยอดแล้ว';
+  showToast('ปิดการขายวันนี้แล้ว และยังสามารถรับออเดอร์เพิ่มได้');
+  await fetchReportDays();
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ปิดการขายไม่สำเร็จ');
  } finally {
-   closeDayBtn.disabled = false;
+  button.disabled = false;
  }
 }
 
@@ -1036,6 +1088,13 @@ async function openCloseDayModal() {
 
    const report = await response.json();
    renderCloseDayReport(report, 'modalReport');
+   const daysResponse = await apiFetch('/api/reports/days');
+   const days = daysResponse.ok ? (await daysResponse.json()).days || [] : [];
+   const todayStatus = days.find((day) => day.date === bangkokDateISO());
+   document.getElementById('closeDayStatusText').textContent = todayStatus?.closedAt
+     ? `ปิดยอดล่าสุด ${formatTimeOnly(todayStatus.closedAt)} · ยังรับออเดอร์เพิ่มได้`
+     : 'ตรวจสอบยอดก่อนปิดการขาย';
+   document.getElementById('confirmCloseDayBtn').textContent = todayStatus?.closedAt ? 'ปิดยอดอีกครั้ง' : '🔒 ปิดการขายวันนี้';
    document.getElementById('closeDayModal').hidden = false;
  } catch (error) {
    console.error(error);
@@ -1111,6 +1170,64 @@ function renderCloseDayReport(report, prefix) {
  });
 }
 
+async function fetchAnalytics() {
+ const days = Number(document.getElementById('analyticsRange').value || 7);
+ try {
+  const response = await apiFetch(`/api/analytics?days=${days}`);
+  if (!response.ok) throw new Error('ไม่สามารถโหลดข้อมูลวิเคราะห์ได้');
+  renderAnalytics(await response.json(), days);
+ } catch (error) {
+  console.error(error);
+  showToast(error.message || 'ไม่สามารถโหลดข้อมูลวิเคราะห์ได้');
+ }
+}
+
+function renderAnalytics(data, days) {
+ const overview = data.overview || {};
+ document.getElementById('analyticsPeriodText').textContent = days === 1
+  ? `ข้อมูลวันนี้ ${formatThaiDate(data.endDate)}`
+  : `ข้อมูล ${days} วัน · ${formatThaiDate(data.startDate)} – ${formatThaiDate(data.endDate)}`;
+ document.getElementById('analyticsRevenue').textContent = formatCurrency(overview.revenue || 0);
+ document.getElementById('analyticsOrders').textContent = overview.orderCount || 0;
+ document.getElementById('analyticsAverage').textContent = formatCurrency(overview.averageTicket || 0);
+ document.getElementById('analyticsProfit').textContent = formatCurrency(overview.grossProfit || 0);
+
+ const daily = data.daily || [];
+ const maxRevenue = Math.max(...daily.map((item) => item.revenue), 1);
+ const chart = document.getElementById('analyticsSalesChart');
+ chart.classList.toggle('is-month', days === 30);
+ chart.innerHTML = daily.map((item, index) => `
+  <div class="sales-chart-item" title="${formatThaiDate(item.date)} · ${formatCurrency(item.revenue)}">
+   <strong>${formatCurrency(item.revenue)}</strong>
+   <div><span style="height:${Math.max(item.revenue ? 8 : 2, (item.revenue / maxRevenue) * 100)}%"></span></div>
+   <small>${days === 30 && index % 5 !== 0 && index !== daily.length - 1 ? '' : `${item.date.slice(8,10)}/${item.date.slice(5,7)}`}</small>
+  </div>
+ `).join('');
+
+ renderAnalyticsList('analyticsTopProducts', data.topProducts || [], (item, index) => `
+  <span class="analytics-rank">${index + 1}</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>${item.soldQty} ชิ้น</strong><small>${formatCurrency(item.revenue)}</small></span>
+ `);
+ renderAnalyticsList('analyticsLosses', data.losses || [], (item) => `
+  <span class="analytics-rank">🎁</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>แถม ${item.giveawayQty}</strong><small>เสีย ${item.wasteQty} ชิ้น</small></span>
+ `);
+ renderAnalyticsList('analyticsLowStock', data.lowStock || [], (item) => `
+  <span class="analytics-rank">!</span>
+  <span><strong>${item.name}</strong><small>${item.code}</small></span>
+  <span><strong>เหลือ ${item.stock}</strong><small>ขั้นต่ำ ${item.minStock} ชิ้น</small></span>
+ `);
+}
+
+function renderAnalyticsList(elementId, items, template) {
+ const element = document.getElementById(elementId);
+ element.innerHTML = items.length
+  ? items.map((item, index) => `<div class="analytics-list-item">${template(item, index)}</div>`).join('')
+  : '<div class="analytics-empty">ยังไม่มีข้อมูลในช่วงนี้</div>';
+}
+
 
 const ORDER_STATUS_LABELS = {
  completed: 'เสร็จสิ้น',
@@ -1145,20 +1262,31 @@ function renderOrdersTable() {
   tbody.innerHTML = '';
 
   if (ordersList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="report-items-cell">ยังไม่มีออเดอร์ในวันนี้</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="report-items-cell">ยังไม่มีออเดอร์ในวันนี้</td></tr>`;
     return;
   }
 
   ordersList.forEach((order) => {
-    const itemsText = order.items.map((item) => `${item.name} x${item.qty}${item.giveawayQty ? ` (แถม ${item.giveawayQty})` : ''}`).join('<br />');
+    const itemCount = order.items.reduce((sum, item) => sum + item.qty, 0);
+    const itemsText = order.items.map((item) => `
+      <div class="order-item-detail">
+        <span>${item.name} × ${item.qty}</span>
+        ${item.giveawayQty ? `<span class="giveaway-badge">🎁 แถม ${item.giveawayQty} ชิ้น</span>` : ''}
+      </div>
+    `).join('');
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${formatTimeOnly(order.time)}</td>
-      <td>#${order.orderNumber}</td>
-      <td>${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</td>
-      <td class="report-items-cell">${itemsText}</td>
       <td class="stock-figure">${formatCurrency(order.total)}</td>
-      <td><span class="status-badge ${order.status === 'cancelled' ? 'cancelled' : 'completed'}">${ORDER_STATUS_LABELS[order.status] || order.status}</span></td>
+      <td>${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}</td>
+      <td class="stock-figure">${itemCount}</td>
+      <td class="report-items-cell">
+        <div class="order-detail-heading">
+          <strong>#${order.orderNumber}</strong>
+          <span class="status-badge ${order.status === 'cancelled' ? 'cancelled' : 'completed'}">${ORDER_STATUS_LABELS[order.status] || order.status}</span>
+        </div>
+        ${itemsText}
+      </td>
       <td></td>
     `;
 
@@ -1287,8 +1415,8 @@ async function init() {
   document.getElementById('settingsMenuSearch').addEventListener('input', applyMenuSettingsFilters);
   document.getElementById('settingsStatusFilter').addEventListener('change', applyMenuSettingsFilters);
   document.getElementById('settingsCategoryFilter').addEventListener('change', applyMenuSettingsFilters);
+  document.getElementById('analyticsRange').addEventListener('change', fetchAnalytics);
  document.getElementById('backToSellFromReportBtn').addEventListener('click', () => showPage('sellPage'));
- document.getElementById('closeDayBtn').addEventListener('click', closeDay);
 
 
   const todayBangkok = bangkokDateISO();
@@ -1304,6 +1432,7 @@ async function init() {
   });
 
   document.getElementById('closeDaySellBtn').addEventListener('click', openCloseDayModal);
+  document.getElementById('confirmCloseDayBtn').addEventListener('click', confirmCloseDay);
   document.getElementById('closeDayModalClose').addEventListener('click', closeCloseDayModal);
   document.getElementById('closeDayModal').addEventListener('click', (event) => {
     if (event.target.id === 'closeDayModal') closeCloseDayModal();

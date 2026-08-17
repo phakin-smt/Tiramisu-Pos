@@ -82,6 +82,11 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+CREATE TABLE IF NOT EXISTS daily_closures (
+    report_date TEXT PRIMARY KEY,
+    closed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS stock_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id INTEGER NOT NULL,

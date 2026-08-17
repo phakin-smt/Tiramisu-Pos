@@ -39,23 +39,27 @@
         <div class="nav-label">เมนูหลัก</div>
         <a href="#" class="nav-link active" data-page="sellPage">
           <span class="nav-icon">▦</span>
-          <span>ขายสินค้า</span>
+          <span class="nav-label-full">ขายสินค้า</span><span class="nav-label-short">ขาย</span>
         </a>
         <a href="#" class="nav-link" data-page="stockPage">
           <span class="nav-icon">⌘</span>
-          <span>จัดการสต็อก</span>
+          <span class="nav-label-full">จัดการสต็อก</span><span class="nav-label-short">สต็อก</span>
         </a>
         <a href="#" class="nav-link" data-page="ordersPage">
           <span class="nav-icon">◫</span>
-          <span>ออเดอร์</span>
+          <span class="nav-label-full">ออเดอร์</span><span class="nav-label-short">ออเดอร์</span>
         </a>
        <a href="#" class="nav-link" data-page="reportPage">
           <span class="nav-icon">◌</span>
-          <span>รายงาน</span>
+          <span class="nav-label-full">รายงาน</span><span class="nav-label-short">รายงาน</span>
+       </a>
+        <a href="#" class="nav-link" data-page="analyticsPage">
+          <span class="nav-icon">◒</span>
+          <span class="nav-label-full">วิเคราะห์</span><span class="nav-label-short">วิเคราะห์</span>
         </a>
         <a href="#" class="nav-link" data-page="settingsPage">
           <span class="nav-icon">☰</span>
-          <span>ตั้งค่า</span>
+          <span class="nav-label-full">ตั้งค่า</span><span class="nav-label-short">ตั้งค่า</span>
         </a>
       </nav>
 
@@ -87,7 +91,7 @@
         <div class="top-actions">
           <button class="btn btn-light metrics-toggle" id="toggleSalesMetrics" type="button" aria-expanded="true" aria-controls="salesMetrics">▴ ซ่อนสรุป</button>
           <button class="btn btn-light" id="goToStockBtn">📥 จัดการสต็อก</button>
-          <button class="btn btn-primary" id="closeDaySellBtn">🔒 ปิดการขายวันนี้</button>
+          <button class="btn btn-light" id="closeDaySellBtn">📊 สรุปยอดวันนี้</button>
         </div>
       </header>
 
@@ -268,24 +272,32 @@
        <header class="topbar">
          <div>
            <div class="page-kicker">สรุปยอดขาย 📊</div>
-           <h1>ปิดการขายวันนี้</h1>
+           <h1>รายงานรายวัน</h1>
          </div>
          <div class="top-actions">
            <button class="btn btn-light" id="backToSellFromReportBtn">← กลับไปขายสินค้า</button>
-           <button class="btn btn-primary" id="closeDayBtn">🔒 ปิดการขายวันนี้</button>
          </div>
        </header>
 
 
-       <div class="empty-report" id="reportEmptyState">
-         <p>กดปุ่ม "ปิดการขายวันนี้" เพื่อสรุปยอดขาย ออเดอร์ และสต็อกของวันนี้ทั้งหมด</p>
-       </div>
+       <section class="panel report-days-panel">
+         <div class="panel-header">
+           <div>
+             <div class="panel-title">รายการรายวัน 📅</div>
+             <div class="panel-subtitle" id="reportDaysSubtitle">กำลังโหลดรายงาน</div>
+           </div>
+         </div>
+         <div class="report-days-list" id="reportDaysList"></div>
+       </section>
 
 
        <div id="reportContent" hidden>
+         <div class="selected-report-heading">
+           <strong id="selectedReportDate">รายละเอียดรายงาน</strong>
+         </div>
          <section class="metrics-grid" id="reportMetrics">
            <article class="metric-card highlight">
-             <div class="metric-title">ยอดขายรวมวันนี้</div>
+             <div class="metric-title">ยอดขายรวม</div>
              <div class="metric-value" id="reportTotalRevenue">฿0</div>
              <div class="metric-subtitle" id="reportOrderCount">0 ออเดอร์</div>
            </article>
@@ -335,7 +347,7 @@
          <section class="panel report-panel">
            <div class="panel-header">
              <div>
-               <div class="panel-title">รายการออเดอร์วันนี้ 🧾</div>
+               <div class="panel-title">รายการออเดอร์ 🧾</div>
                <div class="panel-subtitle" id="reportOrdersSubtitle">0 ออเดอร์</div>
              </div>
            </div>
@@ -363,7 +375,7 @@
            <div class="panel-header">
              <div>
                <div class="panel-title">สรุปยอดขายแต่ละเมนู 🍮</div>
-               <div class="panel-subtitle">เมนูที่เปิดขายหรือมีความเคลื่อนไหววันนี้</div>
+               <div class="panel-subtitle">เมนูที่เปิดขายหรือมีความเคลื่อนไหวในวันที่เลือก</div>
              </div>
            </div>
 
@@ -387,25 +399,16 @@
      </section>
 
      <section id="ordersPage" class="page" hidden>
-       <header class="topbar">
-         <div>
-           <div class="page-kicker">รายการออเดอร์ 🧾</div>
-           <h1>ออเดอร์</h1>
-         </div>
-         <div class="top-actions">
-           <label class="date-filter" for="ordersDateInput">
-             <span>วันที่</span>
-             <input type="date" id="ordersDateInput" />
-           </label>
-         </div>
-       </header>
-
        <section class="panel report-panel">
          <div class="panel-header">
            <div>
              <div class="panel-title">รายการออเดอร์ 🧾</div>
              <div class="panel-subtitle" id="ordersSubtitle">0 ออเดอร์</div>
            </div>
+           <label class="date-filter" for="ordersDateInput">
+             <span>วันที่</span>
+             <input type="date" id="ordersDateInput" />
+           </label>
          </div>
 
          <div class="stock-table-wrap">
@@ -413,16 +416,61 @@
              <thead>
                <tr>
                  <th>เวลา</th>
-                 <th>เลขออเดอร์</th>
+                 <th>ยอด</th>
                  <th>วิธีชำระ</th>
-                 <th>รายการ</th>
-                 <th>ยอดสุทธิ</th>
-                 <th>สถานะ</th>
+                 <th>จำนวนชิ้น</th>
+                 <th>รายละเอียด</th>
                  <th>จัดการ</th>
                </tr>
              </thead>
              <tbody id="ordersTableBody"></tbody>
            </table>
+         </div>
+       </section>
+     </section>
+
+     <section id="analyticsPage" class="page" hidden>
+       <section class="panel analytics-panel">
+         <div class="panel-header analytics-header">
+           <div>
+             <div class="panel-title">วิเคราะห์การขาย 📈</div>
+             <div class="panel-subtitle" id="analyticsPeriodText">ภาพรวม 7 วันล่าสุด</div>
+           </div>
+           <label class="date-filter" for="analyticsRange">
+             <span>ช่วงเวลา</span>
+             <select id="analyticsRange">
+               <option value="1">วันนี้</option>
+               <option value="7" selected>7 วัน</option>
+               <option value="30">30 วัน</option>
+             </select>
+           </label>
+         </div>
+
+         <div class="analytics-metrics">
+           <article><span>ยอดขายรวม</span><strong id="analyticsRevenue">฿0.00</strong></article>
+           <article><span>จำนวนออเดอร์</span><strong id="analyticsOrders">0</strong></article>
+           <article><span>ยอดเฉลี่ยต่อบิล</span><strong id="analyticsAverage">฿0.00</strong></article>
+           <article class="highlight"><span>กำไรขั้นต้น</span><strong id="analyticsProfit">฿0.00</strong></article>
+         </div>
+
+         <section class="analytics-section analytics-chart-section">
+           <div class="analytics-section-title">แนวโน้มยอดขาย</div>
+           <div class="sales-chart" id="analyticsSalesChart"></div>
+         </section>
+
+         <div class="analytics-grid">
+           <section class="analytics-section">
+             <div class="analytics-section-title">สินค้าขายดี 5 อันดับ 🏆</div>
+             <div class="analytics-list" id="analyticsTopProducts"></div>
+           </section>
+           <section class="analytics-section">
+             <div class="analytics-section-title">แถมและของเสีย 🎁</div>
+             <div class="analytics-list" id="analyticsLosses"></div>
+           </section>
+           <section class="analytics-section analytics-low-stock">
+             <div class="analytics-section-title">สินค้าใกล้หมด ⚠️</div>
+             <div class="analytics-list" id="analyticsLowStock"></div>
+           </section>
          </div>
        </section>
      </section>
@@ -675,6 +723,10 @@
             </table>
           </div>
         </section>
+        <div class="modal-actions close-day-summary-actions">
+          <span id="closeDayStatusText">ตรวจสอบยอดก่อนปิดการขาย</span>
+          <button class="btn btn-primary" id="confirmCloseDayBtn" type="button">🔒 ปิดการขายวันนี้</button>
+        </div>
       </div>
     </div>
   </div>

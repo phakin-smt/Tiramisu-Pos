@@ -1,5 +1,4 @@
 import os
-import uuid
 import hmac
 import secrets
 import threading
@@ -264,8 +263,11 @@ def create_order():
    if qty>product['stock_qty']: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
    paid_qty=qty-giveaway_qty; line_total=paid_qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,giveaway_qty,paid_qty,line_total))
   if discount>subtotal: return error('ส่วนลดมากกว่ายอดรวม')
-  total=subtotal-discount; today=bangkok_today().isoformat()
-  day_code=today.replace('-',''); order_number='{}-{}'.format(day_code,uuid.uuid4().hex[:8].upper())
+  total=subtotal-discount; order_time=datetime.now(BANGKOK_TZ); today=order_time.date().isoformat()
+  order_base=order_time.strftime('%Y%m%d%H%M')
+  if is_postgres(): execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',('order-number:'+order_base,))
+  same_minute=execute(cursor,'SELECT COUNT(*) total FROM orders WHERE order_number=? OR order_number LIKE ?',(order_base,order_base+'-%')).fetchone()['total']
+  order_number=order_base if same_minute==0 else '{}-{:02d}'.format(order_base,same_minute+1)
   customer=execute(cursor,'SELECT id FROM customers WHERE customer_type=? AND is_active=1 LIMIT 1',(payload.get('customerType','walkin'),)).fetchone()
   query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
   result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,payload.get('note')))
@@ -344,15 +346,78 @@ def daily_summary():
  cash=sum(number(r['amount']) for r in result if r['payment_method']=='cash'); transfer=sum(number(r['amount']) for r in result if r['payment_method']!='cash')
  return jsonify(date=report_date,orderCount=sum(r['order_count'] for r in result),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer)
 
+@app.get('/api/reports/days')
+def report_days():
+ order_days=rows("SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) total_revenue FROM orders WHERE status='completed' GROUP BY order_date ORDER BY order_date DESC")
+ closure_days=rows('SELECT report_date,closed_at FROM daily_closures ORDER BY report_date DESC')
+ days={r['order_date']:{'date':r['order_date'],'orderCount':r['order_count'],'totalRevenue':number(r['total_revenue']),'closedAt':None} for r in order_days}
+ for closure in closure_days:
+  item=days.setdefault(closure['report_date'],{'date':closure['report_date'],'orderCount':0,'totalRevenue':0,'closedAt':None})
+  item['closedAt']=local_timestamp(closure['closed_at'])
+ for item in days.values():
+  menu_items=stock_data(item['date'])
+  item['soldQty']=sum(menu['sold'] for menu in menu_items)
+  item['giveawayQty']=sum(menu['giveaway'] for menu in menu_items)
+  item['remainingQty']=sum(menu['stockNow'] for menu in menu_items if menu['active'])
+ return jsonify(days=sorted(days.values(),key=lambda item:item['date'],reverse=True))
+
+@app.post('/api/reports/close-day')
+def mark_day_closed():
+ report_date=bangkok_today().isoformat()
+ with transaction() as (_,cursor):
+  existing=execute(cursor,'SELECT report_date FROM daily_closures WHERE report_date=?',(report_date,)).fetchone()
+  if existing: execute(cursor,'UPDATE daily_closures SET closed_at=CURRENT_TIMESTAMP WHERE report_date=?',(report_date,))
+  else: execute(cursor,'INSERT INTO daily_closures (report_date) VALUES (?)',(report_date,))
+  closed=execute(cursor,'SELECT closed_at FROM daily_closures WHERE report_date=?',(report_date,)).fetchone()
+ return jsonify(date=report_date,closedAt=local_timestamp(closed['closed_at']))
+
+@app.get('/api/analytics')
+def analytics():
+ try: days=int(request.args.get('days','7'))
+ except (TypeError,ValueError): return error('ช่วงเวลาไม่ถูกต้อง')
+ if days not in {1,7,30}: return error('รองรับช่วงเวลา 1, 7 หรือ 30 วัน')
+ end_date=bangkok_today(); start_date=end_date-timedelta(days=days-1)
+ start_iso=start_date.isoformat(); end_iso=end_date.isoformat()
+ movement_start,_=local_day_bounds(start_iso); _,movement_end=local_day_bounds(end_iso)
+ connection=connect_db()
+ try:
+  cursor=connection.cursor()
+  order_summary=execute(cursor,"SELECT COUNT(*) order_count,COALESCE(SUM(total),0) revenue,COALESCE(SUM(discount),0) discount FROM orders WHERE order_date>=? AND order_date<=? AND status='completed'",(start_iso,end_iso)).fetchone()
+  cost_row=execute(cursor,"SELECT COALESCE(SUM(oi.quantity*p.cost_price),0) cost_total FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.order_date>=? AND o.order_date<=? AND o.status='completed'",(start_iso,end_iso)).fetchone()
+  daily_rows=execute(cursor,"SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) revenue FROM orders WHERE order_date>=? AND order_date<=? AND status='completed' GROUP BY order_date ORDER BY order_date",(start_iso,end_iso)).fetchall()
+  top_rows=execute(cursor,"SELECT oi.product_id,oi.product_name,oi.sku,SUM(oi.quantity-oi.giveaway_qty) sold_qty,COALESCE(SUM(oi.line_total),0) revenue FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date>=? AND o.order_date<=? AND o.status='completed' GROUP BY oi.product_id,oi.product_name,oi.sku HAVING SUM(oi.quantity-oi.giveaway_qty)>0 ORDER BY sold_qty DESC,revenue DESC LIMIT 5",(start_iso,end_iso)).fetchall()
+  loss_rows=execute(cursor,"SELECT p.id,p.name,p.sku,COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0) giveaway_qty,COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0) waste_qty FROM stock_movements sm JOIN products p ON p.id=sm.product_id WHERE sm.created_at>=? AND sm.created_at<? AND sm.reference_type IN ('giveaway','waste') GROUP BY p.id,p.name,p.sku HAVING COALESCE(SUM(CASE WHEN sm.reference_type IN ('giveaway','waste') THEN -sm.quantity ELSE 0 END),0)>0 ORDER BY (COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0)+COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0)) DESC LIMIT 5",(movement_start,movement_end)).fetchall()
+  low_rows=execute(cursor,'SELECT id,name,sku,stock_qty,stock_min FROM products WHERE is_active=1 AND stock_qty<=stock_min ORDER BY stock_qty,stock_min DESC,name LIMIT 8').fetchall()
+ finally: connection.close()
+ daily_map={r['order_date']:r for r in daily_rows}
+ daily=[]
+ for offset in range(days):
+  day=(start_date+timedelta(days=offset)).isoformat(); row=daily_map.get(day)
+  daily.append({'date':day,'orderCount':row['order_count'] if row else 0,'revenue':number(row['revenue']) if row else 0})
+ revenue=number(order_summary['revenue']); order_count=order_summary['order_count']; cost_total=number(cost_row['cost_total'])
+ return jsonify(
+  startDate=start_iso,endDate=end_iso,
+  overview={'revenue':revenue,'orderCount':order_count,'averageTicket':round(revenue/order_count,2) if order_count else 0,'discount':number(order_summary['discount']),'cost':cost_total,'grossProfit':revenue-cost_total},
+  daily=daily,
+  topProducts=[{'productId':r['product_id'],'name':r['product_name'],'code':r['sku'],'soldQty':r['sold_qty'],'revenue':number(r['revenue'])} for r in top_rows],
+  losses=[{'productId':r['id'],'name':r['name'],'code':r['sku'],'giveawayQty':r['giveaway_qty'],'wasteQty':r['waste_qty']} for r in loss_rows],
+  lowStock=[{'productId':r['id'],'name':r['name'],'code':r['sku'],'stock':r['stock_qty'],'minStock':r['stock_min']} for r in low_rows]
+ )
+
 def stock_data(report_date):
  connection=connect_db()
  try:
-  result=execute(connection.cursor(),'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products ORDER BY category,name').fetchall(); movements=movement_summary(connection,report_date)
+  cursor=connection.cursor()
+  result=execute(cursor,'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products ORDER BY category,name').fetchall(); movements=movement_summary(connection,report_date)
+  _,day_end=local_day_bounds(report_date)
+  future_rows=execute(cursor,'SELECT product_id,COALESCE(SUM(quantity),0) total_qty FROM stock_movements WHERE created_at>=? GROUP BY product_id',(day_end,)).fetchall()
+  future_movements={row['product_id']:row['total_qty'] for row in future_rows}
  finally: connection.close()
  items=[]
  for p in result:
   m=movements.get(p['id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0}); prepared=m['prepared']
-  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':p['stock_qty'],**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
+  stock_at_day_end=p['stock_qty']-future_movements.get(p['id'],0)
+  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':stock_at_day_end,**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
  return items
 
 @app.get('/api/stock/daily-summary')
