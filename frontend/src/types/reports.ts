@@ -64,3 +64,8 @@ export interface CloseDayReport {
   orders: ReportOrder[];
   menuSummary: ReportMenuSummary[];
 }
+
+export interface CloseDayClosure {
+  date: string;
+  closedAt: string;
+}

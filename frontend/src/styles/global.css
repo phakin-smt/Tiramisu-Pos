@@ -225,6 +225,9 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 
 .sell-page { padding-bottom: 24px; }
 .sell-summary { padding: 14px 0 18px; border-bottom: 1px solid var(--line); }
+.sell-page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.sell-page-header .page-header { min-width: 0; padding: 0; border: 0; }
+.close-day-trigger { flex: 0 0 auto; }
 .sell-summary-heading { margin: 0 0 12px; }
 .sell-summary-heading h2 { font-size: 16px; }
 .summary-toggle { min-width: 110px; }
@@ -300,6 +303,27 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .promptpay-modal footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
 .promptpay-modal footer button { min-width: 132px; }
 body.promptpay-open { overflow: hidden; }
+.close-day-overlay { position: fixed; z-index: 100; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(31, 24, 20, 0.58); }
+.close-day-modal { display: grid; width: min(100%, 1080px); max-height: calc(100dvh - 40px); grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border-radius: 8px; background: var(--panel); box-shadow: 0 18px 54px rgba(35, 25, 20, 0.28); }
+.close-day-modal > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.close-day-modal h2 { margin: 0; font-size: 20px; }
+.close-day-modal header span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 13px; }
+.close-day-content { overflow-y: auto; padding: 18px 20px; overscroll-behavior: contain; }
+.close-day-content > .metrics-grid { grid-template-columns: repeat(4, minmax(130px, 1fr)); }
+.close-day-section { margin-top: 20px; padding-top: 2px; border-top: 1px solid var(--line); }
+.close-day-section .section-heading h3 { margin: 0; font-size: 16px; }
+.close-day-movement-totals { display: grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.close-day-movement-totals > div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); }
+.close-day-movement-totals dt { color: var(--text-soft); font-size: 11px; }
+.close-day-movement-totals dd { margin: 3px 0 0; font-size: 18px; font-weight: 800; }
+.close-day-modal > footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel); }
+.close-day-confirmation-copy { min-width: 0; }
+.close-day-confirmation-copy strong, .close-day-confirmation-copy span { display: block; overflow-wrap: anywhere; font-size: 13px; }
+.close-day-confirmation-copy p { margin: 4px 0; color: var(--text-soft); font-size: 12px; }
+.close-day-success { color: #27633c; }
+.close-day-error { margin-top: 5px; color: var(--danger); }
+.close-day-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+body.close-day-open { overflow: hidden; }
 
 @media (min-width: 768px) and (max-width: 1199px) {
   .sell-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
@@ -307,6 +331,7 @@ body.promptpay-open { overflow: hidden; }
   .sell-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sell-product-card { min-height: 200px; padding: 13px; }
   .customer-options { grid-template-columns: 1fr; }
+  .close-day-content > .metrics-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 }
 
 @media (max-width: 767px) {
@@ -333,4 +358,14 @@ body.promptpay-open { overflow: hidden; }
   .promptpay-modal { max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 8px 8px 0 0; }
   .promptpay-content { min-height: 280px; }
   .promptpay-modal footer button { min-width: 0; flex: 1; }
+  .sell-page-header { align-items: stretch; flex-direction: column; }
+  .close-day-trigger { width: 100%; }
+  .close-day-overlay { padding: 0; place-items: end center; }
+  .close-day-modal { max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 8px 8px 0 0; }
+  .close-day-content { padding: 14px; }
+  .close-day-content > .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .close-day-movement-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .close-day-modal > footer { align-items: stretch; flex-direction: column; padding-right: 14px; padding-left: 14px; }
+  .close-day-actions { width: 100%; }
+  .close-day-actions button { min-width: 0; flex: 1; }
 }

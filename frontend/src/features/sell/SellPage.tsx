@@ -11,6 +11,7 @@ import type { CreateOrderRequest } from '../../types/checkout';
 import type { CatalogProduct } from '../../types/products';
 import { Cart } from './Cart';
 import { CategoryTabs } from './CategoryTabs';
+import { CloseDayModal } from './CloseDayModal';
 import type { CustomerType } from './CustomerSelector';
 import { DailyMetrics } from './DailyMetrics';
 import { MobileCartBar } from './MobileCartBar';
@@ -18,6 +19,7 @@ import type { PaymentMethod } from './PaymentSelector';
 import { ProductGrid } from './ProductGrid';
 import { PromptPayModal } from './PromptPayModal';
 import { useCheckout } from './useCheckout';
+import { useCloseDay } from './useCloseDay';
 import { useDailySummary } from './useDailySummary';
 import { useIsMobile } from './useIsMobile';
 import { useProducts } from './useProducts';
@@ -42,6 +44,7 @@ export function SellPage() {
   const [stockNotice, setStockNotice] = useState('');
   const mobile = useIsMobile();
   const checkout = useCheckout();
+  const closeDay = useCloseDay(dailySummary.refresh);
 
   const categories = useMemo(() => [ALL_CATEGORIES, ...new Set(products.map((product) => product.category))], [products]);
   const filteredProducts = selectedCategory === ALL_CATEGORIES ? products : products.filter((product) => product.category === selectedCategory);
@@ -145,7 +148,13 @@ export function SellPage() {
   const checkoutError = validationError || checkout.error;
 
   return <section className="data-page sell-page">
-    <PageHeader title="ขายสินค้า" />
+    <div className="sell-page-header">
+      <PageHeader title="ขายสินค้า" />
+      <button type="button" className="secondary-button close-day-trigger" disabled={closeDay.previewLoading || closeDay.pending || promptPayOpen || checkout.pending} onClick={() => { void closeDay.openPreview(); }}>
+        {closeDay.previewLoading ? 'กำลังสรุปยอด...' : 'สรุป / ปิดยอดวันนี้'}
+      </button>
+    </div>
+    {closeDay.previewError && <MutationFeedback error={closeDay.previewError} success="" />}
     {!promptPayOpen && <MutationFeedback error={checkoutError} success={successMessage} />}
     <DailyMetrics summary={dailySummary.data} productCount={products.length} loading={dailySummary.loading} error={dailySummary.error} collapsed={metricsCollapsed} onToggle={() => setMetricsCollapsed((current) => !current)} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
@@ -164,5 +173,6 @@ export function SellPage() {
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />
     <PromptPayModal open={promptPayOpen} amount={totals.grandTotal} qrUrl={promptPayQr.url} loading={promptPayQr.loading} qrError={qrImageError || promptPayQr.error} checkoutError={checkout.error} submitting={checkout.pending} onClose={closePromptPay} onConfirm={() => { void submitOrder('transfer'); }} onImageError={() => setQrImageError('ไม่สามารถแสดง QR พร้อมเพย์ได้')} />
+    <CloseDayModal open={closeDay.open} report={closeDay.report} closedAt={closeDay.closedAt} closureStatusUnavailable={closeDay.closureStatusUnavailable} pending={closeDay.pending} error={closeDay.mutationError} confirmation={closeDay.confirmation} onClose={closeDay.closePreview} onConfirm={() => { void closeDay.confirm(); }} />
   </section>;
 }
