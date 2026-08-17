@@ -67,12 +67,16 @@ def init_schema():
     try:
         if is_postgres():
             connection.execute(schema)
+            connection.execute('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS giveaway_qty INTEGER NOT NULL DEFAULT 0')
         else:
             connection.executescript(schema)
             columns = {row[1] for row in connection.execute('PRAGMA table_info(orders)')}
             if 'idempotency_key' not in columns:
                 connection.execute('ALTER TABLE orders ADD COLUMN idempotency_key TEXT')
                 connection.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders(idempotency_key)')
+            item_columns = {row[1] for row in connection.execute('PRAGMA table_info(order_items)')}
+            if 'giveaway_qty' not in item_columns:
+                connection.execute('ALTER TABLE order_items ADD COLUMN giveaway_qty INTEGER NOT NULL DEFAULT 0')
         connection.commit()
     finally:
         connection.close()

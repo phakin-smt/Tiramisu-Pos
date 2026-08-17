@@ -257,7 +257,7 @@ function addToCart(productId) {
   if (existing) {
     existing.qty += 1;
   } else {
-    cart.push({ productId, qty: 1 });
+    cart.push({ productId, qty: 1, giveawayQty: 0 });
   }
 
 
@@ -289,6 +289,7 @@ function updateCartQty(productId, delta) {
 
 
   item.qty += delta;
+  item.giveawayQty = Math.min(item.giveawayQty || 0, item.qty);
 
 
   if (item.qty <= 0) {
@@ -296,6 +297,13 @@ function updateCartQty(productId, delta) {
   } else {
     renderCart();
   }
+}
+
+function updateGiveawayQty(productId, delta) {
+  const item = cart.find((cartItem) => cartItem.productId === productId);
+  if (!item) return;
+  item.giveawayQty = Math.min(item.qty, Math.max(0, (item.giveawayQty || 0) + delta));
+  renderCart();
 }
 
 
@@ -323,15 +331,21 @@ function renderCart() {
           <div class="cart-img">${product.icon || '📦'}</div>
           <div>
             <div class="cart-name">${product.name}</div>
-            <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}</div>
+            <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}${item.giveawayQty ? ` · แถม ${item.giveawayQty}` : ''}</div>
             <div class="qty-box">
               <button class="qty-decrease">−</button>
               <span>${item.qty}</span>
               <button class="qty-increase">+</button>
             </div>
+            <div class="giveaway-control">
+              <span>🎁 แถม</span>
+              <button class="giveaway-decrease" type="button" aria-label="ลดจำนวนแถม">−</button>
+              <strong>${item.giveawayQty || 0}</strong>
+              <button class="giveaway-increase" type="button" aria-label="เพิ่มจำนวนแถม">+</button>
+            </div>
           </div>
         </div>
-        <div class="item-total">${formatCurrency(product.price * item.qty)}</div>
+        <div class="item-total">${formatCurrency(product.price * (item.qty - (item.giveawayQty || 0)))}</div>
       `;
 
 
@@ -348,6 +362,12 @@ function renderCart() {
       const increaseBtn = cartRow.querySelector('.qty-increase');
       increaseBtn.disabled = item.qty >= product.stock;
       increaseBtn.addEventListener('click', () => updateCartQty(product.id, 1));
+      const giveawayDecrease = cartRow.querySelector('.giveaway-decrease');
+      const giveawayIncrease = cartRow.querySelector('.giveaway-increase');
+      giveawayDecrease.disabled = !item.giveawayQty;
+      giveawayIncrease.disabled = (item.giveawayQty || 0) >= item.qty;
+      giveawayDecrease.addEventListener('click', () => updateGiveawayQty(product.id, -1));
+      giveawayIncrease.addEventListener('click', () => updateGiveawayQty(product.id, 1));
 
 
       cartItems.appendChild(cartRow);
@@ -363,13 +383,13 @@ function renderCart() {
 function computeTotals() {
   const subtotal = cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product ? sum + product.price * item.qty : sum;
+    return product ? sum + product.price * (item.qty - (item.giveawayQty || 0)) : sum;
   }, 0);
 
 
   const eligibleQty = cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty : sum;
+    return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty - (item.giveawayQty || 0) : sum;
   }, 0);
   const bundleSets = Math.floor(eligibleQty / BUNDLE_QTY);
   const autoDiscount = bundleSets * BUNDLE_DISCOUNT_PER_SET;
@@ -495,7 +515,7 @@ async function submitOrder() {
       method: 'POST',
      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': pendingOrderKey },
       body: JSON.stringify({
-        items: cart.map((item) => ({ productId: item.productId, qty: item.qty })),
+        items: cart.map((item) => ({ productId: item.productId, qty: item.qty, giveawayQty: item.giveawayQty || 0 })),
         paymentMethod,
         customerType,
         discount: totals.discount
@@ -1051,7 +1071,7 @@ function renderCloseDayReport(report, prefix) {
    ordersBody.innerHTML = `<tr><td colspan="6" class="report-items-cell">ยังไม่มีออเดอร์วันนี้</td></tr>`;
  } else {
    report.orders.forEach((order) => {
-     const itemsText = order.items.map((item) => `${item.name} x${item.qty}`).join('<br />');
+     const itemsText = order.items.map((item) => `${item.name} x${item.qty}${item.giveawayQty ? ` (แถม ${item.giveawayQty})` : ''}`).join('<br />');
      const row = document.createElement('tr');
      row.innerHTML = `
        <td>${formatTimeOnly(order.time)}</td>
@@ -1130,7 +1150,7 @@ function renderOrdersTable() {
   }
 
   ordersList.forEach((order) => {
-    const itemsText = order.items.map((item) => `${item.name} x${item.qty}`).join('<br />');
+    const itemsText = order.items.map((item) => `${item.name} x${item.qty}${item.giveawayQty ? ` (แถม ${item.giveawayQty})` : ''}`).join('<br />');
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${formatTimeOnly(order.time)}</td>

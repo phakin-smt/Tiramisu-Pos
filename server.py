@@ -257,11 +257,12 @@ def create_order():
   lines=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
   for item in items:
    product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND is_active=1'+lock,(item.get('productId'),)).fetchone()
-   try: qty=int(item.get('qty',0))
+   try:
+    qty=int(item.get('qty',0)); giveaway_qty=int(item.get('giveawayQty',0) or 0)
    except (TypeError,ValueError): qty=0
-   if not product or qty<=0: return error('สินค้าในตะกร้าไม่ถูกต้อง')
+   if not product or qty<=0 or giveaway_qty<0 or giveaway_qty>qty: return error('สินค้าในตะกร้าหรือจำนวนแถมไม่ถูกต้อง')
    if qty>product['stock_qty']: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
-   line_total=qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,line_total))
+   paid_qty=qty-giveaway_qty; line_total=paid_qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,giveaway_qty,paid_qty,line_total))
   if discount>subtotal: return error('ส่วนลดมากกว่ายอดรวม')
   total=subtotal-discount; today=bangkok_today().isoformat()
   day_code=today.replace('-',''); order_number='{}-{}'.format(day_code,uuid.uuid4().hex[:8].upper())
@@ -269,11 +270,14 @@ def create_order():
   query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
   result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,payload.get('note')))
   order_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
-  for product,qty,line_total in lines:
-   execute(cursor,'INSERT INTO order_items (order_id,product_id,product_name,sku,quantity,unit_price,discount,line_total) VALUES (?,?,?,?,?,?,0,?)',(order_id,product['id'],product['name'],product['sku'],qty,product['unit_price'],line_total))
+  for product,qty,giveaway_qty,paid_qty,line_total in lines:
+   execute(cursor,'INSERT INTO order_items (order_id,product_id,product_name,sku,quantity,giveaway_qty,unit_price,discount,line_total) VALUES (?,?,?,?,?,?,?,0,?)',(order_id,product['id'],product['name'],product['sku'],qty,giveaway_qty,product['unit_price'],line_total))
    updated=execute(cursor,'UPDATE products SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND stock_qty>=?',(qty,product['id'],qty))
    if updated.rowcount!=1: raise ValueError('สต็อกเปลี่ยนแปลง กรุณาลองใหม่')
-   execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,\'sale\',?,\'order\',?,NULL)',(product['id'],-qty,order_number))
+   if paid_qty:
+    execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,\'sale\',?,\'order\',?,NULL)',(product['id'],-paid_qty,order_number))
+   if giveaway_qty:
+    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_out',?,'giveaway',?,'แถมในออเดอร์')",(product['id'],-giveaway_qty,order_number))
   execute(cursor,'INSERT INTO payments (order_id,payment_method,paid_amount,change_amount,payment_reference) VALUES (?,?,?,0,?)',(order_id,payment,total,order_number))
  return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment)
 
@@ -283,10 +287,14 @@ def cancel_order(order_id):
   order=execute(cursor,'SELECT id,status,order_number FROM orders WHERE id=?',(order_id,)).fetchone()
   if not order: return error('ไม่พบออเดอร์นี้',404)
   if order['status']!='completed': return error('ออเดอร์นี้ถูกยกเลิกไปแล้ว')
-  items=execute(cursor,'SELECT product_id,quantity FROM order_items WHERE order_id=?',(order_id,)).fetchall()
+  items=execute(cursor,'SELECT product_id,quantity,giveaway_qty FROM order_items WHERE order_id=?',(order_id,)).fetchall()
   for item in items:
    execute(cursor,'UPDATE products SET stock_qty=stock_qty+?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(item['quantity'],item['product_id']))
-   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'sale',?,'order',?,'ยกเลิกออเดอร์')",(item['product_id'],item['quantity'],order['order_number']))
+   paid_qty=item['quantity']-item['giveaway_qty']
+   if paid_qty:
+    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'sale',?,'order',?,'ยกเลิกออเดอร์')",(item['product_id'],paid_qty,order['order_number']))
+   if item['giveaway_qty']:
+    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_out',?,'giveaway',?,'ยกเลิกออเดอร์')",(item['product_id'],item['giveaway_qty'],order['order_number']))
   execute(cursor,"UPDATE orders SET status='cancelled' WHERE id=?",(order_id,))
  return jsonify(id=order_id,cancelled=True)
 
@@ -298,10 +306,10 @@ def list_orders():
  try:
   cursor=connection.cursor()
   order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total,status FROM orders WHERE order_date=? ORDER BY created_at',(report_date,)).fetchall()
-  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? ORDER BY oi.id',(report_date,)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? ORDER BY oi.id',(report_date,)).fetchall()
  finally: connection.close()
  grouped={}
- for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
+ for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'giveawayQty':r['giveaway_qty'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
  orders=[{'id':r['id'],'orderNumber':r['order_number'],'time':local_timestamp(r['created_at']),'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'status':r['status'],'items':grouped.get(r['id'],[])} for r in order_rows]
  return jsonify(date=report_date,orders=orders)
 
@@ -396,11 +404,11 @@ def close_day():
  try:
   cursor=connection.cursor()
   order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE order_date=? AND status=\'completed\' ORDER BY created_at',(report_date,)).fetchall()
-  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(report_date,)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(report_date,)).fetchall()
   cost_rows=execute(cursor,'SELECT oi.quantity,p.cost_price FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.order_date=? AND o.status=\'completed\'',(report_date,)).fetchall()
  finally: connection.close()
  grouped={}
- for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
+ for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'giveawayQty':r['giveaway_qty'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
  orders=[{'orderNumber':r['order_number'],'time':local_timestamp(r['created_at']),'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
  cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
  cost_total=sum(r['quantity']*number(r['cost_price'] or 0) for r in cost_rows)

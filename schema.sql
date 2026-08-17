@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     product_name TEXT NOT NULL,
     sku TEXT NOT NULL,
     quantity INTEGER NOT NULL CHECK (quantity > 0),
+    giveaway_qty INTEGER NOT NULL DEFAULT 0 CHECK (giveaway_qty >= 0 AND giveaway_qty <= quantity),
     unit_price REAL NOT NULL CHECK (unit_price >= 0),
     discount REAL NOT NULL DEFAULT 0 CHECK (discount >= 0),
     line_total REAL NOT NULL CHECK (line_total >= 0),

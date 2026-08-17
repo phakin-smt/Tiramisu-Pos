@@ -1076,6 +1076,41 @@ body {
   font-size: 12px;
 }
 
+.giveaway-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--accent-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.giveaway-control button {
+  min-width: 26px;
+  min-height: 26px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  font: 700 14px/1 var(--font-numeric);
+  cursor: pointer;
+}
+
+.giveaway-control button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.giveaway-control strong {
+  min-width: 14px;
+  color: var(--accent-dark);
+  font-family: var(--font-numeric);
+  text-align: center;
+}
+
 
 .item-total {
   font-weight: 800;
