@@ -16,6 +16,7 @@ import { CloseDayModal } from './CloseDayModal';
 import type { CustomerType } from './CustomerSelector';
 import { DailyMetrics } from './DailyMetrics';
 import { MobileCartBar } from './MobileCartBar';
+import { OpeningFloatCard } from './OpeningFloatCard';
 import type { PaymentMethod } from './PaymentSelector';
 import { ProductGrid } from './ProductGrid';
 import { PromptPayModal } from './PromptPayModal';
@@ -168,6 +169,7 @@ export function SellPage() {
     {closeDay.previewError && <MutationFeedback error={closeDay.previewError} success="" />}
     {!cashPaymentOpen && !promptPayOpen && <MutationFeedback error={checkoutError} success={successMessage} />}
     <DailyMetrics summary={dailySummary.data} productCount={products.length} loading={dailySummary.loading} error={dailySummary.error} collapsed={metricsCollapsed} onToggle={() => setMetricsCollapsed((current) => !current)} />
+    <OpeningFloatCard cashSales={dailySummary.data?.cashTotal ?? null} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
     <div className="sell-workspace">
       <section className="sell-catalog" aria-labelledby="catalog-title">

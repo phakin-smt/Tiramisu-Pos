@@ -153,6 +153,30 @@ def rows(query,params=()):
  try: return execute(connection.cursor(),query,params).fetchall()
  finally: connection.close()
 
+def cash_day_response(report_date):
+ result=rows('SELECT opening_float FROM cash_days WHERE report_date=?',(report_date,))
+ return {'date':report_date,'openingFloat':number(result[0]['opening_float']) if result else None}
+
+@app.get('/api/cash-day')
+def get_cash_day():
+ return jsonify(cash_day_response(bangkok_today().isoformat()))
+
+@app.put('/api/cash-day')
+def update_cash_day():
+ payload=request.get_json(silent=True) or {}
+ raw=payload.get('openingFloat')
+ if isinstance(raw,bool) or raw is None: return error('จำนวนเงินทอนตั้งต้นไม่ถูกต้อง')
+ try: amount=Decimal(str(raw))
+ except Exception: return error('จำนวนเงินทอนตั้งต้นไม่ถูกต้อง')
+ if not amount.is_finite() or amount<0: return error('จำนวนเงินทอนตั้งต้นต้องไม่ติดลบ')
+ if amount>Decimal('9999999999.99'): return error('จำนวนเงินทอนตั้งต้นสูงเกินไป')
+ amount=amount.quantize(Decimal('0.01'))
+ report_date=bangkok_today().isoformat()
+ with transaction() as (_,cursor):
+  execute(cursor,"""INSERT INTO cash_days (report_date,opening_float) VALUES (?,?)
+   ON CONFLICT(report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(report_date,number(amount)))
+ return jsonify(date=report_date,openingFloat=number(amount))
+
 def apply_due_stock_plans(cursor,today):
  due=execute(cursor,"SELECT id,product_id,quantity FROM stock_plans WHERE status='pending' AND plan_date<=?",(today,)).fetchall()
  for plan in due:
@@ -488,7 +512,8 @@ def close_day():
  cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
  cost_total=sum(r['quantity']*number(r['cost_price'] or 0) for r in cost_rows)
  menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
- return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,costTotal=cost_total,netProfit=(cash+transfer)-cost_total,orders=orders,menuSummary=menus)
+ cash_day=cash_day_response(report_date); opening_float=cash_day['openingFloat']
+ return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,costTotal=cost_total,netProfit=(cash+transfer)-cost_total,openingFloat=opening_float,expectedCash=(opening_float+cash) if opening_float is not None else None,orders=orders,menuSummary=menus)
 
 @app.get('/')
 def index(): return send_from_directory(PUBLIC_ROOT,'index.html')

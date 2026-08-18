@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 
 import { formatThaiDate, formatTime } from '../../domain/date';
+import { formatCurrency } from '../../domain/format';
 import type { CloseDayClosure, CloseDayReport } from '../../types/reports';
 import { ReportOrders } from '../reports/ReportOrders';
 import { ReportProductMovements } from '../reports/ReportProductMovements';
@@ -77,6 +78,13 @@ export function CloseDayModal({ open, report, closedAt, closureStatusUnavailable
       </header>
       <div className="close-day-content">
         <ReportSummary report={report} />
+
+        <section className="close-day-cash" aria-labelledby="close-day-cash-title">
+          <div className="section-heading"><div><h3 id="close-day-cash-title">เงินสดที่ควรมี</h3><span>เงินทอนตั้งต้นและยอดขายเงินสด</span></div></div>
+          {report.openingFloat == null
+            ? <p className="missing-opening-float">ยังไม่ได้ตั้งเงินทอน</p>
+            : <dl className="expected-cash-lines"><div><dt>เงินทอนตั้งต้น</dt><dd>{formatCurrency(report.openingFloat)}</dd></div><div><dt>ยอดขายเงินสด</dt><dd>{formatCurrency(report.cashTotal)}</dd></div><div><dt>เงินสดที่ควรมี</dt><dd>{formatCurrency(report.expectedCash ?? report.openingFloat + report.cashTotal)}</dd></div></dl>}
+        </section>
 
         <section className="close-day-section" aria-labelledby="close-day-orders-title">
           <div className="section-heading"><div><h3 id="close-day-orders-title">รายการออเดอร์</h3><span>{report.orderCount} ออเดอร์</span></div></div>

@@ -87,6 +87,13 @@ CREATE TABLE IF NOT EXISTS daily_closures (
     closed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS cash_days (
+    report_date TEXT PRIMARY KEY,
+    opening_float REAL NOT NULL CHECK (opening_float >= 0),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS stock_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_id INTEGER NOT NULL,

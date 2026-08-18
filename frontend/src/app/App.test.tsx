@@ -111,12 +111,16 @@ describe('authentication and application shell', () => {
   });
 
   it('logs out and removes access to the shell with one mutation', async () => {
-    const fetchMock = mockResponses(
-      { body: { authenticated: true, configured: true } },
-      { body: [] },
-      { body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } },
-      { body: { authenticated: false, configured: true } },
-    );
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url === '/api/auth/status') return Promise.resolve(response({ body: { authenticated: true, configured: true } }));
+      if (url === '/api/products') return Promise.resolve(response({ body: [] }));
+      if (url === '/api/reports/daily-summary') return Promise.resolve(response({ body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } }));
+      if (url === '/api/cash-day') return Promise.resolve(response({ body: { date: '2026-08-17', openingFloat: null } }));
+      if (url === '/api/auth/logout') return Promise.resolve(response({ body: { authenticated: false, configured: true } }));
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
     renderApplication('/sell');
     const logoutButton = (await screen.findAllByRole('button', { name: 'ออกจากระบบ' }))[0];
     fireEvent.click(logoutButton);
@@ -131,6 +135,7 @@ describe('authentication and application shell', () => {
       if (url === '/api/auth/status') return Promise.resolve(response({ body: { authenticated: true, configured: true } }));
       if (url === '/api/products') return Promise.resolve(response({ status: 401, body: { error: 'กรุณาเข้าสู่ระบบใหม่' } }));
       if (url === '/api/reports/daily-summary') return Promise.resolve(response({ body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } }));
+      if (url === '/api/cash-day') return Promise.resolve(response({ body: { date: '2026-08-17', openingFloat: null } }));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

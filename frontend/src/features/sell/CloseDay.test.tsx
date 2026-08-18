@@ -16,6 +16,7 @@ const summary = { date: '2026-08-17', orderCount: 2, cashTotal: 200, transferTot
 const report = {
   date: '2026-08-17', orderCount: 2, subtotalAll: 407, discountAll: 14, cashTotal: 200,
   transferTotal: 193, totalRevenue: 393, costTotal: 120, netProfit: 273,
+  openingFloat: 1260, expectedCash: 1460,
   orders: [{ orderNumber: 'BB-001', time: '2026-08-17T11:15:00+07:00', paymentMethod: 'cash', subtotal: 207, discount: 7, total: 200, items: [{ name: 'Original', code: 'ORI', qty: 3, giveawayQty: 1, unitPrice: 69, lineTotal: 138 }] }],
   menuSummary: [{ code: 'ORI', name: 'Original', category: 'Tiramisu', icon: '', active: true, sold: 5, giveaway: 1, waste: 2, remaining: 8 }],
 };
@@ -43,6 +44,7 @@ function mockCloseDay(handler?: FetchHandler) {
     if (custom) return Promise.resolve(custom);
     if (url === '/api/products') return Promise.resolve(json(products));
     if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+    if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
     if (url === '/api/reports/close-day' && init.method === 'POST') return Promise.resolve(json(closure));
     if (url === '/api/reports/close-day') return Promise.resolve(json(report));
     if (url === '/api/reports/days') return Promise.resolve(json(openDays));
@@ -92,11 +94,23 @@ describe('Sell close-day workflow', () => {
     expect(within(modal).getByText('ส่วนลดรวม').parentElement).toHaveTextContent('14');
     expect(within(modal).getByText('ต้นทุนรวม').parentElement).toHaveTextContent('120');
     expect(within(modal).getByText('กำไรขั้นต้น').parentElement).toHaveTextContent('273');
+    expect(within(modal).getByText('เงินทอนตั้งต้น').parentElement).toHaveTextContent('1,260');
+    expect(within(modal).getAllByText('เงินสดที่ควรมี').find((element) => element.tagName === 'DT')?.parentElement).toHaveTextContent('1,460');
     expect(within(modal).getByText('ORI · Tiramisu').closest('tr')).toHaveTextContent('5128');
     expect(within(modal).queryByText('เตรียม')).not.toBeInTheDocument();
     expect(closeDayPosts(fetchMock)).toHaveLength(0);
     expect(fetchMock).toHaveBeenCalledWith('/api/reports/close-day', expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(fetchMock).toHaveBeenCalledWith('/api/reports/days', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('marks expected cash as unavailable when the opening float is unset', async () => {
+    mockCloseDay((url, init) => url === '/api/reports/close-day' && init.method !== 'POST'
+      ? json({ ...report, openingFloat: null, expectedCash: null })
+      : undefined);
+    await renderSell();
+    const modal = await openPreview();
+    expect(within(modal).getByText('ยังไม่ได้ตั้งเงินทอน')).toBeInTheDocument();
+    expect(within(modal).queryByText('฿0.00')).not.toBeInTheDocument();
   });
 
   it('explains the marker semantics and allows an already-closed day to be re-closed', async () => {
@@ -126,6 +140,7 @@ describe('Sell close-day workflow', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/products') return Promise.resolve(json(products));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+      if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url === '/api/reports/close-day') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -190,6 +205,7 @@ describe('Sell close-day workflow', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/products') return Promise.resolve(json(products));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+      if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url === '/api/reports/close-day' && init.method === 'POST') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/reports/close-day') return Promise.resolve(json(report));
       if (url === '/api/reports/days') return Promise.resolve(json(openDays));

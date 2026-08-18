@@ -39,6 +39,7 @@ function mockCheckout(handler?: Handler) {
     if (custom !== undefined) return Promise.resolve(custom);
     if (url === '/api/products') return Promise.resolve(json(products));
     if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+    if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
     if (url.startsWith('/api/payment-qr?')) return Promise.resolve(png());
     if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(json(order));
     throw new Error(`Unexpected request: ${url}`);
@@ -319,6 +320,7 @@ describe('Sell checkout', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/products') return Promise.resolve(json(products));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+      if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url === '/api/auth/login') return Promise.resolve(json({ authenticated: true }));
       if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(++posts === 1 ? json({ error: 'หมดอายุ' }, 401) : json(order));
       throw new Error(`Unexpected request: ${url}`);
@@ -344,6 +346,7 @@ describe('Sell checkout', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/products') return Promise.resolve(json(products));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+      if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url.startsWith('/api/payment-qr')) return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/auth/login') return Promise.resolve(json({ authenticated: true }));
       throw new Error(`Unexpected request: ${url}`);

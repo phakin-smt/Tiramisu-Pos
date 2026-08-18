@@ -28,6 +28,7 @@ function mockSell(handler?: (url: string, init: RequestInit) => Response | Promi
     if (custom) return Promise.resolve(custom);
     if (url === '/api/products') return Promise.resolve(json(products));
     if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+    if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -162,7 +163,11 @@ describe('SellPage', () => {
   });
 
   it('announces independent product and summary loading errors', async () => {
-    mockSell((url) => url === '/api/products' ? json({ error: 'โหลดสินค้าไม่ได้' }, 500) : json({ error: 'โหลดสรุปไม่ได้' }, 500));
+    mockSell((url) => {
+      if (url === '/api/products') return json({ error: 'โหลดสินค้าไม่ได้' }, 500);
+      if (url === '/api/reports/daily-summary') return json({ error: 'โหลดสรุปไม่ได้' }, 500);
+      return undefined;
+    });
     render(<SellPage />);
     expect(await screen.findByText('โหลดสินค้าไม่ได้')).toHaveAttribute('role', 'alert');
     expect(await screen.findByText('โหลดสรุปไม่ได้')).toHaveAttribute('role', 'alert');
@@ -182,6 +187,7 @@ describe('SellPage', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/products') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
+      if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -247,5 +253,21 @@ describe('SellPage', () => {
     expect(screen.getByText(/พักออเดอร์แล้ว/)).toHaveAttribute('role', 'status');
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('2');
     expect(fetchMock.mock.calls).toHaveLength(callsBeforeHold);
+  });
+
+  it('saves the opening float without clearing the cart or submitting an order', async () => {
+    const fetchMock = mockSell((url, init) => url === '/api/cash-day' && init.method === 'PUT'
+      ? json({ date: summary.date, openingFloat: 500 })
+      : undefined);
+    await renderSell();
+    add('Original');
+    fireEvent.click(await screen.findByRole('button', { name: 'ตั้งเงินทอน' }));
+    fireEvent.change(screen.getByLabelText('เงินทอนตั้งต้น'), { target: { value: '500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await screen.findByRole('button', { name: 'แก้ไข' });
+
+    expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('1');
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/cash-day' && (init as RequestInit).method === 'PUT')).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/orders')).toBe(false);
   });
 });

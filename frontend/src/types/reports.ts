@@ -61,6 +61,8 @@ export interface CloseDayReport {
   totalRevenue: number;
   costTotal: number;
   netProfit: number;
+  openingFloat?: number | null;
+  expectedCash?: number | null;
   orders: ReportOrder[];
   menuSummary: ReportMenuSummary[];
 }
