@@ -9,10 +9,10 @@ import { useTabletSwipeNavigation } from './useTabletSwipeNavigation';
 function Brand() {
   return (
     <div className="shell-brand">
-      <div className="brand-mark" aria-hidden="true">BB</div>
+      <div className="brand-mark" aria-hidden="true">BP</div>
       <div>
         <div className="brand-title-row">
-          <strong>Bellies Buddy</strong>
+          <strong>Baannoi-POS</strong>
           <span className="version-label">v1.1.0</span>
         </div>
         <span className="brand-subtitle">ระบบขายของหวาน</span>

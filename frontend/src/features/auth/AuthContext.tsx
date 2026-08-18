@@ -123,8 +123,8 @@ export function LoginForm() {
   return (
     <div className="login-screen">
       <form className="login-panel" onSubmit={handleSubmit}>
-        <div className="brand-mark" aria-hidden="true">BB</div>
-        <h1>Bellies Buddy</h1>
+        <div className="brand-mark" aria-hidden="true">BP</div>
+        <h1>Baannoi-POS</h1>
         <span className="version-label">v1.1.0</span>
         <p>Enter your PIN to continue</p>
         <label htmlFor="login-pin">PIN</label>
