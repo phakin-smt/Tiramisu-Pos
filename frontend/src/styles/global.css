@@ -306,6 +306,30 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .promptpay-modal footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
 .promptpay-modal footer button { min-width: 132px; }
 body.promptpay-open { overflow: hidden; }
+.cash-payment-overlay { position: fixed; z-index: 90; inset: 0; display: grid; padding: 20px; place-items: center; overflow-y: auto; background: rgba(31, 24, 20, 0.62); }
+.cash-payment-modal { width: min(100%, 480px); overflow: hidden; border: 1px solid rgba(217, 195, 174, 0.9); border-radius: 22px; background: var(--panel); box-shadow: var(--shadow-strong, 0 18px 54px rgba(35, 25, 20, 0.28)); }
+.cash-payment-modal > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; color: #fff8f1; background: linear-gradient(135deg, #604130, #805137); }
+.cash-payment-modal h2 { margin: 0; font-size: 21px; }
+.cash-payment-modal header span { display: block; margin-top: 3px; color: rgba(255,255,255,.72); font-size: 12px; }
+.cash-payment-modal header .icon-button { color: #fff; }
+.cash-payment-content { display: grid; gap: 18px; padding: 22px; }
+.cash-total, .cash-change { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border-radius: var(--radius-md); }
+.cash-total { color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
+.cash-total span, .cash-change span { font-weight: 700; }
+.cash-total strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.cash-received-field { display: grid; gap: 7px; color: var(--text-soft); font-size: 13px; font-weight: 700; }
+.cash-received-field > div { display: flex; min-height: 58px; align-items: center; overflow: hidden; border: 2px solid var(--line); border-radius: var(--radius-md); background: #fff; }
+.cash-received-field > div:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
+.cash-received-field > div > span { padding-left: 16px; color: var(--primary-dark); font-size: 22px; }
+.cash-received-field input { width: 100%; min-width: 0; min-height: 54px; padding: 8px 16px 8px 8px; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 28px; font-weight: 800; text-align: right; }
+.cash-quick-buttons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.cash-quick-buttons button { min-height: 48px; border: 1px solid #d8b795; border-radius: var(--radius-pill); color: var(--primary-dark); background: var(--accent-soft); font-weight: 800; }
+.cash-change { border: 1px solid var(--line); color: var(--text-soft); background: var(--panel-soft); }
+.cash-change strong { font-size: 27px; font-variant-numeric: tabular-nums; }
+.cash-change.is-ready { border-color: #a9cbb4; color: #285b3a; background: var(--success-soft); }
+.cash-payment-modal > footer { display: flex; justify-content: flex-end; gap: 10px; padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.cash-payment-modal > footer button { min-width: 140px; }
+body.cash-payment-open { overflow: hidden; }
 .close-day-overlay { position: fixed; z-index: 100; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(31, 24, 20, 0.58); }
 .close-day-modal { display: grid; width: min(100%, 1080px); max-height: calc(100dvh - 40px); grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border-radius: 8px; background: var(--panel); box-shadow: 0 18px 54px rgba(35, 25, 20, 0.28); }
 .close-day-modal > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
@@ -585,6 +609,12 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .sell-cart-items { min-height: 110px; }
   .customer-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .promptpay-overlay { padding: 0; place-items: end center; }
+  .cash-payment-overlay { padding: 0; place-items: end center; }
+  .cash-payment-modal { max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 22px 22px 0 0; }
+  .cash-payment-content { gap: 14px; padding: 18px; }
+  .cash-quick-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cash-payment-modal > footer { padding-inline: 18px; }
+  .cash-payment-modal > footer button { min-width: 0; flex: 1; }
   .promptpay-modal { max-height: calc(100dvh - env(safe-area-inset-top)); border-radius: 8px 8px 0 0; }
   .promptpay-content { min-height: 280px; }
   .promptpay-modal footer button { min-width: 0; flex: 1; }

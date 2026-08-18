@@ -58,7 +58,13 @@ function add(times = 1) {
   for (let count = 0; count < times; count += 1) fireEvent.click(button);
 }
 
-function cashButton() { return screen.getByRole('button', { name: /เงินสด/ }); }
+function cashButton() { return screen.getByRole('button', { name: 'เงินสด' }); }
+function cashConfirmButton() { return screen.getByRole('button', { name: 'ยืนยันรับเงิน' }); }
+function confirmCashExact() {
+  fireEvent.click(cashButton());
+  fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+  fireEvent.click(cashConfirmButton());
+}
 function transferButton() { return screen.getByRole('button', { name: /QR พร้อมเพย์/ }); }
 function orderCalls(fetchMock: ReturnType<typeof vi.fn>) { return fetchMock.mock.calls.filter(([url, init]) => url === '/api/orders' && (init as RequestInit).method === 'POST'); }
 
@@ -94,7 +100,9 @@ describe('Sell checkout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'สมาชิก' }));
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '5' } });
     fireEvent.click(cashButton());
-    fireEvent.click(cashButton());
+    fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+    fireEvent.click(cashConfirmButton());
+    fireEvent.click(cashConfirmButton());
     view.rerender(<SellPage />);
 
     expect(orderCalls(fetchMock)).toHaveLength(1);
@@ -131,21 +139,21 @@ describe('Sell checkout', () => {
     add(3);
     fireEvent.click(screen.getByLabelText('เพิ่มจำนวนแถม Original'));
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '5' } });
-    fireEvent.click(cashButton());
+    confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('บันทึกไม่สำเร็จ');
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('3');
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('1');
     expect(screen.getByLabelText('ส่วนลด')).toHaveValue(5);
 
     view.rerender(<SellPage />);
-    fireEvent.click(cashButton());
+    fireEvent.click(cashConfirmButton());
     expect(await screen.findByText(/บันทึกออเดอร์ #ORDER-2/)).toBeInTheDocument();
     const firstKey = (orderCalls(fetchMock)[0][1] as RequestInit).headers as Record<string, string>;
     const retryKey = (orderCalls(fetchMock)[1][1] as RequestInit).headers as Record<string, string>;
     expect(retryKey['Idempotency-Key']).toBe(firstKey['Idempotency-Key']);
 
     add();
-    fireEvent.click(cashButton());
+    confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์ #ORDER-3/)).toBeInTheDocument();
     const nextKey = (orderCalls(fetchMock)[2][1] as RequestInit).headers as Record<string, string>;
     expect(nextKey['Idempotency-Key']).not.toBe(firstKey['Idempotency-Key']);
@@ -160,10 +168,10 @@ describe('Sell checkout', () => {
       return posts === 1 ? Promise.reject(new TypeError('network response lost')) : json({ ...order, duplicate: true });
     });
     await renderCheckout(); add();
-    fireEvent.click(cashButton());
+    confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
     expect(orderCalls(fetchMock)).toHaveLength(1);
-    fireEvent.click(cashButton());
+    fireEvent.click(cashConfirmButton());
     expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
     const keys = orderCalls(fetchMock).map(([, init]) => ((init as RequestInit).headers as Record<string, string>)['Idempotency-Key']);
@@ -175,7 +183,7 @@ describe('Sell checkout', () => {
     await renderCheckout(); add(2);
     fireEvent.click(screen.getByLabelText('เพิ่มจำนวนแถม Original'));
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '4' } });
-    fireEvent.click(cashButton());
+    confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('คงเหลือไม่พอ');
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('2');
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('1');
@@ -190,7 +198,7 @@ describe('Sell checkout', () => {
       if (url === '/api/reports/daily-summary') return ++summaryLoads === 1 ? json(summary) : json({ error: 'โหลดสรุปล่าสุดไม่ได้' }, 500);
       return undefined;
     });
-    await renderCheckout(); add(); fireEvent.click(cashButton());
+    await renderCheckout(); add(); confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
     expect(await screen.findByText('โหลดสต็อกล่าสุดไม่ได้')).toBeInTheDocument();
@@ -318,13 +326,13 @@ describe('Sell checkout', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<AuthProvider><MemoryRouter initialEntries={['/sell']}><AppRoutes /></MemoryRouter></AuthProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    add(); fireEvent.click(cashButton());
+    add(); confirmCashExact();
     expect(await screen.findByLabelText('PIN')).toBeInTheDocument();
     const firstKey = ((orderCalls(fetchMock)[0][1] as RequestInit).headers as Record<string, string>)['Idempotency-Key'];
     fireEvent.change(screen.getByLabelText('PIN'), { target: { value: '2468' } });
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
     expect(await screen.findByLabelText('จำนวน Original')).toHaveTextContent('1');
-    fireEvent.click(cashButton());
+    confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
     const retryKey = ((orderCalls(fetchMock)[1][1] as RequestInit).headers as Record<string, string>)['Idempotency-Key'];
     expect(retryKey).toBe(firstKey);

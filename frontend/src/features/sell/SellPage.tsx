@@ -10,6 +10,7 @@ import type { CartItem, DiscountState } from '../../types/domain';
 import type { CreateOrderRequest } from '../../types/checkout';
 import type { CatalogProduct } from '../../types/products';
 import { Cart } from './Cart';
+import { CashPaymentModal } from './CashPaymentModal';
 import { CategoryTabs } from './CategoryTabs';
 import { CloseDayModal } from './CloseDayModal';
 import type { CustomerType } from './CustomerSelector';
@@ -38,6 +39,7 @@ export function SellPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [metricsCollapsed, setMetricsCollapsed] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [cashPaymentOpen, setCashPaymentOpen] = useState(false);
   const [promptPayOpen, setPromptPayOpen] = useState(false);
   const [qrImageError, setQrImageError] = useState('');
   const [validationError, setValidationError] = useState('');
@@ -103,6 +105,7 @@ export function SellPage() {
     setPromptPayOpen(false);
     setQrImageError('');
   }, []);
+  const closeCashPayment = useCallback(() => setCashPaymentOpen(false), []);
 
   const submitOrder = async (method: PaymentMethod) => {
     if (checkout.isLocked()) return;
@@ -125,6 +128,7 @@ export function SellPage() {
     setDiscountState(resetManualDiscount());
     setStockNotice('');
     setCartOpen(false);
+    closeCashPayment();
     closePromptPay();
     productsQuery.refresh();
     dailySummary.refresh();
@@ -135,12 +139,13 @@ export function SellPage() {
     setPaymentMethod(method);
     setValidationError('');
     checkout.clearFeedback();
-    if (method === 'cash') {
-      void submitOrder('cash');
-      return;
-    }
     if (!cart.length) {
       setValidationError('ไม่มีสินค้าในตะกร้า');
+      return;
+    }
+    if (method === 'cash') {
+      setCartOpen(false);
+      setCashPaymentOpen(true);
       return;
     }
     setQrImageError('');
@@ -156,12 +161,12 @@ export function SellPage() {
   return <section className="data-page sell-page">
     <div className="sell-page-header">
       <PageHeader title="ขายสินค้า" />
-      <button type="button" className="secondary-button close-day-trigger" disabled={closeDay.previewLoading || closeDay.pending || promptPayOpen || checkout.pending} onClick={() => { void closeDay.openPreview(); }}>
+      <button type="button" className="secondary-button close-day-trigger" disabled={closeDay.previewLoading || closeDay.pending || cashPaymentOpen || promptPayOpen || checkout.pending} onClick={() => { void closeDay.openPreview(); }}>
         {closeDay.previewLoading ? 'กำลังสรุปยอด...' : 'สรุป / ปิดยอดวันนี้'}
       </button>
     </div>
     {closeDay.previewError && <MutationFeedback error={closeDay.previewError} success="" />}
-    {!promptPayOpen && <MutationFeedback error={checkoutError} success={successMessage} />}
+    {!cashPaymentOpen && !promptPayOpen && <MutationFeedback error={checkoutError} success={successMessage} />}
     <DailyMetrics summary={dailySummary.data} productCount={products.length} loading={dailySummary.loading} error={dailySummary.error} collapsed={metricsCollapsed} onToggle={() => setMetricsCollapsed((current) => !current)} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
     <div className="sell-workspace">
@@ -174,10 +179,11 @@ export function SellPage() {
           {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} onAdd={(product) => updateCart(addToCart(cart, product))} />}
         </div>
       </section>
-      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} paymentDisabled={checkout.pending || promptPayOpen} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
+      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} paymentDisabled={checkout.pending || cashPaymentOpen || promptPayOpen} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
     </div>
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />
+    {cashPaymentOpen && <CashPaymentModal open amount={totals.grandTotal} checkoutError={checkout.error} submitting={checkout.pending} onClose={closeCashPayment} onConfirm={() => { void submitOrder('cash'); }} />}
     <PromptPayModal open={promptPayOpen} amount={totals.grandTotal} qrUrl={promptPayQr.url} loading={promptPayQr.loading} qrError={qrImageError || promptPayQr.error} checkoutError={checkout.error} submitting={checkout.pending} onClose={closePromptPay} onConfirm={() => { void submitOrder('transfer'); }} onImageError={() => setQrImageError('ไม่สามารถแสดง QR พร้อมเพย์ได้')} />
     <CloseDayModal open={closeDay.open} report={closeDay.report} closedAt={closeDay.closedAt} closureStatusUnavailable={closeDay.closureStatusUnavailable} pending={closeDay.pending} error={closeDay.mutationError} confirmation={closeDay.confirmation} onClose={closeDay.closePreview} onConfirm={() => { void closeDay.confirm(); }} />
   </section>;

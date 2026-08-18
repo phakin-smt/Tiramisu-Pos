@@ -233,8 +233,11 @@ describe('Sell close-day workflow', () => {
     await renderSell();
     fireEvent.click(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' }));
     fireEvent.click(screen.getByRole('button', { name: 'เงินสด' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันรับเงิน' }));
     expect(await screen.findByText('ผลการบันทึกไม่แน่นอน')).toBeInTheDocument();
     const firstKey = (((orderPosts(fetchMock)[0][1] as RequestInit).headers as Record<string, string>)['Idempotency-Key']);
+    fireEvent.click(screen.getByRole('button', { name: 'ปิดรับชำระเงินสด' }));
 
     const modal = await openPreview();
     fireEvent.click(within(modal).getByRole('button', { name: 'ยืนยันปิดยอดวันนี้' }));
@@ -243,6 +246,8 @@ describe('Sell close-day workflow', () => {
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('1');
 
     fireEvent.click(screen.getByRole('button', { name: 'เงินสด' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันรับเงิน' }));
     expect(await screen.findByText(/บันทึกออเดอร์ #ORDER-2/)).toBeInTheDocument();
     const retryKey = (((orderPosts(fetchMock)[1][1] as RequestInit).headers as Record<string, string>)['Idempotency-Key']);
     expect(retryKey).toBe(firstKey);
