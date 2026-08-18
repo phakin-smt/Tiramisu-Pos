@@ -1,7 +1,9 @@
 import { defineConfig } from '@playwright/test';
+import { existsSync } from 'node:fs';
 
 const isWindows = process.platform === 'win32';
-const python = isWindows ? '"..\\.venv\\Scripts\\python.exe"' : '"../.venv/bin/python"';
+const virtualenvPython = isWindows ? '..\\.venv\\Scripts\\python.exe' : '../.venv/bin/python';
+const python = existsSync(virtualenvPython) ? `"${virtualenvPython}"` : 'python';
 const npm = isWindows ? 'npm.cmd' : 'npm';
 
 export default defineConfig({
@@ -36,6 +38,11 @@ export default defineConfig({
     },
   ],
   projects: [
+    {
+      name: 'legacy-stock-plans-chromium',
+      testMatch: /legacy-stock-plans\.spec\.ts/,
+      use: { browserName: 'chromium', viewport: { width: 1440, height: 900 } },
+    },
     {
       name: 'desktop-chromium',
       testMatch: /desktop\.spec\.ts/,

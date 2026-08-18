@@ -1323,6 +1323,118 @@ body {
   margin-top: 24px;
 }
 
+.stock-plan-panel .stock-plan-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(150px, 1fr) minmax(110px, 0.65fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.stock-plan-panel .stock-plan-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stock-plan-panel .stock-plan-form select,
+.stock-plan-panel .stock-plan-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: white;
+  font: inherit;
+}
+
+.stock-plan-panel .stock-plan-form .btn {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.stock-plan-feedback {
+  min-height: 20px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.stock-plan-feedback.success { color: #357a4b; }
+.stock-plan-feedback.error { color: var(--danger); }
+
+.stock-plan-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.stock-plan-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+
+.stock-plan-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stock-plan-details small { color: var(--text-muted); }
+
+.stock-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.stock-plan-status {
+  padding: 5px 9px;
+  border-radius: var(--radius-pill);
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stock-plan-cancel {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  color: var(--danger);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stock-plan-cancel:disabled { cursor: wait; opacity: 0.55; }
+
+.stock-plan-empty {
+  padding: 18px 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .stock-plan-panel .stock-plan-form { grid-template-columns: 1fr; }
+  .stock-plan-item { align-items: flex-start; flex-direction: column; }
+  .stock-plan-actions { justify-content: space-between; width: 100%; }
+}
+
 
 .stock-table-wrap {
   margin-top: 16px;

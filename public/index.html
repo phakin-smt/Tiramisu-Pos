@@ -265,6 +265,34 @@
           </div>
         </section>
 
+        <section class="panel stock-plan-panel" aria-labelledby="stockPlanTitle">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title" id="stockPlanTitle">แผนเตรียมสต็อก</div>
+              <div class="panel-subtitle">รายการที่รอดำเนินการจากเซิร์ฟเวอร์</div>
+            </div>
+          </div>
+          <form class="stock-plan-form" id="stockPlanForm">
+            <label>
+              <span>สินค้า</span>
+              <select id="stockPlanProduct" required></select>
+            </label>
+            <label>
+              <span>วันที่เตรียม</span>
+              <input type="date" id="stockPlanDate" required />
+            </label>
+            <label>
+              <span>จำนวน</span>
+              <input type="number" id="stockPlanQuantity" min="1" step="1" inputmode="numeric" value="1" required />
+            </label>
+            <button class="btn btn-primary" id="stockPlanSubmit" type="submit">เพิ่มแผน</button>
+          </form>
+          <div class="stock-plan-feedback" id="stockPlanFeedback" aria-live="polite"></div>
+          <div class="stock-plan-list" id="stockPlanList" aria-live="polite">
+            <div class="stock-plan-empty">กำลังโหลดแผนสต็อก</div>
+          </div>
+        </section>
+
       </section>
 
 

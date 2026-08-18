@@ -1,5 +1,7 @@
 let products = [];
 let stockItems = [];
+let stockPlans = [];
+let stockPlanMutationPending = false;
 let settingsMenuItems = [];
 let editingProductId = null;
 let discountManual = false;
@@ -34,12 +36,24 @@ function bangkokDateISO() {
 }
 
 function formatThaiDate(dateString) {
+  if (!dateString) return '—';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
   const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return dateString;
+  }
   return new Intl.DateTimeFormat('th-TH', {
     day: 'numeric',
     month: 'short',
     year: 'numeric'
-  }).format(new Date(Date.UTC(year, month - 1, day)));
+  }).format(date);
+}
+
+function addDaysISO(dateString, days) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
 }
 
 
@@ -595,7 +609,7 @@ function showPage(pageId) {
 
 
   if (pageId === 'stockPage') {
-    fetchStockSummary();
+    Promise.all([fetchStockSummary(), fetchStockPlans()]);
   }
 
   if (pageId === 'settingsPage') {
@@ -642,10 +656,189 @@ async function fetchStockSummary(date = document.getElementById('stockDateInput'
       ? 'เพิ่มหรือลดยอดเตรียม แถม และเสียของวันนี้'
       : `ประวัติประจำวันที่ ${formatThaiDate(summary.date)} · ดูย้อนหลังอย่างเดียว`;
     renderStockTable(stockItems, isToday);
+    populateStockPlanProducts(stockItems);
     populateCategoryOptions(stockItems);
   } catch (error) {
     console.error(error);
     showToast('ไม่สามารถโหลดข้อมูลสต็อกได้');
+  }
+}
+
+function populateStockPlanProducts(items) {
+  const select = document.getElementById('stockPlanProduct');
+  const submit = document.getElementById('stockPlanSubmit');
+  const previousValue = select.value;
+  const activeProducts = items.filter((item) => item.active);
+  select.innerHTML = '';
+
+  activeProducts.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = String(item.productId);
+    option.textContent = `${item.name} (${item.code})`;
+    select.appendChild(option);
+  });
+
+  if (activeProducts.some((item) => String(item.productId) === previousValue)) {
+    select.value = previousValue;
+  }
+  select.disabled = !activeProducts.length || stockPlanMutationPending;
+  submit.disabled = !activeProducts.length || stockPlanMutationPending;
+  if (!activeProducts.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'ไม่มีสินค้าที่เปิดขาย';
+    select.appendChild(option);
+    setStockPlanFeedback('ไม่มีสินค้าที่เปิดขายสำหรับสร้างแผน', 'error');
+  }
+}
+
+function setStockPlanFeedback(message = '', type = '') {
+  const feedback = document.getElementById('stockPlanFeedback');
+  feedback.textContent = message;
+  feedback.className = `stock-plan-feedback${type ? ` ${type}` : ''}`;
+  if (type === 'error') feedback.setAttribute('role', 'alert');
+  else feedback.removeAttribute('role');
+}
+
+function setStockPlanMutationPending(pending) {
+  stockPlanMutationPending = pending;
+  document.getElementById('stockPlanProduct').disabled = pending || !stockItems.length;
+  document.getElementById('stockPlanDate').disabled = pending;
+  document.getElementById('stockPlanQuantity').disabled = pending;
+  document.getElementById('stockPlanSubmit').disabled = pending || !stockItems.length;
+  document.querySelectorAll('.stock-plan-cancel').forEach((button) => {
+    button.disabled = pending;
+  });
+}
+
+function renderStockPlans(plans) {
+  const list = document.getElementById('stockPlanList');
+  list.innerHTML = '';
+  if (!plans.length) {
+    const empty = document.createElement('div');
+    empty.className = 'stock-plan-empty';
+    empty.textContent = 'ไม่มีแผนเตรียมสต็อกที่รอดำเนินการ';
+    list.appendChild(empty);
+    return;
+  }
+
+  plans.forEach((plan) => {
+    const item = document.createElement('article');
+    item.className = 'stock-plan-item';
+    const details = document.createElement('div');
+    details.className = 'stock-plan-details';
+    const name = document.createElement('strong');
+    name.textContent = plan.name;
+    const meta = document.createElement('small');
+    meta.textContent = `${plan.code} · ${formatThaiDate(plan.date)} · ${plan.quantity} ชิ้น`;
+    details.append(name, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'stock-plan-actions';
+    const status = document.createElement('span');
+    status.className = 'stock-plan-status';
+    status.textContent = 'รอดำเนินการ';
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'stock-plan-cancel';
+    cancelButton.textContent = 'ยกเลิก';
+    cancelButton.setAttribute('aria-label', `ยกเลิกแผน ${plan.name}`);
+    cancelButton.disabled = stockPlanMutationPending;
+    cancelButton.addEventListener('click', () => cancelStockPlan(plan));
+    actions.append(status, cancelButton);
+    item.append(details, actions);
+    list.appendChild(item);
+  });
+}
+
+async function fetchStockPlans() {
+  try {
+    const response = await apiFetch('/api/stock/plans');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ไม่สามารถโหลดแผนสต็อกได้');
+    stockPlans = Array.isArray(data) ? data : [];
+    renderStockPlans(stockPlans);
+  } catch (error) {
+    console.error(error);
+    setStockPlanFeedback(error.message || 'ไม่สามารถโหลดแผนสต็อกได้', 'error');
+  }
+}
+
+function validStockPlanDate(date, today) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [year, month, day] = date.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day
+    && date >= today;
+}
+
+async function refreshStockPlanState() {
+  const selectedDate = document.getElementById('stockDateInput').value || bangkokDateISO();
+  await Promise.all([fetchStockPlans(), fetchStockSummary(selectedDate), fetchProducts()]);
+}
+
+async function createStockPlan(event) {
+  event.preventDefault();
+  if (stockPlanMutationPending) return;
+  const productId = Number(document.getElementById('stockPlanProduct').value);
+  const date = document.getElementById('stockPlanDate').value;
+  const quantity = Number(document.getElementById('stockPlanQuantity').value);
+  const today = bangkokDateISO();
+
+  if (!Number.isInteger(productId) || productId <= 0) {
+    setStockPlanFeedback('กรุณาเลือกสินค้า', 'error');
+    return;
+  }
+  if (!validStockPlanDate(date, today)) {
+    setStockPlanFeedback('กรุณาเลือกวันที่เตรียมตั้งแต่วันนี้เป็นต้นไป', 'error');
+    return;
+  }
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    setStockPlanFeedback('กรุณากรอกจำนวนเต็มมากกว่า 0', 'error');
+    return;
+  }
+
+  setStockPlanMutationPending(true);
+  setStockPlanFeedback();
+  try {
+    const response = await apiFetch('/api/stock/plans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId, date, quantity })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'สร้างแผนเตรียมสต็อกไม่สำเร็จ');
+    document.getElementById('stockPlanQuantity').value = '1';
+    setStockPlanFeedback('สร้างแผนเตรียมสต็อกแล้ว', 'success');
+    showToast('สร้างแผนเตรียมสต็อกแล้ว');
+    await refreshStockPlanState();
+  } catch (error) {
+    console.error(error);
+    setStockPlanFeedback(error.message || 'สร้างแผนเตรียมสต็อกไม่สำเร็จ', 'error');
+  } finally {
+    setStockPlanMutationPending(false);
+  }
+}
+
+async function cancelStockPlan(plan) {
+  if (stockPlanMutationPending) return;
+  if (!confirm(`ยกเลิกแผน ${plan.name} วันที่ ${formatThaiDate(plan.date)} ใช่หรือไม่?`)) return;
+  setStockPlanMutationPending(true);
+  setStockPlanFeedback();
+  try {
+    const response = await apiFetch(`/api/stock/plans/${plan.id}`, { method: 'DELETE' });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ยกเลิกแผนไม่สำเร็จ');
+    setStockPlanFeedback('ยกเลิกแผนแล้ว', 'success');
+    showToast('ยกเลิกแผนแล้ว');
+    await refreshStockPlanState();
+  } catch (error) {
+    console.error(error);
+    setStockPlanFeedback(error.message || 'ยกเลิกแผนไม่สำเร็จ', 'error');
+  } finally {
+    setStockPlanMutationPending(false);
   }
 }
 
@@ -1425,6 +1618,9 @@ async function init() {
   document.getElementById('stockDateInput').addEventListener('change', (event) => {
     if (event.target.value) fetchStockSummary(event.target.value);
   });
+  document.getElementById('stockPlanDate').min = todayBangkok;
+  document.getElementById('stockPlanDate').value = addDaysISO(todayBangkok, 1);
+  document.getElementById('stockPlanForm').addEventListener('submit', createStockPlan);
   document.getElementById('ordersDateInput').max = todayBangkok;
   document.getElementById('ordersDateInput').value = todayBangkok;
   document.getElementById('ordersDateInput').addEventListener('change', (event) => {
