@@ -5,6 +5,8 @@ import type {
   CreateStockPlanResponse,
   StockAdjustmentRequest,
   StockAdjustmentResponse,
+  HistoricalCorrectionRequest,
+  HistoricalCorrectionResponse,
   StockPlan,
   StockSummaryResponse,
 } from '../types/stock';
@@ -15,6 +17,10 @@ export function getStockSummary(date: string, signal?: AbortSignal): Promise<Sto
 
 export function adjustStock(payload: StockAdjustmentRequest): Promise<StockAdjustmentResponse> {
   return postJson('/api/stock/adjust', payload);
+}
+
+export function correctHistoricalStock(payload: HistoricalCorrectionRequest): Promise<HistoricalCorrectionResponse> {
+  return postJson('/api/stock/historical-correction', payload);
 }
 
 export function getStockPlans(signal?: AbortSignal): Promise<StockPlan[]> {

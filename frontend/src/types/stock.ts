@@ -40,6 +40,9 @@ export interface StockAdjustmentResponse {
   stock: number;
 }
 
+export interface HistoricalCorrectionRequest { productId: number; date: string; targetStock: number; note?: string; }
+export interface HistoricalCorrectionResponse { productId: number; date: string; previousStock: number; targetStock: number; delta: number; currentStock: number; noChange: boolean; }
+
 export interface StockPlan {
   id: number;
   productId: number;

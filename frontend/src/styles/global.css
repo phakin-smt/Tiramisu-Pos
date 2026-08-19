@@ -537,6 +537,11 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
 .stock-plan-form input, .stock-plan-form select, .product-filters input, .product-filters select, .product-form-grid input { border-radius: var(--radius-md); }
 .stock-plan-list { gap: 10px; }
 .stock-plan-list > div { padding: 13px 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fffaf5; }
+.historical-correction-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(35, 24, 18, .55); }
+.historical-correction-modal { width: min(480px, 100%); display: grid; gap: 16px; padding: 24px; border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-lg); }
+.historical-correction-modal label { display: grid; gap: 6px; font-weight: 700; }
+.historical-correction-modal input { min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); font: inherit; }
+.historical-correction-modal footer { display: flex; justify-content: flex-end; gap: 10px; }
 .status-label, .read-only-label { border-radius: var(--radius-pill); }
 .read-only-label { padding: 8px 12px; font-weight: 700; background: var(--panel-soft); }
 

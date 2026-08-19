@@ -11,6 +11,8 @@ import { useStockSummary } from './useStockSummary';
 import { useStockPlans } from './useStockPlans';
 import { useSafeMutation } from '../shared/useSafeMutation';
 import type { StockAdjustmentReason } from '../../types/stock';
+import type { StockSummaryItem } from '../../types/stock';
+import { HistoricalCorrectionModal } from './HistoricalCorrectionModal';
 
 const actionLabels: Record<StockAdjustmentReason, string> = {
   prepare: 'เตรียมเพิ่ม', undo_prepare: 'ยกเลิกเตรียม', giveaway: 'บันทึกแถม',
@@ -22,6 +24,8 @@ export function StockPage() {
   const [date, setDate] = useState(today);
   const [stockRevision, setStockRevision] = useState(0);
   const [planRevision, setPlanRevision] = useState(0);
+  const [correctionItem, setCorrectionItem] = useState<StockSummaryItem | null>(null);
+  const [correctionSuccess, setCorrectionSuccess] = useState('');
   const query = useStockSummary(date, stockRevision);
   const plans = useStockPlans(planRevision);
   const mutation = useSafeMutation();
@@ -48,17 +52,19 @@ export function StockPage() {
         <span className="read-only-label">{isToday ? 'ปรับสต็อกวันนี้' : 'อ่านอย่างเดียว'}</span>
       </div>
       <MutationFeedback error={mutation.error} success={mutation.success} />
+      <MutationFeedback error="" success={correctionSuccess} />
       <div aria-live="polite">
         {query.loading && <LoadingState label="กำลังโหลดข้อมูลสต็อก" />}
         {query.error && <ErrorState message={query.error} />}
         {query.data && (
           <section className="surface">
             <div className="section-heading"><div><h2>{formatThaiDate(query.data.date)}</h2><span>สรุปความเคลื่อนไหวรายสินค้า</span></div></div>
-            <StockSummaryTable items={query.data.items.filter((item) => item.active || item.stockNow > 0)} editable={isToday} pending={mutation.pending} onAdjust={handleAdjust} />
+            <StockSummaryTable items={query.data.items.filter((item) => item.active || item.stockNow > 0)} editable={isToday} pending={mutation.pending} onAdjust={handleAdjust} onCorrect={setCorrectionItem} />
           </section>
         )}
       </div>
       <StockPlansPanel plans={plans.data} products={query.data?.items ?? []} loading={plans.loading} error={plans.error} editable={isToday} today={today} onChanged={refreshPlansAndStock} />
+      {correctionItem && <HistoricalCorrectionModal item={correctionItem} date={date} onClose={() => setCorrectionItem(null)} onSaved={() => { setCorrectionItem(null); setCorrectionSuccess('ปรับยอดย้อนหลังแล้ว'); setStockRevision((current) => current + 1); }} />}
     </section>
   );
 }

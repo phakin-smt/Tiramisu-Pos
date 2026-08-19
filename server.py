@@ -372,6 +372,26 @@ def adjust_stock():
   execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,?,?,NULL,?)',(product['id'],movement,delta,reference,payload.get('note') or default_note))
  return jsonify(productId=product['id'],stock=new_stock)
 
+@app.post('/api/stock/historical-correction')
+def historical_stock_correction():
+ payload=request.get_json(silent=True) or {}; raw_target=payload.get('targetStock'); raw_date=str(payload.get('date',''))
+ try: report_date=date.fromisoformat(raw_date); target_stock=int(raw_target)
+ except (TypeError,ValueError): return error('วันที่หรือยอดสต็อกไม่ถูกต้อง')
+ if report_date.isoformat()!=raw_date or report_date>bangkok_today(): return error('เลือกวันที่ไม่เกินวันนี้')
+ if isinstance(raw_target,bool) or target_stock<0 or str(target_stock)!=str(raw_target): return error('ยอดสต็อกต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป')
+ _,day_end=local_day_bounds(raw_date)
+ effective_at=day_end-timedelta(seconds=1) if is_postgres() else (datetime.strptime(day_end,'%Y-%m-%d %H:%M:%S')-timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S')
+ with transaction() as (_,cursor):
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  if not product: return error('ไม่พบสินค้า',404)
+  future=execute(cursor,'SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND created_at>=?',(product['id'],day_end)).fetchone()['total']
+  historical_stock=product['stock_qty']-future; delta=target_stock-historical_stock; new_current=product['stock_qty']+delta
+  if new_current<0: return error('การปรับย้อนหลังทำให้สต็อกปัจจุบันติดลบ')
+  if delta:
+   execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_current,product['id']))
+   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note,created_at) VALUES (?,'adjust',?,'correction',NULL,?,?)",(product['id'],delta,str(payload.get('note','')).strip() or 'ปรับยอดย้อนหลัง',effective_at))
+ return jsonify(productId=product['id'],date=raw_date,previousStock=historical_stock,targetStock=target_stock,delta=delta,currentStock=new_current,noChange=delta==0)
+
 @app.get('/api/reports/daily-summary')
 def daily_summary():
  report_date=request.args.get('date') or bangkok_today().isoformat()

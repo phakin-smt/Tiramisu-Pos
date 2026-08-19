@@ -72,7 +72,41 @@ describe('StockPage', () => {
     expect(row).toHaveTextContent('5');
     expect(row).toHaveTextContent('40%');
     expect(screen.getByText('อ่านอย่างเดียว')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /เพิ่ม|ลด/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ปรับยอดย้อนหลัง Original' })).toBeInTheDocument();
+  });
+
+  it('previews and confirms a historical correction, then refreshes the selected date', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    let summaryLoads = 0;
+    const fetchMock = mockStockRoutes((url, init) => {
+      if (url.startsWith('/api/stock/daily-summary')) { summaryLoads += 1; return json({ ...stock, date: '2026-08-15' }); }
+      if (url === '/api/stock/historical-correction' && init.method === 'POST') return json({ productId: 1, date: '2026-08-15', previousStock: 8, targetStock: 5, delta: -3, currentStock: 5, noChange: false });
+    });
+    render(<StockPage />);
+    fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'ปรับยอดย้อนหลัง Original' }));
+    expect(screen.getByRole('dialog', { name: 'ปรับยอดย้อนหลัง' })).toHaveTextContent('8 ชิ้น');
+    fireEvent.change(screen.getByLabelText('ยอดที่ถูกต้อง'), { target: { value: '5' } });
+    expect(screen.getByRole('status')).toHaveTextContent('ปรับลด 3 ชิ้น');
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันปรับยอด' }));
+    await vi.waitFor(() => expect(summaryLoads).toBeGreaterThanOrEqual(3));
+    expect(vi.mocked(window.confirm)).toHaveBeenCalledWith(expect.stringContaining('จาก 8 ชิ้น เป็น 5 ชิ้น'));
+    const request = fetchMock.mock.calls.find(([url]) => url === '/api/stock/historical-correction');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ productId: 1, date: '2026-08-15', targetStock: 5, note: '' });
+    expect(screen.getByLabelText('วันที่สต็อก')).toHaveValue('2026-08-15');
+  });
+
+  it('keeps the correction form open when the backend rejects it', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    mockStockRoutes((url) => url === '/api/stock/historical-correction' ? json({ error: 'สต็อกปัจจุบันจะติดลบ' }, 400) : undefined);
+    render(<StockPage />);
+    fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'ปรับยอดย้อนหลัง Original' }));
+    fireEvent.change(screen.getByLabelText('ยอดที่ถูกต้อง'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันปรับยอด' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('สต็อกปัจจุบันจะติดลบ');
+    expect(screen.getByRole('dialog', { name: 'ปรับยอดย้อนหลัง' })).toBeInTheDocument();
   });
 
   it.each([

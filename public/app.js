@@ -997,7 +997,7 @@ function renderStockTable(items, editable = true) {
         </div>
       </td>
       <td>
-        <div class="stock-counter-groups" aria-label="ปรับจำนวน ${item.name}">
+        ${editable ? `<div class="stock-counter-groups" aria-label="ปรับจำนวน ${item.name}">
           <div class="stock-counter-group prepared">
             <span>เตรียม${editable ? 'วันนี้' : ''}</span>
             <div><button type="button" data-reason="undo_prepare" data-quantity="1" ${!editable || item.prepared <= 0 || item.stockNow <= 0 ? 'disabled' : ''}>−</button><input class="stock-counter-input" type="number" min="0" step="1" inputmode="numeric" value="${item.prepared}" data-value="${item.prepared}" data-increase-reason="prepare" data-decrease-reason="undo_prepare" aria-label="จำนวนเตรียม ${item.name}" ${editable ? '' : 'readonly'}><button type="button" data-reason="prepare" data-quantity="1" ${editable ? '' : 'disabled'}>+</button></div>
@@ -1010,9 +1010,11 @@ function renderStockTable(items, editable = true) {
             <span>เสีย${editable ? 'วันนี้' : ''}</span>
             <div><button type="button" data-reason="undo_waste" data-quantity="1" ${!editable || item.waste <= 0 ? 'disabled' : ''}>−</button><input class="stock-counter-input" type="number" min="0" step="1" inputmode="numeric" value="${item.waste}" data-value="${item.waste}" data-increase-reason="waste" data-decrease-reason="undo_waste" aria-label="จำนวนเสีย ${item.name}" ${editable ? '' : 'readonly'}><button type="button" data-reason="waste" data-quantity="1" ${!editable || item.stockNow <= 0 ? 'disabled' : ''}>+</button></div>
           </div>
-        </div>
+        </div>` : `<button type="button" class="btn btn-outline historical-correction-button" aria-label="ปรับยอดย้อนหลัง ${item.name}">ปรับยอดย้อนหลัง</button>`}
       </td>
     `;
+
+    row.querySelector('.historical-correction-button')?.addEventListener('click', () => submitHistoricalCorrection(item));
 
     row.querySelectorAll('.stock-counter-group button').forEach((button) => {
       button.addEventListener('click', () => {
@@ -1053,6 +1055,23 @@ function renderStockTable(items, editable = true) {
 
     tbody.appendChild(row);
   });
+}
+
+async function submitHistoricalCorrection(item) {
+  const selectedDate = document.getElementById('stockDateInput').value;
+  const targetText = window.prompt(`ยอดปลายวันที่ระบบแสดง: ${item.stockNow} ชิ้น\nกรอกยอดที่ถูกต้อง`, String(item.stockNow));
+  if (targetText === null) return;
+  const targetStock = Number(targetText);
+  if (!Number.isInteger(targetStock) || targetStock < 0) { showToast('ยอดสต็อกต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป'); return; }
+  const note = window.prompt('หมายเหตุ (ไม่บังคับ)', '') ?? '';
+  if (!window.confirm(`ยืนยันปรับยอด ${item.name} วันที่ ${formatThaiDate(selectedDate)} จาก ${item.stockNow} ชิ้น เป็น ${targetStock} ชิ้น ใช่หรือไม่?`)) return;
+  try {
+    const response = await apiFetch('/api/stock/historical-correction', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: item.productId, date: selectedDate, targetStock, note }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'ปรับยอดย้อนหลังไม่สำเร็จ');
+    showToast(data.noChange ? 'ยอดสต็อกไม่เปลี่ยนแปลง' : 'ปรับยอดย้อนหลังแล้ว');
+    await Promise.all([fetchStockSummary(selectedDate), fetchProducts()]);
+  } catch (error) { showToast(error.message || 'ปรับยอดย้อนหลังไม่สำเร็จ'); }
 }
 
 
