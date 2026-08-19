@@ -42,6 +42,8 @@ products = [
     ("E2E-ZERO", "E2E Zero Stock", "E2E Stock", 40, 8, 0, 1, 1),
     ("E2E-UNDO", "E2E Undo Item", "E2E Stock", 55, 12, 4, 1, 1),
     ("E2E-LONG", "ทีรามิสุรสช็อกโกแลตเข้มข้นพิเศษสำหรับทดสอบหน้าจอ", "Tiramisu", 89, 30, 6, 1, 1),
+    ("E2E-OFF-STOCK", "E2E Inactive Stocked", "E2E Stock", 60, 15, 2, 1, 0),
+    ("E2E-OFF-ZERO", "E2E Inactive Empty", "E2E Stock", 60, 15, 0, 1, 0),
 ]
 customers = [
     ("E2E-WALKIN", "E2E Walk-in", "walkin"),

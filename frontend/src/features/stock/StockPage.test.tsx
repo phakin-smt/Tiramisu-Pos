@@ -8,7 +8,11 @@ import type { StockPlan, StockSummaryResponse } from '../../types/stock';
 import { StockPage } from './StockPage';
 
 const TODAY = '2026-08-17';
-const stock: StockSummaryResponse = { date: TODAY, items: [{ productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 }] };
+const stock: StockSummaryResponse = { date: TODAY, items: [
+  { productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 },
+  { productId: 2, code: 'REST', name: 'Resting Stocked', category: 'classic', icon: '', active: false, price: 69, cost: 25, minStock: 4, stockNow: 3, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
+  { productId: 3, code: 'REST0', name: 'Resting Empty', category: 'classic', icon: '', active: false, price: 69, cost: 25, minStock: 4, stockNow: 0, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
+] };
 const plan: StockPlan = { id: 9, productId: 1, date: '2026-08-20', quantity: 12, name: 'Original', code: 'ORI' };
 
 function json(body: unknown, status = 200): Response {
@@ -46,6 +50,17 @@ describe('StockPage', () => {
     expect(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' })).toBeEnabled();
     expect(screen.getByLabelText('วันที่เตรียม')).toHaveAttribute('min', TODAY);
     expect(fetchMock).toHaveBeenCalledWith(`/api/stock/daily-summary?date=${TODAY}`, expect.anything());
+  });
+
+  it('shows inactive stocked products in today stock and every menu item in planning', async () => {
+    mockStockRoutes();
+    render(<StockPage />);
+
+    expect(await screen.findByText('Resting Stocked')).toBeInTheDocument();
+    expect(screen.queryByText('Resting Empty')).not.toBeInTheDocument();
+    const selector = screen.getByLabelText('สินค้า');
+    expect(selector).toHaveTextContent('Resting Stocked (REST) · พักขาย');
+    expect(selector).toHaveTextContent('Resting Empty (REST0) · พักขาย');
   });
 
   it('renders historical movement values without any mutation controls', async () => {

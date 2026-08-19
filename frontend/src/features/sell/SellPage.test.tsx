@@ -14,6 +14,7 @@ const products: CatalogProduct[] = [
   { id: 3, code: 'CKI', barcode: null, name: 'Cookie', category: 'Bakery', price: 50, cost: 18, stock: 2, minStock: 1, active: true, icon: '🍪' },
   { id: 4, code: 'OUT', barcode: null, name: 'Sold Out', category: 'Bakery', price: 79, cost: 30, stock: 0, minStock: 1, active: true, icon: '' },
   { id: 5, code: 'OFF', barcode: null, name: 'Inactive', category: 'Bakery', price: 69, cost: 20, stock: 5, minStock: 1, active: false, icon: '' },
+  { id: 6, code: 'OFF0', barcode: null, name: 'Inactive Empty', category: 'Bakery', price: 69, cost: 20, stock: 0, minStock: 1, active: false, icon: '' },
 ];
 const summary = { date: '2026-08-17', orderCount: 3, cashTotal: 200, transferTotal: 150, totalRevenue: 350 };
 
@@ -60,7 +61,8 @@ describe('SellPage', () => {
     expect(original).toHaveFocus();
     expect(original).toHaveTextContent('ORI');
     expect(original).toHaveTextContent('69');
-    expect(screen.queryByText('Inactive')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'เพิ่ม Inactive ลงตะกร้า' })).toBeEnabled();
+    expect(screen.queryByText('Inactive Empty')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/products', expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 

@@ -27,6 +27,12 @@ test('legacy stock planning loads, validates, creates once, handles cancellation
   const future = addDays(today, 2);
   await expect(form.locator('input[type="date"]')).toHaveValue(addDays(today, 1));
   await expect(form.locator('input[type="date"]')).toHaveAttribute('min', today);
+  await expect(form.locator('select')).toContainText('E2E Inactive Stocked (E2E-OFF-STOCK) · พักขาย');
+  await expect(form.locator('select')).toContainText('E2E Inactive Empty (E2E-OFF-ZERO) · พักขาย');
+  await expect(page.locator('#stockTableBody').getByText('E2E Inactive Stocked', { exact: true })).toBeVisible();
+  await expect(page.locator('#stockTableBody').getByText('E2E Inactive Empty', { exact: true })).toHaveCount(0);
+  await expect(page.locator('#productGrid').getByText('E2E Inactive Stocked', { exact: true })).toHaveCount(1);
+  await expect(page.locator('#productGrid').getByText('E2E Inactive Empty', { exact: true })).toHaveCount(0);
   await form.locator('select').selectOption({ label: 'E2E Stock Item (E2E-STK)' });
 
   let posts = 0;

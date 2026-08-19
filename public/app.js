@@ -650,12 +650,12 @@ async function fetchStockSummary(date = document.getElementById('stockDateInput'
 
 
     const summary = await response.json();
-    stockItems = (summary.items || []).filter((item) => item.active);
+    stockItems = summary.items || [];
     const isToday = summary.date === bangkokDateISO();
     document.getElementById('stockDateHint').textContent = isToday
       ? 'เพิ่มหรือลดยอดเตรียม แถม และเสียของวันนี้'
       : `ประวัติประจำวันที่ ${formatThaiDate(summary.date)} · ดูย้อนหลังอย่างเดียว`;
-    renderStockTable(stockItems, isToday);
+    renderStockTable(stockItems.filter((item) => item.active || item.stockNow > 0), isToday);
     populateStockPlanProducts(stockItems);
     populateCategoryOptions(stockItems);
   } catch (error) {
@@ -668,27 +668,26 @@ function populateStockPlanProducts(items) {
   const select = document.getElementById('stockPlanProduct');
   const submit = document.getElementById('stockPlanSubmit');
   const previousValue = select.value;
-  const activeProducts = items.filter((item) => item.active);
   select.innerHTML = '';
 
-  activeProducts.forEach((item) => {
+  items.forEach((item) => {
     const option = document.createElement('option');
     option.value = String(item.productId);
-    option.textContent = `${item.name} (${item.code})`;
+    option.textContent = `${item.name} (${item.code})${item.active ? '' : ' · พักขาย'}`;
     select.appendChild(option);
   });
 
-  if (activeProducts.some((item) => String(item.productId) === previousValue)) {
+  if (items.some((item) => String(item.productId) === previousValue)) {
     select.value = previousValue;
   }
-  select.disabled = !activeProducts.length || stockPlanMutationPending;
-  submit.disabled = !activeProducts.length || stockPlanMutationPending;
-  if (!activeProducts.length) {
+  select.disabled = !items.length || stockPlanMutationPending;
+  submit.disabled = !items.length || stockPlanMutationPending;
+  if (!items.length) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'ไม่มีสินค้าที่เปิดขาย';
+    option.textContent = 'ไม่มีสินค้าในเมนู';
     select.appendChild(option);
-    setStockPlanFeedback('ไม่มีสินค้าที่เปิดขายสำหรับสร้างแผน', 'error');
+    setStockPlanFeedback('ไม่มีสินค้าในเมนูสำหรับสร้างแผน', 'error');
   }
 }
 

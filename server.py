@@ -215,11 +215,11 @@ def health():
 @app.get('/api/products')
 def products():
  ensure_daily_plans_applied()
- result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE is_active=1 ORDER BY category,name')
+ result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE is_active=1 OR stock_qty>0 ORDER BY category,name')
  return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON)} for r in result])
 
 @app.get('/api/products/categories')
-def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE is_active=1 ORDER BY category')])
+def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE is_active=1 OR stock_qty>0 ORDER BY category')])
 
 def product_payload(payload):
  try:
@@ -286,7 +286,7 @@ def create_order():
   if duplicate: return jsonify(orderNumber=duplicate['order_number'],subtotal=number(duplicate['subtotal']),discount=number(duplicate['discount']),vat=number(duplicate['vat']),total=number(duplicate['total']),paymentMethod=duplicate['payment_method'],duplicate=True)
   lines=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
   for item in items:
-   product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND is_active=1'+lock,(item.get('productId'),)).fetchone()
+   product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND (is_active=1 OR stock_qty>0)'+lock,(item.get('productId'),)).fetchone()
    try:
     qty=int(item.get('qty',0)); giveaway_qty=int(item.get('giveawayQty',0) or 0)
    except (TypeError,ValueError): qty=0

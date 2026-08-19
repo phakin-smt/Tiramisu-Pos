@@ -32,7 +32,7 @@ const ALL_CATEGORIES = 'ทั้งหมด';
 export function SellPage() {
   const productsQuery = useProducts();
   const dailySummary = useDailySummary();
-  const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active), [productsQuery.data]);
+  const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active || product.stock > 0), [productsQuery.data]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [discountState, setDiscountState] = useState<DiscountState>(automaticDiscountState);
   const [selectedCategory, setSelectedCategory] = useState(ALL_CATEGORIES);

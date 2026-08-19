@@ -54,7 +54,7 @@ export function StockPage() {
         {query.data && (
           <section className="surface">
             <div className="section-heading"><div><h2>{formatThaiDate(query.data.date)}</h2><span>สรุปความเคลื่อนไหวรายสินค้า</span></div></div>
-            <StockSummaryTable items={query.data.items.filter((item) => item.active)} editable={isToday} pending={mutation.pending} onAdjust={handleAdjust} />
+            <StockSummaryTable items={query.data.items.filter((item) => item.active || item.stockNow > 0)} editable={isToday} pending={mutation.pending} onAdjust={handleAdjust} />
           </section>
         )}
       </div>

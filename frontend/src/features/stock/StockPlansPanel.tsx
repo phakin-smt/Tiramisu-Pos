@@ -17,17 +17,16 @@ interface Props {
 }
 
 export function StockPlansPanel({ plans, products, loading, error, editable, today, onChanged }: Props) {
-  const activeProducts = products.filter((product) => product.active);
   const [productId, setProductId] = useState('');
   const [date, setDate] = useState(addDaysISO(today, 1));
   const [quantity, setQuantity] = useState('1');
   const mutation = useSafeMutation();
 
   useEffect(() => {
-    if (!activeProducts.some((product) => String(product.productId) === productId)) {
-      setProductId(activeProducts[0] ? String(activeProducts[0].productId) : '');
+    if (!products.some((product) => String(product.productId) === productId)) {
+      setProductId(products[0] ? String(products[0].productId) : '');
     }
-  }, [activeProducts, productId]);
+  }, [products, productId]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -51,10 +50,10 @@ export function StockPlansPanel({ plans, products, loading, error, editable, tod
       <div className="section-heading"><div><h2>แผนเตรียมสต็อก</h2><span>รายการที่รอดำเนินการจากเซิร์ฟเวอร์</span></div></div>
       {editable && (
         <form className="stock-plan-form" onSubmit={submit}>
-          <label><span>สินค้า</span><select value={productId} onChange={(event) => setProductId(event.target.value)} required>{activeProducts.map((product) => <option key={product.productId} value={product.productId}>{product.name} ({product.code})</option>)}</select></label>
+          <label><span>สินค้า</span><select value={productId} onChange={(event) => setProductId(event.target.value)} required>{products.map((product) => <option key={product.productId} value={product.productId}>{product.name} ({product.code}){product.active ? '' : ' · พักขาย'}</option>)}</select></label>
           <label><span>วันที่เตรียม</span><input type="date" min={today} value={date} onChange={(event) => setDate(event.target.value)} required /></label>
           <label><span>จำนวน</span><input type="number" min="1" step="1" inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} required /></label>
-          <button className="primary-button" type="submit" disabled={mutation.pending || !activeProducts.length || !productId || date < today}>เพิ่มแผน</button>
+          <button className="primary-button" type="submit" disabled={mutation.pending || !products.length || !productId || date < today}>เพิ่มแผน</button>
         </form>
       )}
       <MutationFeedback error={mutation.error} success={mutation.success} />
