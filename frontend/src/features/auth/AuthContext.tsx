@@ -11,10 +11,12 @@ import {
 
 import { getAuthStatus, loginWithPin, logoutSession } from '../../api/auth';
 import { subscribeToUnauthorized } from '../../api/client';
+import { useConnectivity } from '../../connectivity/ConnectivityContext';
 
 type AuthPhase =
   | 'checking'
   | 'authenticated'
+  | 'offline'
   | 'unauthenticated'
   | 'unconfigured'
   | 'expired';
@@ -33,11 +35,23 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isOnline } = useConnectivity();
   const [state, setState] = useState<AuthState>({ phase: 'checking', message: '' });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     let active = true;
+
+    if (!isOnline) {
+      setState({ phase: 'offline', message: '' });
+      return () => {
+        active = false;
+      };
+    }
+
+    setState((current) => (
+      current.phase === 'offline' ? { phase: 'checking', message: '' } : current
+    ));
     getAuthStatus()
       .then((status) => {
         if (!active) return;
@@ -58,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isOnline]);
 
   useEffect(
     () =>
@@ -161,7 +175,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (phase !== 'authenticated' && phase !== 'expired') return <LoginForm />;
+  if (phase !== 'authenticated' && phase !== 'expired' && phase !== 'offline') return <LoginForm />;
   return <>
     <div hidden={phase === 'expired'} inert={phase === 'expired'}>{children}</div>
     {phase === 'expired' && <LoginForm />}

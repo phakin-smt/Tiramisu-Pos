@@ -40,6 +40,19 @@ class ReactStagingRouteTests(unittest.TestCase):
             'document.querySelector("#react-staging");',
             encoding="utf-8",
         )
+        (self.react_root / "sw.js").write_text(
+            'importScripts("workbox-ABC123.js");',
+            encoding="utf-8",
+        )
+        (self.react_root / "workbox-ABC123.js").write_text(
+            'self.workbox = {};',
+            encoding="utf-8",
+        )
+        (self.react_root / "manifest.webmanifest").write_text(
+            '{"name":"Baannoi-POS"}',
+            encoding="utf-8",
+        )
+        (self.react_root / "pwa-192.png").write_bytes(b"pwa-icon")
         self.react_root_patch = patch.object(server, "REACT_ROOT", self.react_root)
         self.react_root_patch.start()
         self.client = server.app.test_client()
@@ -111,6 +124,25 @@ class ReactStagingRouteTests(unittest.TestCase):
             self.assertNotIn(b"from flask import", fallback.data)
         finally:
             fallback.close()
+
+    def test_pwa_root_files_are_served_instead_of_the_spa_fallback(self):
+        expected = {
+            "sw.js": (b"importScripts", "no-cache"),
+            "workbox-ABC123.js": (b"self.workbox", "public, max-age=31536000, immutable"),
+            "manifest.webmanifest": (b"Baannoi-POS", "no-cache"),
+            "pwa-192.png": (b"pwa-icon", "public, max-age=3600"),
+            "index.html": (b"react-staging", "no-cache"),
+        }
+
+        for filename, (content, cache_control) in expected.items():
+            with self.subTest(filename=filename):
+                response = self.client.get(f"/next/{filename}")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(content, response.data)
+                self.assertEqual(response.headers["Cache-Control"], cache_control)
+                if filename != "index.html":
+                    self.assertNotIn(b"react-staging", response.data)
+                response.close()
 
 
 if __name__ == "__main__":

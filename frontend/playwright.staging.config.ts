@@ -1,7 +1,9 @@
 import { defineConfig } from '@playwright/test';
+import { existsSync } from 'node:fs';
 
 const isWindows = process.platform === 'win32';
-const python = isWindows ? '"..\\.venv\\Scripts\\python.exe"' : '"../.venv/bin/python"';
+const virtualenvPython = isWindows ? '..\\.venv\\Scripts\\python.exe' : '../.venv/bin/python';
+const python = existsSync(virtualenvPython) ? `"${virtualenvPython}"` : 'python';
 
 export default defineConfig({
   testDir: './e2e/staging',

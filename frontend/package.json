@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test:e2e": "playwright test",
+    "pretest:pwa": "npm run build",
+    "test:pwa": "playwright test --config=playwright.pwa.config.ts",
     "test:staging": "playwright test --config=playwright.staging.config.ts"
   },
   "dependencies": {
@@ -27,6 +30,7 @@
     "jsdom": "^26.1.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^3.2.4"
   }
 }

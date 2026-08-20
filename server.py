@@ -551,6 +551,14 @@ def react_asset(filename):
 @app.get('/next/')
 @app.get('/next/<path:route>')
 def react_index(route=None):
+ if route:
+  try: response=send_from_directory(REACT_ROOT,route)
+  except NotFound: response=None
+  if response is not None:
+   if route in {'sw.js','index.html','manifest.webmanifest'}: response.headers['Cache-Control']='no-cache'
+   elif route.startswith('workbox-') and route.endswith('.js'): response.headers['Cache-Control']='public, max-age=31536000, immutable'
+   else: response.headers['Cache-Control']='public, max-age=3600'
+   return response
  response=send_from_directory(REACT_ROOT,'index.html')
  response.headers['Cache-Control']='no-cache'
  return response

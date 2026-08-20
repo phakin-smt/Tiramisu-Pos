@@ -52,8 +52,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .navigation-marker { display: grid; width: 26px; height: 26px; flex: 0 0 26px; border: 1px solid currentColor; border-radius: 50%; place-items: center; font-size: 10px; font-weight: 800; }
 .navigation-label-short { display: none; }
 .sidebar-status { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
-.sidebar-status span { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.sidebar-status i { width: 8px; height: 8px; border-radius: 50%; background: #5fa777; }
+.connectivity-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.connectivity-status i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #5fa777; }
+.connectivity-status.is-offline { color: #ffe1a8; }
+.connectivity-status.is-offline i { background: #efad4e; }
+.mobile-header-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-header .connectivity-status { color: #27633c; font-weight: 700; }
+.mobile-header .connectivity-status.is-offline { color: #8a5415; }
+.offline-foundation-message { margin: 0 auto 16px; padding: 10px 14px; border: 1px solid #e7c983; border-radius: 8px; color: #6f4c15; background: #fff6dd; font-size: 13px; line-height: 1.45; }
 .sidebar-status button { width: 100%; margin-top: 14px; padding: 9px 12px; color: #fbf2ea; background: rgba(255, 255, 255, 0.12); }
 .main-content { min-width: 0; flex: 1; padding: 28px; }
 .page-header { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
@@ -165,7 +171,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 @media (min-width: 768px) and (max-width: 1199px) {
   .sidebar { flex-basis: 112px; padding: 22px 12px; }
   .sidebar .shell-brand { justify-content: center; }
-  .sidebar .shell-brand > div:last-child, .navigation-heading, .navigation-label-full, .sidebar-status span { display: none; }
+  .sidebar .shell-brand > div:last-child, .navigation-heading, .navigation-label-full, .sidebar-status .connectivity-status { display: none; }
   .sidebar-navigation { margin-top: 34px; }
   .navigation-link { flex-direction: column; gap: 4px; padding: 9px 4px; text-align: center; }
   .navigation-label-short { display: block; font-size: 11px; }
@@ -185,6 +191,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .mobile-header .brand-mark { width: 40px; height: 40px; }
   .mobile-header .brand-title-row strong { font-size: 17px; }
   .mobile-header .brand-subtitle, .mobile-header .version-label { display: none; }
+  .mobile-header .connectivity-status { font-size: 11px; }
   .mobile-header button { padding: 8px 12px; color: var(--primary-dark); background: var(--panel-soft); font-weight: 700; }
   .main-content { padding: 20px 14px calc(90px + env(safe-area-inset-bottom)); }
   .page-header h1 { font-size: 23px; }

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ConnectivityProvider } from '../connectivity/ConnectivityContext';
 import { AuthProvider } from '../features/auth/AuthContext';
 import { AppRoutes } from './router';
 
@@ -28,12 +29,21 @@ function mockResponses(...items: MockResponse[]) {
 
 function renderApplication(path = '/') {
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <AppRoutes />
-      </MemoryRouter>
-    </AuthProvider>,
+    <ConnectivityProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AuthProvider>
+    </ConnectivityProvider>,
   );
+}
+
+function setNavigatorOnline(value: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', {
+    configurable: true,
+    value,
+  });
 }
 
 async function submitPin(pin = '2468') {
@@ -45,6 +55,7 @@ describe('authentication and application shell', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    setNavigatorOnline(true);
   });
 
   it('shows the application shell for an initially authenticated session', async () => {
@@ -70,11 +81,13 @@ describe('authentication and application shell', () => {
     await submitPin();
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     view.rerender(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/sell']}>
-          <AppRoutes />
-        </MemoryRouter>
-      </AuthProvider>,
+      <ConnectivityProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sell']}>
+            <AppRoutes />
+          </MemoryRouter>
+        </AuthProvider>
+      </ConnectivityProvider>,
     );
     const loginCalls = fetchMock.mock.calls.filter(([url, init]) =>
       url === '/api/auth/login' && (init as RequestInit).method === 'POST');
@@ -108,6 +121,21 @@ describe('authentication and application shell', () => {
     renderApplication('/reports');
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to connect to the server.');
     expect(screen.queryByRole('heading', { name: 'รายงาน' })).not.toBeInTheDocument();
+  });
+
+  it('renders the application shell and honest status when the browser is offline', async () => {
+    setNavigatorOnline(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication('/orders');
+
+    expect(await screen.findByRole('heading', { name: 'ออเดอร์' })).toBeInTheDocument();
+    expect(screen.getAllByRole('status').some(
+      (status) => status.textContent?.includes('Offline'),
+    )).toBe(true);
+    expect(screen.getByRole('note')).toHaveTextContent('ยังไม่สามารถบันทึกการขายแบบออฟไลน์ได้');
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/auth/status')).toBe(false);
   });
 
   it('logs out and removes access to the shell with one mutation', async () => {
