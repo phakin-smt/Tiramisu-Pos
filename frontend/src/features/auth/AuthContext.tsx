@@ -12,6 +12,7 @@ import {
 import { getAuthStatus, loginWithPin, logoutSession } from '../../api/auth';
 import { subscribeToUnauthorized } from '../../api/client';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
+import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
 
 type AuthPhase =
   | 'checking'
@@ -53,11 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       current.phase === 'offline' ? { phase: 'checking', message: '' } : current
     ));
     getAuthStatus()
-      .then((status) => {
+      .then(async (status) => {
         if (!active) return;
         if (!status.configured) {
           setState({ phase: 'unconfigured', message: 'PIN authentication is not configured.' });
         } else if (status.authenticated) {
+          try {
+            await refreshOfflineAuthorization();
+          } catch {
+            // Online Flask authentication remains valid if local storage is unavailable.
+          }
+          if (!active) return;
           setState({ phase: 'authenticated', message: '' });
         } else {
           setState({ phase: 'unauthenticated', message: '' });
@@ -85,7 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (pin: string) => {
     setSubmitting(true);
     try {
-      await loginWithPin(pin);
+      const status = await loginWithPin(pin);
+      if (!status.authenticated) throw new Error('Login failed');
+      try {
+        await refreshOfflineAuthorization();
+      } catch {
+        // Never reject a confirmed online Flask login due to local storage.
+      }
       setState({ phase: 'authenticated', message: '' });
       return true;
     } catch (error) {

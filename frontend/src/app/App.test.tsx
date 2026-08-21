@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectivityProvider } from '../connectivity/ConnectivityContext';
 import { AuthProvider } from '../features/auth/AuthContext';
+import { readOfflineAuthorization } from '../offline/offlineAuthorization';
 import { AppRoutes } from './router';
 
 interface MockResponse {
@@ -63,6 +64,7 @@ describe('authentication and application shell', () => {
     renderApplication('/sell');
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'เมนูหลัก' })).toBeInTheDocument();
+    await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
   });
 
   it('shows login and denies shell access for an unauthenticated session', async () => {
@@ -92,6 +94,7 @@ describe('authentication and application shell', () => {
     const loginCalls = fetchMock.mock.calls.filter(([url, init]) =>
       url === '/api/auth/login' && (init as RequestInit).method === 'POST');
     expect(loginCalls).toHaveLength(1);
+    await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
   });
 
   it.each([
@@ -134,7 +137,7 @@ describe('authentication and application shell', () => {
     expect(screen.getAllByRole('status').some(
       (status) => status.textContent?.includes('Offline'),
     )).toBe(true);
-    expect(screen.getByRole('note')).toHaveTextContent('ยังไม่สามารถบันทึกการขายแบบออฟไลน์ได้');
+    expect(screen.getByRole('note')).toHaveTextContent('ขายเงินสดได้บนอุปกรณ์ที่ได้รับอนุญาต');
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/auth/status')).toBe(false);
   });
 

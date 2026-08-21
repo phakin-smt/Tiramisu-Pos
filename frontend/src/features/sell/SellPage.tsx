@@ -11,6 +11,9 @@ import { automaticDiscountState, resetManualDiscount, setManualDiscount } from '
 import type { CartItem, DiscountState } from '../../types/domain';
 import type { CreateOrderRequest } from '../../types/checkout';
 import type { CatalogProduct } from '../../types/products';
+import { OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE } from '../../offline/offlineAuthorization';
+import { LOCAL_MODE_MESSAGE, LOCAL_MODE_PROMPTPAY_MESSAGE, OFFLINE_PROMPTPAY_MESSAGE, PENDING_OFFLINE_ORDERS_MESSAGE } from '../../offline/offlineOrders';
+import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
 import { Cart } from './Cart';
 import { CashPaymentModal } from './CashPaymentModal';
 import { CategoryTabs } from './CategoryTabs';
@@ -22,7 +25,7 @@ import { OpeningFloatCard } from './OpeningFloatCard';
 import type { PaymentMethod } from './PaymentSelector';
 import { ProductGrid } from './ProductGrid';
 import { PromptPayModal } from './PromptPayModal';
-import { OFFLINE_CHECKOUT_MESSAGE, useCheckout } from './useCheckout';
+import { useCheckout } from './useCheckout';
 import { useCloseDay } from './useCloseDay';
 import { useDailySummary } from './useDailySummary';
 import { useIsMobile } from './useIsMobile';
@@ -33,7 +36,9 @@ const ALL_CATEGORIES = 'ทั้งหมด';
 
 export function SellPage() {
   const { isOnline } = useConnectivity();
+  const offlineAuthorization = useOfflineAuthorization();
   const productsQuery = useProducts();
+  const localMode = productsQuery.pendingOfflineOrderCount > 0;
   const dailySummary = useDailySummary();
   const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active || product.stock > 0), [productsQuery.data]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -58,7 +63,7 @@ export function SellPage() {
   const totals = calculateCartTotals(products, cart, discountState);
   const totalQuantity = totalCartQuantity(cart);
   const paidQuantity = paidCartQuantity(cart);
-  const promptPayQr = usePromptPayQr(promptPayOpen && isOnline, totals.grandTotal);
+  const promptPayQr = usePromptPayQr(promptPayOpen && isOnline && !localMode, totals.grandTotal);
 
   useEffect(() => {
     if (!categories.includes(selectedCategory)) setSelectedCategory(ALL_CATEGORIES);
@@ -76,11 +81,10 @@ export function SellPage() {
 
   useEffect(() => { if (!mobile) setCartOpen(false); }, [mobile]);
   useEffect(() => {
-    if (isOnline) return;
-    setCashPaymentOpen(false);
+    if (isOnline && !localMode) return;
     setPromptPayOpen(false);
     setQrImageError('');
-  }, [isOnline]);
+  }, [isOnline, localMode]);
   useEffect(() => {
     if (!holdNotice) return;
     const timer = window.setTimeout(() => setHoldNotice(''), 2600);
@@ -117,12 +121,11 @@ export function SellPage() {
   }, []);
   const closeCashPayment = useCallback(() => setCashPaymentOpen(false), []);
 
-  const submitOrder = async (method: PaymentMethod) => {
+  const submitOrder = async (
+    method: PaymentMethod,
+    cashDetails?: { amountTendered: number; changeAmount: number },
+  ) => {
     if (checkout.isLocked()) return;
-    if (!isOnline) {
-      setValidationError(OFFLINE_CHECKOUT_MESSAGE);
-      return;
-    }
     if (!cart.length) {
       setValidationError('ไม่มีสินค้าในตะกร้า');
       return;
@@ -135,8 +138,8 @@ export function SellPage() {
       customerType,
       discount: totals.discount,
     };
-    const response = await checkout.submit(payload);
-    if (!response) return;
+    const result = await checkout.submit(payload, cashDetails ? { totals, ...cashDetails } : undefined);
+    if (!result) return;
 
     setCart([]);
     setDiscountState(resetManualDiscount());
@@ -145,13 +148,17 @@ export function SellPage() {
     closeCashPayment();
     closePromptPay();
     productsQuery.refresh();
-    dailySummary.refresh();
+    if (result.mode === 'online') dailySummary.refresh();
   };
 
   const activatePayment = (method: PaymentMethod) => {
     if (checkout.isLocked()) return;
-    if (!isOnline) {
-      setValidationError(OFFLINE_CHECKOUT_MESSAGE);
+    if ((!isOnline || localMode) && method === 'transfer') {
+      setValidationError(localMode ? LOCAL_MODE_PROMPTPAY_MESSAGE : OFFLINE_PROMPTPAY_MESSAGE);
+      return;
+    }
+    if (!isOnline && !offlineAuthorization.authorized) {
+      setValidationError(OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE);
       return;
     }
     setPaymentMethod(method);
@@ -173,7 +180,9 @@ export function SellPage() {
 
   const successMessage = checkout.response
     ? `บันทึกออเดอร์ #${checkout.response.orderNumber} - ${formatCurrency(checkout.response.total)}`
-    : '';
+    : checkout.offlineOrder
+      ? `บันทึกออเดอร์ออฟไลน์ #${checkout.offlineOrder.localOrderNumber} แล้ว · ยังไม่ได้ Sync`
+      : '';
   const checkoutError = validationError || checkout.error;
 
   return <section className="data-page sell-page">
@@ -189,12 +198,13 @@ export function SellPage() {
     <OpeningFloatCard cashSales={dailySummary.data?.cashTotal ?? null} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
     {productsQuery.storageError && <div className="catalog-storage-warning" role="alert">{productsQuery.storageError}</div>}
+    {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.pendingOfflineOrderCount} รายการ</strong><span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span></div>}
     <div className="sell-workspace">
       <section className="sell-catalog" aria-labelledby="catalog-title">
         <div className="section-heading catalog-heading"><div><h2 id="catalog-title">เมนูของหวาน</h2><span>{products.length} รายการ</span></div><button type="button" className="secondary-button" disabled={productsQuery.loading} onClick={productsQuery.refresh}>{isOnline ? 'รีเฟรชสินค้า' : 'อ่านข้อมูลออฟไลน์อีกครั้ง'}</button></div>
         {productsQuery.isCached && (
           <div className="cached-catalog-status" role="status">
-            <strong>ใช้ข้อมูลออฟไลน์ล่าสุด</strong>
+            <strong>{productsQuery.source === 'cache-pending-sync' ? 'ใช้สต็อกในเครื่องระหว่างรอ Sync' : 'ใช้ข้อมูลออฟไลน์ล่าสุด'}</strong>
             <span>อัปเดตล่าสุด {formatThaiDateTime(productsQuery.lastSuccessfulCatalogSyncAt)}</span>
             {productsQuery.source === 'cache-fallback' && productsQuery.error && (
               <span>เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ: <span className="cached-catalog-error-detail">{productsQuery.error}</span></span>
@@ -214,11 +224,11 @@ export function SellPage() {
           {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} onAdd={(product) => updateCart(addToCart(cart, product))} />}
         </div>
       </section>
-      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} paymentDisabled={!isOnline || checkout.pending || cashPaymentOpen || promptPayOpen} checkoutUnavailableMessage={isOnline ? '' : OFFLINE_CHECKOUT_MESSAGE} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
+      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} cashPaymentDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} promptPayDisabled={!isOnline || localMode || checkout.pending || cashPaymentOpen || promptPayOpen} checkoutUnavailableMessages={localMode ? [LOCAL_MODE_PROMPTPAY_MESSAGE] : !isOnline ? [OFFLINE_PROMPTPAY_MESSAGE, ...(!offlineAuthorization.checking && !offlineAuthorization.authorized ? [OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE] : [])] : []} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(Number.isNaN(value) ? 0 : value)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
     </div>
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />
-    {cashPaymentOpen && <CashPaymentModal open amount={totals.grandTotal} checkoutError={checkout.error} submitting={checkout.pending} onClose={closeCashPayment} onConfirm={() => { void submitOrder('cash'); }} />}
+    {cashPaymentOpen && <CashPaymentModal open amount={totals.grandTotal} checkoutError={checkout.error} submitting={checkout.pending} onClose={closeCashPayment} onConfirm={(details) => { void submitOrder('cash', details); }} />}
     <PromptPayModal open={promptPayOpen} amount={totals.grandTotal} qrUrl={promptPayQr.url} loading={promptPayQr.loading} qrError={qrImageError || promptPayQr.error} checkoutError={checkout.error} submitting={checkout.pending} onClose={closePromptPay} onConfirm={() => { void submitOrder('transfer'); }} onImageError={() => setQrImageError('ไม่สามารถแสดง QR พร้อมเพย์ได้')} />
     <CloseDayModal open={closeDay.open} report={closeDay.report} closedAt={closeDay.closedAt} closureStatusUnavailable={closeDay.closureStatusUnavailable} pending={closeDay.pending} error={closeDay.mutationError} confirmation={closeDay.confirmation} onClose={closeDay.closePreview} onConfirm={() => { void closeDay.confirm(); }} />
   </section>;

@@ -9,7 +9,9 @@ import {
   BAANNOI_POS_SCHEMA_VERSION,
   readConfirmedCatalogSnapshot,
   replaceConfirmedCatalogSnapshot,
+  replaceConfirmedCatalogSnapshotIfNoPendingOrders,
 } from './catalogSnapshot';
+import { openBaannoiPosDatabase } from './database';
 
 const original: CatalogProduct = {
   id: 17,
@@ -60,5 +62,30 @@ describe('catalog snapshot IndexedDB storage', () => {
     await replaceConfirmedCatalogSnapshot([], '2026-08-21T06:00:00.000Z');
 
     expect((await readConfirmedCatalogSnapshot())?.products).toEqual([]);
+  });
+
+  it('atomically refuses server replacement while a pending offline order exists', async () => {
+    await replaceConfirmedCatalogSnapshot([original], '2026-08-21T04:30:00.000Z');
+    const database = await openBaannoiPosDatabase();
+    await database.add('offlineOrders', {
+      localOrderId: '550e8400-e29b-41d4-a716-446655440000',
+      localOrderNumber: 'OFF-20260821-143522-0000',
+      createdAt: '2026-08-21T07:35:22.000Z',
+      businessDate: '2026-08-21',
+      paymentMethod: 'cash',
+      customerType: 'walkin',
+      subtotal: 69,
+      discount: 0,
+      total: 69,
+      amountTendered: 100,
+      changeAmount: 31,
+      status: 'completed',
+      syncStatus: 'pending',
+    });
+    database.close();
+
+    const replacement = { ...original, stock: 99 };
+    expect(await replaceConfirmedCatalogSnapshotIfNoPendingOrders([replacement])).toBeNull();
+    expect((await readConfirmedCatalogSnapshot())?.products).toEqual([original]);
   });
 });

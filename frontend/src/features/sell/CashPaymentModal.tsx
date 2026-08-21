@@ -8,7 +8,7 @@ interface CashPaymentModalProps {
   checkoutError: string;
   submitting: boolean;
   onClose(): void;
-  onConfirm(): void;
+  onConfirm(details: { amountTendered: number; changeAmount: number }): void;
 }
 
 const CASH_PRESETS = [100, 500, 1000] as const;
@@ -44,7 +44,7 @@ export function CashPaymentModal({ open, amount, checkoutError, submitting, onCl
         <div className={`cash-change${validReceived ? ' is-ready' : ''}`} aria-live="polite"><span>เงินทอน</span><strong>{formatCurrency(change)}</strong></div>
         {checkoutError && <div className="qr-status is-error" role="alert">{checkoutError}</div>}
       </div>
-      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!validReceived || submitting} onClick={onConfirm}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
+      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!validReceived || submitting} onClick={() => onConfirm({ amountTendered: receivedAmount, changeAmount: change })}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
     </section>
   </div>;
 }

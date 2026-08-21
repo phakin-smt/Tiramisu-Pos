@@ -10,6 +10,8 @@ import {
   readConfirmedCatalogSnapshot,
   replaceConfirmedCatalogSnapshot,
 } from '../../offline/catalogSnapshot';
+import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
+import { recordOfflineCashSale } from '../../offline/offlineOrders';
 import type { CatalogProduct } from '../../types/products';
 import { useProducts } from './useProducts';
 
@@ -80,5 +82,30 @@ describe('useProducts offline snapshot behavior', () => {
     await waitFor(() => expect(result.current.source).toBe('cache-offline'));
     expect(result.current.data).toEqual(products);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves locally reduced stock when pending offline orders exist after reconnect', async () => {
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    const createdAt = new Date().toISOString();
+    await recordOfflineCashSale({
+      identity: {
+        localOrderId: '550e8400-e29b-41d4-a716-446655440000',
+        localOrderNumber: 'OFF-20260821-143522-0000',
+        createdAt,
+        businessDate: '2026-08-21',
+      },
+      order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+      amountTendered: 200,
+      changeAmount: 62,
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(products)));
+
+    const { result } = renderHook(() => useProducts(), { wrapper });
+    await waitFor(() => expect(result.current.source).toBe('cache-pending-sync'));
+    expect(result.current.data?.[0].stock).toBe(7);
+    expect(result.current.pendingOfflineOrderCount).toBe(1);
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
   });
 });

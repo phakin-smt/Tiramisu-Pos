@@ -68,7 +68,7 @@ export function AppShell() {
       <main ref={mainContent} className="main-content">
         {!isOnline && (
           <p className="offline-foundation-message" role="note">
-            โหมดออฟไลน์กำลังเตรียมใช้งาน ตอนนี้เปิดแอปได้ แต่ยังไม่สามารถบันทึกการขายแบบออฟไลน์ได้
+            โหมดออฟไลน์ · ขายเงินสดได้บนอุปกรณ์ที่ได้รับอนุญาต · PromptPay ยังต้องเชื่อมต่ออินเทอร์เน็ต
           </p>
         )}
         <Outlet />

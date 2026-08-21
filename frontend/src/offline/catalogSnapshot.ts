@@ -1,49 +1,19 @@
-import { openDB, type DBSchema } from 'idb';
-
 import type { CatalogProduct } from '../types/products';
+import {
+  BAANNOI_POS_DATABASE_NAME,
+  BAANNOI_POS_SCHEMA_VERSION,
+  CATALOG_METADATA_KEY,
+  openBaannoiPosDatabase,
+  PRODUCT_SNAPSHOT_KEY,
+  type CatalogSnapshotMetadata,
+} from './database';
 
-export const BAANNOI_POS_DATABASE_NAME = 'BaannoiPOS';
-export const BAANNOI_POS_SCHEMA_VERSION = 1;
-
-const PRODUCT_SNAPSHOT_KEY = 'confirmed';
-const CATALOG_METADATA_KEY = 'catalog';
-
-interface ProductSnapshotRecord {
-  key: typeof PRODUCT_SNAPSHOT_KEY;
-  products: CatalogProduct[];
-}
-
-export interface CatalogSnapshotMetadata {
-  key: typeof CATALOG_METADATA_KEY;
-  lastSuccessfulCatalogSyncAt: string;
-  schemaVersion: number;
-}
+export { BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION } from './database';
+export type { CatalogSnapshotMetadata } from './database';
 
 export interface ConfirmedCatalogSnapshot {
   products: CatalogProduct[];
   metadata: CatalogSnapshotMetadata;
-}
-
-interface BaannoiPosDatabase extends DBSchema {
-  productSnapshot: {
-    key: typeof PRODUCT_SNAPSHOT_KEY;
-    value: ProductSnapshotRecord;
-  };
-  metadata: {
-    key: typeof CATALOG_METADATA_KEY;
-    value: CatalogSnapshotMetadata;
-  };
-}
-
-function openBaannoiPosDatabase() {
-  return openDB<BaannoiPosDatabase>(BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION, {
-    upgrade(database, oldVersion) {
-      if (oldVersion < 1) {
-        database.createObjectStore('productSnapshot', { keyPath: 'key' });
-        database.createObjectStore('metadata', { keyPath: 'key' });
-      }
-    },
-  });
 }
 
 export async function replaceConfirmedCatalogSnapshot(
@@ -73,6 +43,44 @@ export async function replaceConfirmedCatalogSnapshot(
   }
 }
 
+export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
+  products: readonly CatalogProduct[],
+  syncedAt = new Date().toISOString(),
+): Promise<CatalogSnapshotMetadata | null> {
+  const database = await openBaannoiPosDatabase();
+  const metadata: CatalogSnapshotMetadata = {
+    key: CATALOG_METADATA_KEY,
+    lastSuccessfulCatalogSyncAt: syncedAt,
+    schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+  };
+  const transaction = database.transaction(
+    ['offlineOrders', 'productSnapshot', 'metadata'],
+    'readwrite',
+  );
+
+  try {
+    const pendingCount = await transaction.objectStore('offlineOrders')
+      .index('by-sync-status')
+      .count('pending');
+    if (pendingCount > 0) {
+      await transaction.done;
+      return null;
+    }
+    await transaction.objectStore('productSnapshot').put({
+      key: PRODUCT_SNAPSHOT_KEY,
+      products: [...products],
+    });
+    await transaction.objectStore('metadata').put(metadata);
+    await transaction.done;
+    return metadata;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The browser may already have aborted it. */ }
+    throw error;
+  } finally {
+    database.close();
+  }
+}
+
 export async function readConfirmedCatalogSnapshot(): Promise<ConfirmedCatalogSnapshot | null> {
   const database = await openBaannoiPosDatabase();
   try {
@@ -82,7 +90,7 @@ export async function readConfirmedCatalogSnapshot(): Promise<ConfirmedCatalogSn
       transaction.objectStore('metadata').get(CATALOG_METADATA_KEY),
       transaction.done,
     ]);
-    if (!snapshot || !metadata) return null;
+    if (!snapshot || !metadata || metadata.key !== CATALOG_METADATA_KEY) return null;
     return { products: snapshot.products, metadata };
   } finally {
     database.close();

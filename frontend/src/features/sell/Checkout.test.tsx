@@ -5,7 +5,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppRoutes } from '../../app/router';
+import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import { AuthProvider } from '../auth/AuthContext';
+import { readConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshot } from '../../offline/catalogSnapshot';
+import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
+import { getPendingOfflineOrderCount, recordOfflineCashSale } from '../../offline/offlineOrders';
 import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
 
@@ -92,6 +96,68 @@ describe('Sell checkout', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });
 
+  it('routes one open cash confirmation locally when connectivity disappears before confirm', async () => {
+    const fetchMock = mockCheckout();
+    await refreshOfflineAuthorization();
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    add();
+    fireEvent.click(cashButton());
+    expect(screen.getByRole('dialog', { name: 'รับชำระเงินสด' })).toBeInTheDocument();
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+    fireEvent.click(cashConfirmButton());
+    fireEvent.click(cashConfirmButton());
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('keeps online cash in Local Mode after reconnect until pending orders are synchronized', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    await recordOfflineCashSale({
+      identity: {
+        localOrderId: '550e8400-e29b-41d4-a716-446655440000',
+        localOrderNumber: 'OFF-20260821-143522-0000',
+        createdAt: new Date().toISOString(),
+        businessDate: '2026-08-21',
+      },
+      order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      amountTendered: 100,
+      changeAmount: 31,
+    });
+    const fetchMock = mockCheckout();
+
+    render(<SellPage />);
+    expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
+    expect(screen.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 9 ชิ้น');
+    expect(transferButton()).toBeDisabled();
+
+    add();
+    confirmCashExact();
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument());
+    expect(await getPendingOfflineOrderCount()).toBe(2);
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+
+    cleanup();
+    render(<SellPage />);
+    expect(await screen.findByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 8 ชิ้น');
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+  });
+
   it('submits one exact cash payload and idempotency key under a double click', async () => {
     const pending = deferred<Response>();
     const fetchMock = mockCheckout((url, init) => url === '/api/orders' && init.method === 'POST' ? pending.promise : undefined);
@@ -106,7 +172,7 @@ describe('Sell checkout', () => {
     fireEvent.click(cashConfirmButton());
     view.rerender(<SellPage />);
 
-    expect(orderCalls(fetchMock)).toHaveLength(1);
+    await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
     const [, init] = orderCalls(fetchMock)[0];
     expect(init.headers).toEqual(expect.objectContaining({ 'Idempotency-Key': expect.any(String) }));
     expect(JSON.parse(String(init.body))).toEqual({
@@ -123,6 +189,7 @@ describe('Sell checkout', () => {
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
     await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/products')).toHaveLength(2));
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/reports/daily-summary')).toHaveLength(2);
+    expect(await getPendingOfflineOrderCount()).toBe(0);
   });
 
   it('preserves the key and cart state across failure and rerender, then resets the key after success', async () => {
@@ -171,7 +238,7 @@ describe('Sell checkout', () => {
     await renderCheckout(); add();
     confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
-    expect(orderCalls(fetchMock)).toHaveLength(1);
+    await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
     fireEvent.click(cashConfirmButton());
     expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
@@ -247,7 +314,7 @@ describe('Sell checkout', () => {
     fireEvent.load(image);
     const confirm = within(modal).getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' });
     fireEvent.click(confirm); fireEvent.click(confirm);
-    expect(orderCalls(fetchMock)).toHaveLength(1);
+    await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
     expect(JSON.parse(String(orderCalls(fetchMock)[0][1].body))).toEqual({ items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'transfer', customerType: 'walkin', discount: 5 });
     expect(confirm).toBeDisabled();
 
@@ -333,6 +400,7 @@ describe('Sell checkout', () => {
     const firstKey = ((orderCalls(fetchMock)[0][1] as RequestInit).headers as Record<string, string>)['Idempotency-Key'];
     fireEvent.change(screen.getByLabelText('PIN'), { target: { value: '2468' } });
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+    await screen.findByRole('button', { name: 'เงินสด' });
     expect(await screen.findByLabelText('จำนวน Original')).toHaveTextContent('1');
     confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();

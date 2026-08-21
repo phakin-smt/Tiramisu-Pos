@@ -45,6 +45,7 @@ describe('CashPaymentModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '100' }));
     fireEvent.click(screen.getByRole('button', { name: 'ยืนยันรับเงิน' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith({ amountTendered: 100, changeAmount: 31 });
 
     view.rerender(<CashPaymentModal open amount={69} checkoutError="" submitting onClose={vi.fn()} onConfirm={onConfirm} />);
     expect(screen.getByRole('button', { name: 'ยืนยันรับเงิน' })).toBeDisabled();
