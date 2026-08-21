@@ -271,6 +271,13 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .sell-metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); }
 .sell-metrics .metric:first-child { border-color: #b7d4c0; background: #f1f8f3; }
 .stock-refresh-notice { margin-top: 14px; padding: 10px 12px; border: 1px solid #d2b562; border-radius: 8px; color: #665019; background: #fff9df; font-size: 13px; }
+.cached-catalog-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 12px; padding: 9px 12px; border: 1px solid #e7c983; border-radius: var(--radius-md); color: #6f4c15; background: #fff8e8; font-size: 12px; }
+.cached-catalog-status strong { font-size: 13px; }
+.cached-catalog-status span:last-child:not(:nth-child(2)) { width: 100%; }
+.catalog-storage-warning { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-md); color: var(--danger); background: var(--danger-soft); font-size: 13px; }
+.offline-catalog-empty { min-height: 180px; align-content: center; gap: 8px; }
+.offline-catalog-empty strong, .offline-catalog-empty span { display: block; }
+.offline-checkout-message { margin: 0; padding: 9px 16px; color: #6f4c15; background: #fff6dd; font-size: 12px; line-height: 1.4; }
 .sell-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 400px); align-items: start; gap: 20px; padding-top: 18px; }
 .sell-catalog { min-width: 0; }
 .catalog-heading { margin: 0 0 12px; }
