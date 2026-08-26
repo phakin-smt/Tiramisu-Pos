@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BAANNOI_POS_DATABASE_NAME, openBaannoiPosDatabase } from './database';
+import { BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION, openBaannoiPosDatabase } from './database';
 import { readOfflineAuthorization, refreshOfflineAuthorization } from './offlineAuthorization';
 
 describe('offline trusted-device authorization', () => {
@@ -15,7 +15,7 @@ describe('offline trusted-device authorization', () => {
     const record = await refreshOfflineAuthorization(enabled);
     expect(record).toEqual({
       key: 'offlineAuthorization', enabledAt: enabled.toISOString(),
-      expiresAt: '2026-08-28T00:00:00.000Z', schemaVersion: 2,
+      expiresAt: '2026-08-28T00:00:00.000Z', schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
     });
     expect(JSON.stringify(record).toLowerCase()).not.toMatch(/pin|secret|hash|cookie/);
     expect((await readOfflineAuthorization(new Date('2026-08-27T23:59:59.000Z'))).authorized).toBe(true);

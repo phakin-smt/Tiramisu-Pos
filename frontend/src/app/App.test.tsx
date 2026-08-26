@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConnectivityProvider } from '../connectivity/ConnectivityContext';
 import { AuthProvider } from '../features/auth/AuthContext';
 import { readOfflineAuthorization } from '../offline/offlineAuthorization';
+import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
 
 interface MockResponse {
@@ -60,11 +61,18 @@ describe('authentication and application shell', () => {
   });
 
   it('shows the application shell for an initially authenticated session', async () => {
-    mockResponses({ body: { authenticated: true, configured: true } });
+    mockResponses(
+      { body: { authenticated: true, configured: true } },
+      { body: { configured: true, merchantAccountInfo: '0016A00000067701011101130066801234567', version: 1 } },
+    );
     renderApplication('/sell');
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'เมนูหลัก' })).toBeInTheDocument();
     await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+    await vi.waitFor(async () => expect(await readOfflinePaymentConfig()).toMatchObject({
+      merchantAccountInfo: '0016A00000067701011101130066801234567',
+      version: 1,
+    }));
   });
 
   it('shows login and denies shell access for an unauthenticated session', async () => {
@@ -95,6 +103,56 @@ describe('authentication and application shell', () => {
       url === '/api/auth/login' && (init as RequestInit).method === 'POST');
     expect(loginCalls).toHaveLength(1);
     await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+  });
+
+  const storageScenarios: Array<[string, Partial<StorageManager> | undefined]> = [
+    ['rejects the request', { persist: async (): Promise<boolean> => { throw new Error('permission database unavailable'); } }],
+    ['refuses persistence', { persist: async () => false, persisted: async () => false }],
+    ['has no Storage API', undefined],
+  ];
+
+  it.each(storageScenarios)('logs in and provisions the device even when the browser %s', async (_label, storage) => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'storage');
+    Object.defineProperty(navigator, 'storage', { configurable: true, value: storage });
+    try {
+      mockResponses(
+        { body: { authenticated: false, configured: true } },
+        { body: { authenticated: true, configured: true } },
+      );
+      renderApplication('/sell');
+      await submitPin();
+
+      expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
+      // Trusted-device provisioning must survive a storage failure beside it.
+      await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+      expect(await screen.findByText(/อุปกรณ์นี้อาจลบข้อมูลออฟไลน์/)).toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'storage', original);
+      else Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'storage');
+    }
+  });
+
+  it('reports durable storage without warning the cashier when persistence is granted', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'storage');
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: { persist: async () => true, persisted: async () => false },
+    });
+    try {
+      mockResponses(
+        { body: { authenticated: false, configured: true } },
+        { body: { authenticated: true, configured: true } },
+      );
+      renderApplication('/sell');
+      await submitPin();
+
+      expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
+      await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+      expect(screen.queryByText(/อุปกรณ์นี้อาจลบข้อมูลออฟไลน์/)).not.toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'storage', original);
+      else Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'storage');
+    }
   });
 
   it.each([
@@ -137,7 +195,7 @@ describe('authentication and application shell', () => {
     expect(screen.getAllByRole('status').some(
       (status) => status.textContent?.includes('Offline'),
     )).toBe(true);
-    expect(screen.getByRole('note')).toHaveTextContent('ขายเงินสดได้บนอุปกรณ์ที่ได้รับอนุญาต');
+    expect(screen.getByRole('note')).toHaveTextContent('ขายเงินสดและ PromptPay ได้บนอุปกรณ์ที่ได้รับอนุญาต');
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/auth/status')).toBe(false);
   });
 

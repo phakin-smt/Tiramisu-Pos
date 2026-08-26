@@ -3,10 +3,11 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { CatalogProduct } from '../types/products';
 
 export const BAANNOI_POS_DATABASE_NAME = 'BaannoiPOS';
-export const BAANNOI_POS_SCHEMA_VERSION = 2;
+export const BAANNOI_POS_SCHEMA_VERSION = 4;
 export const PRODUCT_SNAPSHOT_KEY = 'confirmed';
 export const CATALOG_METADATA_KEY = 'catalog';
 export const OFFLINE_AUTHORIZATION_KEY = 'offlineAuthorization';
+export const PROMPTPAY_CONFIG_KEY = 'promptpay';
 
 export interface ProductSnapshotRecord {
   key: typeof PRODUCT_SNAPSHOT_KEY;
@@ -26,18 +27,33 @@ export interface OfflineAuthorizationRecord {
   schemaVersion: number;
 }
 
+export interface OfflinePaymentConfigRecord {
+  key: typeof PROMPTPAY_CONFIG_KEY;
+  version: number;
+  merchantAccountInfo: string;
+  provisionedAt: string;
+}
+
 export interface OfflineOrder {
   localOrderId: string;
   localOrderNumber: string;
+  /**
+   * The same checkout identity the online `POST /api/orders` would have sent as
+   * `Idempotency-Key`. Carrying it here lets a later sync replay the sale without
+   * duplicating an order the server may already have committed. Orders written
+   * before schema v4 predate the field.
+   */
+  idempotencyKey?: string;
   createdAt: string;
   businessDate: string;
-  paymentMethod: 'cash';
+  paymentMethod: 'cash' | 'transfer';
   customerType: 'walkin' | 'member' | 'store';
   subtotal: number;
   discount: number;
   total: number;
-  amountTendered: number;
-  changeAmount: number;
+  amountTendered?: number;
+  changeAmount?: number;
+  paymentConfirmation?: 'manual';
   status: 'completed';
   syncStatus: 'pending';
 }
@@ -77,7 +93,11 @@ export interface BaannoiPosDatabase extends DBSchema {
   offlineOrders: {
     key: string;
     value: OfflineOrder;
-    indexes: { 'by-sync-status': string; 'by-created-at': string };
+    indexes: {
+      'by-sync-status': string;
+      'by-created-at': string;
+      'by-idempotency-key': string;
+    };
   };
   offlineOrderItems: {
     key: string;
@@ -89,11 +109,15 @@ export interface BaannoiPosDatabase extends DBSchema {
     value: OfflineStockMovement;
     indexes: { 'by-local-order': string; 'by-product': number };
   };
+  offlinePaymentConfig: {
+    key: typeof PROMPTPAY_CONFIG_KEY;
+    value: OfflinePaymentConfigRecord;
+  };
 }
 
 export function openBaannoiPosDatabase(): Promise<IDBPDatabase<BaannoiPosDatabase>> {
   return openDB<BaannoiPosDatabase>(BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION, {
-    upgrade(database, oldVersion) {
+    upgrade(database, oldVersion, _newVersion, transaction) {
       if (oldVersion < 1) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
         database.createObjectStore('metadata', { keyPath: 'key' });
@@ -107,6 +131,15 @@ export function openBaannoiPosDatabase(): Promise<IDBPDatabase<BaannoiPosDatabas
         const movements = database.createObjectStore('offlineStockMovements', { keyPath: 'localMovementId' });
         movements.createIndex('by-local-order', 'localOrderId');
         movements.createIndex('by-product', 'productId');
+      }
+      if (oldVersion < 3) {
+        database.createObjectStore('offlinePaymentConfig', { keyPath: 'key' });
+      }
+      if (oldVersion < 4) {
+        // Legacy orders have no idempotencyKey, so they simply stay out of the
+        // index rather than colliding on it.
+        transaction.objectStore('offlineOrders')
+          .createIndex('by-idempotency-key', 'idempotencyKey', { unique: true });
       }
     },
   });

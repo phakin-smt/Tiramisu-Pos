@@ -15,9 +15,11 @@ import {
   createOfflineOrderIdentity,
   getOfflineOrderDetails,
   getPendingOfflineOrderCount,
+  getOfflineOrderByIdempotencyKey,
   getRecentOfflineOrders,
   INSUFFICIENT_OFFLINE_STOCK_MESSAGE,
   recordOfflineCashSale,
+  recordOfflineSale,
 } from './offlineOrders';
 
 const products: CatalogProduct[] = [
@@ -156,13 +158,71 @@ describe('offline cash order transaction', () => {
     expect(await getPendingOfflineOrderCount()).toBe(1);
     expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
   });
+
+  it('stores the checkout idempotency key so a later sync can replay the sale safely', async () => {
+    const order = await recordOfflineCashSale({
+      identity,
+      idempotencyKey: 'b2f1e6d4-0000-4000-8000-00000000aaaa',
+      order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      amountTendered: 100,
+      changeAmount: 31,
+    });
+    expect(order.idempotencyKey).toBe('b2f1e6d4-0000-4000-8000-00000000aaaa');
+    expect(await getOfflineOrderByIdempotencyKey('b2f1e6d4-0000-4000-8000-00000000aaaa'))
+      .toMatchObject({ localOrderId: identity.localOrderId, total: 69 });
+  });
+
+  it('refuses a second local order for one idempotency key even under a new local order id', async () => {
+    const key = 'b2f1e6d4-0000-4000-8000-00000000bbbb';
+    const first = await recordOfflineCashSale({
+      identity, idempotencyKey: key,
+      order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      amountTendered: 100, changeAmount: 31,
+    });
+    const replay = await recordOfflineCashSale({
+      identity: { ...identity, localOrderId: '6ba7b810-9dad-41d1-80b4-00c04fd430ff', localOrderNumber: 'OFF-20260821-143599-30FF' },
+      idempotencyKey: key,
+      order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      amountTendered: 100, changeAmount: 31,
+    });
+
+    expect(replay.localOrderId).toBe(first.localOrderId);
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    // The replay must not have deducted stock a second time.
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(9);
+  });
+
+  it('uses the same atomic transaction for a manually confirmed transfer', async () => {
+    const transferIdentity = { ...identity, localOrderId: '6ba7b810-9dad-41d1-80b4-00c04fd430c8', localOrderNumber: 'OFF-20260821-143523-30C8' };
+    const order = await recordOfflineSale({
+      identity: transferIdentity,
+      order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'transfer', customerType: 'member', discount: 0 },
+      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+    });
+    expect(order).toMatchObject({
+      paymentMethod: 'transfer', paymentConfirmation: 'manual', total: 138,
+      status: 'completed', syncStatus: 'pending',
+    });
+    expect(order).not.toHaveProperty('amountTendered');
+    expect(order).not.toHaveProperty('changeAmount');
+    const details = await getOfflineOrderDetails(transferIdentity.localOrderId);
+    expect(details?.movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ semanticType: 'sale', quantity: -2 }),
+      expect.objectContaining({ semanticType: 'giveaway', quantity: -1 }),
+    ]));
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+  });
 });
 
-describe('BaannoiPOS v1 to v2 migration', () => {
+describe('BaannoiPOS migrations', () => {
   beforeEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
   afterEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
 
-  it('preserves the Phase 2 catalog and metadata while adding only Phase 3 stores', async () => {
+  it('preserves the Phase 2 catalog and metadata while adding later stores', async () => {
     const versionOne = await openDB(BAANNOI_POS_DATABASE_NAME, 1, {
       upgrade(database) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
@@ -176,12 +236,130 @@ describe('BaannoiPOS v1 to v2 migration', () => {
     const upgraded = await openBaannoiPosDatabase();
     expect(upgraded.version).toBe(BAANNOI_POS_SCHEMA_VERSION);
     expect([...upgraded.objectStoreNames]).toEqual([
-      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlineStockMovements', 'productSnapshot',
+      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productSnapshot',
     ]);
     upgraded.close();
     expect(await readConfirmedCatalogSnapshot()).toEqual({
       products,
       metadata: { key: 'catalog', lastSuccessfulCatalogSyncAt: '2026-08-20T03:00:00.000Z', schemaVersion: 1 },
     });
+  });
+
+  it('upgrades v2 to the current schema without changing existing catalog or offline transaction data', async () => {
+    const versionTwo = await openDB(BAANNOI_POS_DATABASE_NAME, 2, {
+      upgrade(database) {
+        database.createObjectStore('productSnapshot', { keyPath: 'key' });
+        database.createObjectStore('metadata', { keyPath: 'key' });
+        const orders = database.createObjectStore('offlineOrders', { keyPath: 'localOrderId' });
+        orders.createIndex('by-sync-status', 'syncStatus');
+        orders.createIndex('by-created-at', 'createdAt');
+        const items = database.createObjectStore('offlineOrderItems', { keyPath: 'localOrderItemId' });
+        items.createIndex('by-local-order', 'localOrderId');
+        const movements = database.createObjectStore('offlineStockMovements', { keyPath: 'localMovementId' });
+        movements.createIndex('by-local-order', 'localOrderId');
+        movements.createIndex('by-product', 'productId');
+      },
+    });
+    await versionTwo.put('productSnapshot', { key: 'confirmed', products });
+    await versionTwo.put('metadata', { key: 'catalog', lastSuccessfulCatalogSyncAt: '2026-08-20T03:00:00.000Z', schemaVersion: 2 });
+    await versionTwo.put('offlineOrders', {
+      ...identity, paymentMethod: 'cash', customerType: 'walkin', subtotal: 69, discount: 0,
+      total: 69, amountTendered: 100, changeAmount: 31, status: 'completed', syncStatus: 'pending',
+    });
+    await versionTwo.put('offlineOrderItems', {
+      localOrderItemId: `${identity.localOrderId}:1`, localOrderId: identity.localOrderId,
+      productId: 1, productName: 'Original', productCode: 'ORI', unitPrice: 69,
+      qty: 1, giveawayQty: 0, paidLineSubtotal: 69,
+    });
+    await versionTwo.put('offlineStockMovements', {
+      localMovementId: `${identity.localOrderId}:1:sale`, localOrderId: identity.localOrderId,
+      referenceId: identity.localOrderId, createdAt: identity.createdAt, businessDate: identity.businessDate,
+      productId: 1, semanticType: 'sale', quantity: -1,
+    });
+    versionTwo.close();
+
+    const upgraded = await openBaannoiPosDatabase();
+    expect(upgraded.version).toBe(BAANNOI_POS_SCHEMA_VERSION);
+    expect(upgraded.objectStoreNames.contains('offlinePaymentConfig')).toBe(true);
+    expect(await upgraded.count('offlineOrders')).toBe(1);
+    expect(await upgraded.count('offlineOrderItems')).toBe(1);
+    expect(await upgraded.count('offlineStockMovements')).toBe(1);
+    upgraded.close();
+    expect((await readConfirmedCatalogSnapshot())?.products).toEqual(products);
+  });
+
+  it('upgrades v3 to v4 by indexing idempotency keys without disturbing pre-v4 orders', async () => {
+    const versionThree = await openDB(BAANNOI_POS_DATABASE_NAME, 3, {
+      upgrade(database) {
+        database.createObjectStore('productSnapshot', { keyPath: 'key' });
+        database.createObjectStore('metadata', { keyPath: 'key' });
+        const orders = database.createObjectStore('offlineOrders', { keyPath: 'localOrderId' });
+        orders.createIndex('by-sync-status', 'syncStatus');
+        orders.createIndex('by-created-at', 'createdAt');
+        const items = database.createObjectStore('offlineOrderItems', { keyPath: 'localOrderItemId' });
+        items.createIndex('by-local-order', 'localOrderId');
+        const movements = database.createObjectStore('offlineStockMovements', { keyPath: 'localMovementId' });
+        movements.createIndex('by-local-order', 'localOrderId');
+        movements.createIndex('by-product', 'productId');
+        database.createObjectStore('offlinePaymentConfig', { keyPath: 'key' });
+      },
+    });
+    await versionThree.put('productSnapshot', { key: 'confirmed', products });
+    await versionThree.put('metadata', { key: 'catalog', lastSuccessfulCatalogSyncAt: '2026-08-21T03:00:00.000Z', schemaVersion: 3 });
+    await versionThree.put('offlinePaymentConfig', {
+      key: 'promptpay', merchantAccountInfo: '0016A00000067701011101130066812345678', version: 1,
+      provisionedAt: '2026-08-21T04:30:00.000Z',
+    });
+    // A legacy order carries no idempotencyKey at all.
+    await versionThree.put('offlineOrders', {
+      ...identity, paymentMethod: 'cash', customerType: 'walkin', subtotal: 69, discount: 0,
+      total: 69, amountTendered: 100, changeAmount: 31, status: 'completed', syncStatus: 'pending',
+    });
+    versionThree.close();
+
+    const upgraded = await openBaannoiPosDatabase();
+    expect(upgraded.version).toBe(4);
+    expect([...upgraded.transaction('offlineOrders').store.indexNames].sort())
+      .toEqual(['by-created-at', 'by-idempotency-key', 'by-sync-status']);
+    expect(await upgraded.count('offlineOrders')).toBe(1);
+    expect((await upgraded.get('offlineOrders', identity.localOrderId))?.total).toBe(69);
+    // Records without the key path stay out of the unique index instead of colliding.
+    expect(await upgraded.countFromIndex('offlineOrders', 'by-idempotency-key')).toBe(0);
+    expect(await upgraded.get('offlinePaymentConfig', 'promptpay')).toMatchObject({ version: 1 });
+    upgraded.close();
+
+    expect((await readConfirmedCatalogSnapshot())?.products).toEqual(products);
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+  });
+
+  it('keeps two legacy keyless orders valid under the unique idempotency index', async () => {
+    const versionThree = await openDB(BAANNOI_POS_DATABASE_NAME, 3, {
+      upgrade(database) {
+        database.createObjectStore('productSnapshot', { keyPath: 'key' });
+        database.createObjectStore('metadata', { keyPath: 'key' });
+        const orders = database.createObjectStore('offlineOrders', { keyPath: 'localOrderId' });
+        orders.createIndex('by-sync-status', 'syncStatus');
+        orders.createIndex('by-created-at', 'createdAt');
+        const items = database.createObjectStore('offlineOrderItems', { keyPath: 'localOrderItemId' });
+        items.createIndex('by-local-order', 'localOrderId');
+        const movements = database.createObjectStore('offlineStockMovements', { keyPath: 'localMovementId' });
+        movements.createIndex('by-local-order', 'localOrderId');
+        movements.createIndex('by-product', 'productId');
+        database.createObjectStore('offlinePaymentConfig', { keyPath: 'key' });
+      },
+    });
+    for (const suffix of ['a', 'b']) {
+      await versionThree.put('offlineOrders', {
+        ...identity, localOrderId: `${identity.localOrderId}-${suffix}`,
+        paymentMethod: 'cash', customerType: 'walkin', subtotal: 69, discount: 0,
+        total: 69, amountTendered: 100, changeAmount: 31, status: 'completed', syncStatus: 'pending',
+      });
+    }
+    versionThree.close();
+
+    const upgraded = await openBaannoiPosDatabase();
+    expect(await upgraded.count('offlineOrders')).toBe(2);
+    upgraded.close();
+    expect(await getPendingOfflineOrderCount()).toBe(2);
   });
 });

@@ -49,11 +49,16 @@ def parse_amount(value):
     return amount
 
 
+def promptpay_merchant_account_info(target):
+    """Return only the normalized EMVCo tag-29 value required by a QR client."""
+    target_tag, normalized_target = _normalize_target(target)
+    return _tlv("00", PROMPTPAY_GUID) + _tlv(target_tag, normalized_target)
+
+
 def generate_promptpay_payload(target, amount):
     """Return an EMVCo Thai QR Payment payload with a fixed THB amount."""
-    target_tag, normalized_target = _normalize_target(target)
     parsed_amount = parse_amount(amount)
-    merchant = _tlv("00", PROMPTPAY_GUID) + _tlv(target_tag, normalized_target)
+    merchant = promptpay_merchant_account_info(target)
     body = "".join((
         _tlv("00", "01"),
         _tlv("01", "12"),

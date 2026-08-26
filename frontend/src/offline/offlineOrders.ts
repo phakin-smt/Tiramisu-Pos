@@ -14,13 +14,16 @@ import {
 import { OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE } from './offlineAuthorization';
 
 export const INSUFFICIENT_OFFLINE_STOCK_MESSAGE = 'สต็อกไม่เพียงพอ กรุณาตรวจสอบรายการอีกครั้ง';
-export const OFFLINE_PROMPTPAY_MESSAGE = 'PromptPay แบบออฟไลน์จะเปิดใช้งานในขั้นตอนถัดไป';
 export const PENDING_OFFLINE_ORDERS_MESSAGE = 'มีรายการออฟไลน์ที่ยังไม่ได้ Sync กรุณา Sync ก่อนอัปเดตสต็อกจากระบบ';
 export const LOCAL_MODE_MESSAGE = 'มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง';
-export const LOCAL_MODE_PROMPTPAY_MESSAGE = 'PromptPay ใช้งานไม่ได้ขณะมีออเดอร์รอ Sync';
 
-export interface OfflineCashDetails {
+export interface OfflineSaleDetails {
   totals: CartTotals;
+  amountTendered?: number;
+  changeAmount?: number;
+}
+
+export interface OfflineCashDetails extends OfflineSaleDetails {
   amountTendered: number;
   changeAmount: number;
 }
@@ -32,9 +35,20 @@ export interface OfflineOrderIdentity {
   businessDate: string;
 }
 
+export interface OfflineSaleInput extends OfflineSaleDetails {
+  identity: OfflineOrderIdentity;
+  order: CreateOrderRequest;
+  /**
+   * The checkout idempotency key. Pass the same key an online attempt used so a
+   * lost `POST /api/orders` response cannot become a second sale at sync time.
+   */
+  idempotencyKey?: string;
+}
+
 export interface OfflineCashSaleInput extends OfflineCashDetails {
   identity: OfflineOrderIdentity;
   order: CreateOrderRequest;
+  idempotencyKey?: string;
 }
 
 export function createClientUuid(): string {
@@ -73,8 +87,11 @@ function authorizationValid(value: CatalogSnapshotMetadata | OfflineAuthorizatio
   return value?.key === OFFLINE_AUTHORIZATION_KEY && Date.parse(value.expiresAt) > Date.parse(at);
 }
 
-export async function recordOfflineCashSale(input: OfflineCashSaleInput): Promise<OfflineOrder> {
-  if (input.order.paymentMethod !== 'cash') throw new Error(OFFLINE_PROMPTPAY_MESSAGE);
+export async function recordOfflineSale(input: OfflineSaleInput): Promise<OfflineOrder> {
+  if (input.order.paymentMethod === 'cash'
+    && (input.amountTendered === undefined || input.changeAmount === undefined)) {
+    throw new Error('ข้อมูลการรับเงินสดไม่ครบถ้วน');
+  }
   const database = await openBaannoiPosDatabase();
   const transaction = database.transaction(
     ['metadata', 'productSnapshot', 'offlineOrders', 'offlineOrderItems', 'offlineStockMovements'],
@@ -82,10 +99,20 @@ export async function recordOfflineCashSale(input: OfflineCashSaleInput): Promis
   );
 
   try {
-    const existing = await transaction.objectStore('offlineOrders').get(input.identity.localOrderId);
+    const orders = transaction.objectStore('offlineOrders');
+    const existing = await orders.get(input.identity.localOrderId);
     if (existing) {
       await transaction.done;
       return existing;
+    }
+    // A retry that changed its mind about the local order id must still not
+    // produce a second sale for the same checkout.
+    if (input.idempotencyKey) {
+      const replayed = await orders.index('by-idempotency-key').get(input.idempotencyKey);
+      if (replayed) {
+        await transaction.done;
+        return replayed;
+      }
     }
 
     const authorization = await transaction.objectStore('metadata').get(OFFLINE_AUTHORIZATION_KEY);
@@ -145,17 +172,19 @@ export async function recordOfflineCashSale(input: OfflineCashSaleInput): Promis
 
     const order: OfflineOrder = {
       ...input.identity,
-      paymentMethod: 'cash',
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      paymentMethod: input.order.paymentMethod,
       customerType: input.order.customerType,
       subtotal: input.totals.subtotal,
       discount: input.totals.discount,
       total: input.totals.grandTotal,
-      amountTendered: input.amountTendered,
-      changeAmount: input.changeAmount,
       status: 'completed',
       syncStatus: 'pending',
+      ...(input.order.paymentMethod === 'cash'
+        ? { amountTendered: input.amountTendered, changeAmount: input.changeAmount }
+        : { paymentConfirmation: 'manual' as const }),
     };
-    await transaction.objectStore('offlineOrders').add(order);
+    await orders.add(order);
     for (const item of items) await transaction.objectStore('offlineOrderItems').add(item);
     for (const movement of movements) await transaction.objectStore('offlineStockMovements').add(movement);
     await transaction.objectStore('productSnapshot').put({ key: PRODUCT_SNAPSHOT_KEY, products: updatedProducts });
@@ -170,10 +199,26 @@ export async function recordOfflineCashSale(input: OfflineCashSaleInput): Promis
   }
 }
 
+export function recordOfflineCashSale(input: OfflineCashSaleInput): Promise<OfflineOrder> {
+  if (input.order.paymentMethod !== 'cash') return Promise.reject(new Error('วิธีชำระเงินไม่ถูกต้อง'));
+  return recordOfflineSale(input);
+}
+
 export async function getPendingOfflineOrderCount(): Promise<number> {
   const database = await openBaannoiPosDatabase();
   try {
     return await database.countFromIndex('offlineOrders', 'by-sync-status', 'pending');
+  } finally {
+    database.close();
+  }
+}
+
+export async function getOfflineOrderByIdempotencyKey(
+  idempotencyKey: string,
+): Promise<OfflineOrder | null> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    return await database.getFromIndex('offlineOrders', 'by-idempotency-key', idempotencyKey) ?? null;
   } finally {
     database.close();
   }

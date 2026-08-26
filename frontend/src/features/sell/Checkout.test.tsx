@@ -5,13 +5,24 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppRoutes } from '../../app/router';
+import { CHECKOUT_API_TIMEOUT_MS, REQUEST_TIMEOUT_MESSAGE } from '../../api/client';
 import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import { AuthProvider } from '../auth/AuthContext';
 import { readConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshot } from '../../offline/catalogSnapshot';
 import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
-import { getPendingOfflineOrderCount, recordOfflineCashSale } from '../../offline/offlineOrders';
+import { getOfflineOrderByIdempotencyKey, getOfflineOrderDetails, getPendingOfflineOrderCount, getRecentOfflineOrders, recordOfflineCashSale } from '../../offline/offlineOrders';
+import {
+  isCheckoutActive,
+  queueServiceWorkerUpdate,
+  resetServiceWorkerUpdateGate,
+} from '../../pwa/updateGate';
+import { replaceOfflinePaymentConfig } from '../../offline/paymentConfig';
 import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
+
+vi.mock('qrcode', () => ({
+  default: { toString: vi.fn(async () => '<svg xmlns="http://www.w3.org/2000/svg"/>') },
+}));
 
 const products: CatalogProduct[] = [
   { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
@@ -72,6 +83,17 @@ function confirmCashExact() {
 }
 function transferButton() { return screen.getByRole('button', { name: /QR พร้อมเพย์/ }); }
 function orderCalls(fetchMock: ReturnType<typeof vi.fn>) { return fetchMock.mock.calls.filter(([url, init]) => url === '/api/orders' && (init as RequestInit).method === 'POST'); }
+function idempotencyKeyOf(call: unknown[]) { return ((call[1] as RequestInit).headers as Record<string, string>)['Idempotency-Key']; }
+function cartTotals() { return screen.getByRole('region', { name: 'ยอดรวมตะกร้า' }); }
+
+/** Settles only on abort, the way a checkout POST into dead air behaves. */
+function neverResponds(init: RequestInit) {
+  const abortError = () => new DOMException('Aborted', 'AbortError');
+  if (init.signal?.aborted) return Promise.reject(abortError());
+  return new Promise<Response>((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(abortError()));
+  });
+}
 
 const originalCreateObjectURL = URL.createObjectURL;
 const originalRevokeObjectURL = URL.revokeObjectURL;
@@ -94,6 +116,137 @@ describe('Sell checkout', () => {
     vi.restoreAllMocks();
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
+  });
+
+  it('reuses the lost POST idempotency key for the local order written on an offline retry', async () => {
+    // The server committed this order; only its response was lost. The retry
+    // must therefore carry the same key so a later sync recognises the sale.
+    const fetchMock = mockCheckout((url, init) => (
+      url === '/api/orders' && init.method === 'POST'
+        ? Promise.reject(new TypeError('network response lost'))
+        : undefined
+    ));
+    await refreshOfflineAuthorization();
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    add();
+    confirmCashExact();
+    expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
+    const sentKey = idempotencyKeyOf(orderCalls(fetchMock)[0]);
+    expect(sentKey).toBeTruthy();
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+    fireEvent.click(cashConfirmButton());
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    expect(orderCalls(fetchMock)).toHaveLength(1);
+    const [latest] = await getRecentOfflineOrders(1);
+    expect(latest.idempotencyKey).toBe(sentKey);
+    expect(await getOfflineOrderByIdempotencyKey(sentKey)).toMatchObject({ localOrderId: latest.localOrderId });
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('does not write a second local order when the offline retry is double clicked', async () => {
+    const fetchMock = mockCheckout((url, init) => (
+      url === '/api/orders' && init.method === 'POST'
+        ? Promise.reject(new TypeError('network response lost'))
+        : undefined
+    ));
+    await refreshOfflineAuthorization();
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    add();
+    confirmCashExact();
+    expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
+    const sentKey = idempotencyKeyOf(orderCalls(fetchMock)[0]);
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+    fireEvent.click(cashConfirmButton());
+    fireEvent.click(cashConfirmButton());
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect((await getRecentOfflineOrders(5)).filter((order) => order.idempotencyKey === sentKey)).toHaveLength(1);
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(9);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('preserves the cart and creates no local order when the order request times out', async () => {
+    // Fake only the client's own timer: fake-indexeddb drives its event loop on
+    // the other timer APIs and would stall if those were faked too.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const fetchMock = mockCheckout((url, init) => (
+        url === '/api/orders' && init.method === 'POST' ? neverResponds(init) : undefined
+      ));
+      await renderCheckout();
+      add(2);
+      confirmCashExact();
+      await vi.advanceTimersByTimeAsync(CHECKOUT_API_TIMEOUT_MS);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(REQUEST_TIMEOUT_MESSAGE);
+      // Cart intact, so the cashier can retry or fall back deliberately.
+      expect(cartTotals()).toHaveTextContent('฿138.00');
+      // A timeout is not permission to invent a local sale, and never retries.
+      expect(await getPendingOfflineOrderCount()).toBe(0);
+      expect(orderCalls(fetchMock)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reuses the timed-out idempotency key on a deliberate retry instead of duplicating', async () => {
+    // Fake only the client's own timer: fake-indexeddb drives its event loop on
+    // the other timer APIs and would stall if those were faked too.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let attempts = 0;
+      const fetchMock = mockCheckout((url, init) => {
+        if (url !== '/api/orders' || init.method !== 'POST') return undefined;
+        attempts += 1;
+        return attempts === 1 ? neverResponds(init) : json({ ...order, duplicate: true });
+      });
+      await renderCheckout();
+      add();
+      confirmCashExact();
+      await vi.advanceTimersByTimeAsync(CHECKOUT_API_TIMEOUT_MS);
+      expect(await screen.findByRole('alert')).toHaveTextContent(REQUEST_TIMEOUT_MESSAGE);
+
+      fireEvent.click(cashConfirmButton());
+      expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
+
+      const keys = orderCalls(fetchMock).map(idempotencyKeyOf);
+      expect(keys).toHaveLength(2);
+      expect(keys[1]).toBe(keys[0]);
+      expect(await getPendingOfflineOrderCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds a waiting service worker update until the sale is finished', async () => {
+    resetServiceWorkerUpdateGate();
+    mockCheckout();
+    await renderCheckout();
+    const applyUpdate = vi.fn();
+
+    add();
+    await vi.waitFor(() => expect(isCheckoutActive()).toBe(true));
+    queueServiceWorkerUpdate(applyUpdate);
+    expect(applyUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(cashButton());
+    fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
+    expect(applyUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(cashConfirmButton());
+    expect(await screen.findByText(/บันทึกออเดอร์/)).toBeInTheDocument();
+    await vi.waitFor(() => expect(applyUpdate).toHaveBeenCalledTimes(1));
   });
 
   it('routes one open cash confirmation locally when connectivity disappears before confirm', async () => {
@@ -141,7 +294,7 @@ describe('Sell checkout', () => {
     expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
     expect(screen.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 9 ชิ้น');
-    expect(transferButton()).toBeDisabled();
+    expect(transferButton()).toBeEnabled();
 
     add();
     confirmCashExact();
@@ -156,6 +309,94 @@ describe('Sell checkout', () => {
     expect(await screen.findByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 8 ชิ้น');
     expect(orderCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it('creates an atomic local PromptPay sale while online Local Mode is latched by a pending order', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
+    await recordOfflineCashSale({
+      identity: {
+        localOrderId: '550e8400-e29b-41d4-a716-446655440000',
+        localOrderNumber: 'OFF-20260821-143522-0000',
+        createdAt: new Date().toISOString(),
+        businessDate: '2026-08-21',
+      },
+      order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      amountTendered: 100,
+      changeAmount: 31,
+    });
+    const fetchMock = mockCheckout();
+
+    render(<SellPage />);
+    expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
+    add();
+    fireEvent.click(transferButton());
+    const modal = screen.getByRole('dialog', { name: 'QR พร้อมเพย์' });
+    expect(within(modal).getByText('Local Mode · สร้าง QR ในเครื่อง')).toBeInTheDocument();
+    const image = await within(modal).findByRole('img');
+    expect(image).toHaveAttribute('src', 'blob:promptpay-1');
+    fireEvent.load(image);
+    const confirm = within(modal).getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    expect(await getPendingOfflineOrderCount()).toBe(2);
+    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
+    const [latest] = await getRecentOfflineOrders(1);
+    expect(latest).toMatchObject({ paymentMethod: 'transfer', paymentConfirmation: 'manual', syncStatus: 'pending' });
+    expect((await getOfflineOrderDetails(latest.localOrderId))?.movements).toHaveLength(1);
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
+  });
+
+  it('switches an open Cloud PromptPay modal to local QR and checkout when connectivity disappears', async () => {
+    const qrPending = deferred<Response>();
+    const fetchMock = mockCheckout((url) => url.startsWith('/api/payment-qr') ? qrPending.promise : undefined);
+    await refreshOfflineAuthorization();
+    await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    add();
+    fireEvent.click(transferButton());
+    const modal = screen.getByRole('dialog', { name: 'QR พร้อมเพย์' });
+    expect(within(modal).getByText('กำลังสร้าง QR ตามยอด...')).toBeInTheDocument();
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+    expect(await within(modal).findByText('Local Mode · สร้าง QR ในเครื่อง')).toBeInTheDocument();
+    const image = await within(modal).findByRole('img');
+    fireEvent.load(image);
+    const confirm = within(modal).getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' });
+    await vi.waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('shows actionable guidance when Local Mode has not been provisioned for PromptPay', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    const fetchMock = mockCheckout();
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    add();
+    fireEvent.click(transferButton());
+    const modal = screen.getByRole('dialog', { name: 'QR พร้อมเพย์' });
+    expect(await within(modal).findByRole('alert')).toHaveTextContent('ยังไม่ได้เตรียมพร้อมเพย์สำหรับใช้งานออฟไลน์');
+    expect(within(modal).getByText('กรุณาเชื่อมต่ออินเทอร์เน็ตและเข้าสู่ระบบอย่างน้อย 1 ครั้ง')).toBeInTheDocument();
+    expect(within(modal).getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' })).toBeDisabled();
+    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
   it('submits one exact cash payload and idempotency key under a double click', async () => {

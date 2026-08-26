@@ -13,6 +13,11 @@ import { getAuthStatus, loginWithPin, logoutSession } from '../../api/auth';
 import { subscribeToUnauthorized } from '../../api/client';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
 import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
+import { provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
+import {
+  requestPersistentStorage,
+  type StoragePersistenceStatus,
+} from '../../offline/storagePersistence';
 
 type AuthPhase =
   | 'checking'
@@ -31,6 +36,8 @@ interface AuthContextValue extends AuthState {
   login(pin: string): Promise<boolean>;
   logout(): Promise<void>;
   submitting: boolean;
+  /** Whether the browser agreed to keep offline data out of its eviction pool. */
+  storagePersistence: StoragePersistenceStatus;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,6 +46,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { isOnline } = useConnectivity();
   const [state, setState] = useState<AuthState>({ phase: 'checking', message: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [storagePersistence, setStoragePersistence] = useState<StoragePersistenceStatus>('unknown');
+
+  /**
+   * Everything a trusted device needs for offline selling, provisioned on the
+   * one occasion we know we are both online and authenticated. Settled, not
+   * awaited for success: none of these may block a cashier from logging in.
+   */
+  const provisionOfflineDevice = useCallback(async () => {
+    const [, , persistence] = await Promise.allSettled([
+      refreshOfflineAuthorization(),
+      provisionOfflinePaymentConfig(),
+      requestPersistentStorage(),
+    ]);
+    setStoragePersistence(persistence.status === 'fulfilled' ? persistence.value : 'unsupported');
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -59,11 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!status.configured) {
           setState({ phase: 'unconfigured', message: 'PIN authentication is not configured.' });
         } else if (status.authenticated) {
-          try {
-            await refreshOfflineAuthorization();
-          } catch {
-            // Online Flask authentication remains valid if local storage is unavailable.
-          }
+          await provisionOfflineDevice();
           if (!active) return;
           setState({ phase: 'authenticated', message: '' });
         } else {
@@ -79,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [isOnline]);
+  }, [isOnline, provisionOfflineDevice]);
 
   useEffect(
     () =>
@@ -94,11 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const status = await loginWithPin(pin);
       if (!status.authenticated) throw new Error('Login failed');
-      try {
-        await refreshOfflineAuthorization();
-      } catch {
-        // Never reject a confirmed online Flask login due to local storage.
-      }
+      await provisionOfflineDevice();
       setState({ phase: 'authenticated', message: '' });
       return true;
     } catch (error) {
@@ -110,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setSubmitting(false);
     }
-  }, []);
+  }, [provisionOfflineDevice]);
 
   const logout = useCallback(async () => {
     setSubmitting(true);
@@ -125,8 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, submitting, login, logout }),
-    [state, submitting, login, logout],
+    () => ({ ...state, submitting, login, logout, storagePersistence }),
+    [state, submitting, login, logout, storagePersistence],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

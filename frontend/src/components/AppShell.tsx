@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 
 import { useConnectivity } from '../connectivity/ConnectivityContext';
 import { useAuth } from '../features/auth/AuthContext';
+import { isStorageDurable, STORAGE_NOT_PERSISTED_MESSAGE } from '../offline/storagePersistence';
 import { MobileNavigation } from './MobileNavigation';
 import { SidebarNavigation } from './SidebarNavigation';
 import { useTabletSwipeNavigation } from './useTabletSwipeNavigation';
@@ -37,8 +38,8 @@ function ConnectivityStatus({ compact = false }: { compact?: boolean }) {
 }
 
 export function AppShell() {
-  const { logout, submitting } = useAuth();
-  const { isOnline } = useConnectivity();
+  const { logout, submitting, storagePersistence } = useAuth();
+  const { isOnline, isBackendReachable } = useConnectivity();
   const mainContent = useRef<HTMLElement>(null);
   useTabletSwipeNavigation(mainContent);
 
@@ -68,7 +69,17 @@ export function AppShell() {
       <main ref={mainContent} className="main-content">
         {!isOnline && (
           <p className="offline-foundation-message" role="note">
-            โหมดออฟไลน์ · ขายเงินสดได้บนอุปกรณ์ที่ได้รับอนุญาต · PromptPay ยังต้องเชื่อมต่ออินเทอร์เน็ต
+            โหมดออฟไลน์ · ขายเงินสดและ PromptPay ได้บนอุปกรณ์ที่ได้รับอนุญาต
+          </p>
+        )}
+        {isOnline && !isBackendReachable && (
+          <p className="offline-foundation-message" role="status" aria-live="polite">
+            ต่ออินเทอร์เน็ตได้ แต่ติดต่อเซิร์ฟเวอร์ไม่ได้ · การขายจะบันทึกในเครื่อง
+          </p>
+        )}
+        {storagePersistence !== 'unknown' && !isStorageDurable(storagePersistence) && (
+          <p className="offline-foundation-message" role="status" aria-live="polite">
+            {STORAGE_NOT_PERSISTED_MESSAGE}
           </p>
         )}
         <Outlet />

@@ -47,7 +47,7 @@ describe('SellPage offline catalog', () => {
     expect(screen.queryByRole('button', { name: /เพิ่ม .* ลงตะกร้า/ })).not.toBeInTheDocument();
   });
 
-  it('uses cached categories and stock while blocking cash without authorization and PromptPay always', async () => {
+  it('uses cached categories and stock while blocking every checkout path without authorization', async () => {
     await replaceConfirmedCatalogSnapshot(cachedProducts, '2026-08-21T04:30:00.000Z');
     setNavigatorOnline(false);
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('offline'));
@@ -73,7 +73,6 @@ describe('SellPage offline catalog', () => {
 
     expect(screen.getByRole('button', { name: 'เงินสด' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeDisabled();
-    expect(screen.getByText('PromptPay แบบออฟไลน์จะเปิดใช้งานในขั้นตอนถัดไป')).toBeInTheDocument();
     expect(screen.getByText('อุปกรณ์นี้ยังไม่พร้อมสำหรับการขายออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตและเข้าสู่ระบบก่อนใช้งาน')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'เงินสด' }));
     fireEvent.click(screen.getByRole('button', { name: 'QR พร้อมเพย์' }));

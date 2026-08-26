@@ -16,7 +16,7 @@ import qrcode
 from qrcode.constants import ERROR_CORRECT_M
 from werkzeug.exceptions import NotFound
 from database import ROOT, connect_db, execute, init_schema, is_postgres, transaction
-from promptpay_qr import PromptPayError, generate_promptpay_payload
+from promptpay_qr import PromptPayError, generate_promptpay_payload, promptpay_merchant_account_info
 
 app = Flask(__name__, static_folder=None)
 PUBLIC_ROOT = ROOT / 'public'
@@ -561,6 +561,25 @@ def react_index(route=None):
    return response
  response=send_from_directory(REACT_ROOT,'index.html')
  response.headers['Cache-Control']='no-cache'
+ return response
+
+@app.get('/api/offline-payment-config')
+def offline_payment_config():
+ promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
+ configured=False
+ merchant_account_info=None
+ if promptpay_id:
+  try:
+   merchant_account_info=promptpay_merchant_account_info(promptpay_id)
+   configured=True
+  except PromptPayError:
+   pass
+ payload={'configured':configured,'version':1}
+ if merchant_account_info is not None:
+  payload['merchantAccountInfo']=merchant_account_info
+ response=jsonify(payload)
+ response.headers['Cache-Control']='private, no-store'
+ response.headers['X-Content-Type-Options']='nosniff'
  return response
 
 @app.get('/<path:filename>')

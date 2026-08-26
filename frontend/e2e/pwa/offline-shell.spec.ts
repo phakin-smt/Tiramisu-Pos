@@ -11,27 +11,29 @@ async function readCatalogSnapshot(page: Page) {
     });
     try {
       if (!database.objectStoreNames.contains('productSnapshot') || !database.objectStoreNames.contains('metadata')) return null;
-      const stores = ['productSnapshot', 'metadata', 'offlineOrders', 'offlineOrderItems', 'offlineStockMovements'];
+      const stores = ['productSnapshot', 'metadata', 'offlineOrders', 'offlineOrderItems', 'offlineStockMovements', 'offlinePaymentConfig'];
       if (stores.some((store) => !database.objectStoreNames.contains(store))) return null;
       const transaction = database.transaction(stores, 'readonly');
       const requestResult = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      const [snapshot, metadata, authorization, orders, items, movements] = await Promise.all([
+      const [snapshot, metadata, authorization, orders, items, movements, paymentConfig] = await Promise.all([
         requestResult(transaction.objectStore('productSnapshot').get('confirmed')),
         requestResult(transaction.objectStore('metadata').get('catalog')),
         requestResult(transaction.objectStore('metadata').get('offlineAuthorization')),
         requestResult(transaction.objectStore('offlineOrders').getAll()),
         requestResult(transaction.objectStore('offlineOrderItems').getAll()),
         requestResult(transaction.objectStore('offlineStockMovements').getAll()),
+        requestResult(transaction.objectStore('offlinePaymentConfig').get('promptpay')),
       ]) as [
         undefined | { products: Array<{ id: number; name: string; stock: number }> },
         undefined | { lastSuccessfulCatalogSyncAt: string; schemaVersion: number },
         undefined | { enabledAt: string; expiresAt: string },
-        Array<{ localOrderId: string; localOrderNumber: string; syncStatus: string }>,
+        Array<{ localOrderId: string; localOrderNumber: string; syncStatus: string; paymentMethod: string; paymentConfirmation?: string; idempotencyKey?: string }>,
         Array<{ localOrderId: string; productId: number; qty: number; giveawayQty: number }>,
         Array<{ localOrderId: string; semanticType: string; quantity: number }>,
+        undefined | { merchantAccountInfo: string; version: number; provisionedAt: string },
       ];
       if (!snapshot || !metadata) return null;
       return {
@@ -43,6 +45,7 @@ async function readCatalogSnapshot(page: Page) {
         orders,
         items,
         movements,
+        paymentConfig: paymentConfig ?? null,
       };
     } finally {
       database.close();
@@ -82,9 +85,14 @@ test('installed shell reopens offline without caching API responses', async ({ c
   if (!catalogSnapshot) throw new Error('Confirmed catalog snapshot was not found');
   expect(catalogSnapshot.productNames).toContain('E2E Original');
   expect(catalogSnapshot.lastSuccessfulCatalogSyncAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-  expect(catalogSnapshot.schemaVersion).toBe(2);
+  expect(catalogSnapshot.schemaVersion).toBe(4);
   expect(catalogSnapshot.authorization?.enabledAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   expect(catalogSnapshot.authorization?.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(catalogSnapshot.paymentConfig).toMatchObject({
+    merchantAccountInfo: expect.stringMatching(/^0016A000000677010111/),
+    version: 1,
+    provisionedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+  });
 
   const onlineApiStatus = await page.evaluate(async () => (await fetch('/api/health')).status);
   expect(onlineApiStatus).toBe(200);
@@ -105,7 +113,7 @@ test('installed shell reopens offline without caching API responses', async ({ c
   trackOfflineRequests = true;
   await context.setOffline(true);
   await expect(page.locator('.connectivity-status.is-offline').first()).toContainText('Offline');
-  await expect(page.getByRole('note')).toContainText('ขายเงินสดได้บนอุปกรณ์ที่ได้รับอนุญาต');
+  await expect(page.getByRole('note')).toContainText('ขายเงินสดและ PromptPay ได้บนอุปกรณ์ที่ได้รับอนุญาต');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('navigation', { name: 'เมนูหลัก' })).toBeVisible();
@@ -125,12 +133,13 @@ test('installed shell reopens offline without caching API responses', async ({ c
   await expect(page.getByLabel('ส่วนลด')).toHaveValue('0');
   await expect(page.getByRole('region', { name: 'ยอดรวมตะกร้า' })).toContainText('฿138.00');
   await expect(page.getByRole('button', { name: 'เงินสด' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeDisabled();
-  await expect(page.getByText('PromptPay แบบออฟไลน์จะเปิดใช้งานในขั้นตอนถัดไป')).toBeVisible();
-  await page.getByRole('button', { name: 'เงินสด' }).click();
-  await page.getByRole('button', { name: 'Exact' }).click();
-  const confirmCash = page.getByRole('button', { name: 'ยืนยันรับเงิน' });
-  await confirmCash.click();
+  await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeEnabled();
+  await page.getByRole('button', { name: 'QR พร้อมเพย์' }).click();
+  const offlinePromptPay = page.getByRole('dialog', { name: 'QR พร้อมเพย์' });
+  await expect(offlinePromptPay.getByText('Local Mode · สร้าง QR ในเครื่อง')).toBeVisible();
+  await expect(offlinePromptPay.getByRole('img')).toBeVisible();
+  await expect(offlinePromptPay.getByText(/กรุณาตรวจชื่อผู้รับก่อนยืนยันการโอน/)).toBeVisible();
+  await offlinePromptPay.getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' }).click();
   await expect(page.getByText(/บันทึกออเดอร์ออฟไลน์ #OFF-.*แล้ว · ยังไม่ได้ Sync/)).toBeVisible();
   await expect(page.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeVisible();
   await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toContainText('คงเหลือ 17 ชิ้น');
@@ -139,6 +148,10 @@ test('installed shell reopens offline without caching API responses', async ({ c
   expect(offlineSale.orders).toHaveLength(1);
   expect(offlineSale.orders[0].localOrderNumber).toMatch(/^OFF-/);
   expect(offlineSale.orders[0].syncStatus).toBe('pending');
+  expect(offlineSale.orders[0].paymentMethod).toBe('transfer');
+  expect(offlineSale.orders[0].paymentConfirmation).toBe('manual');
+  // Every offline order carries the key a later sync will replay it under.
+  expect(offlineSale.orders[0].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
   expect(offlineSale.items).toEqual([expect.objectContaining({ qty: 2, giveawayQty: 1 })]);
   expect(offlineSale.movements).toEqual(expect.arrayContaining([
     expect.objectContaining({ semanticType: 'sale', quantity: -2 }),
@@ -176,16 +189,22 @@ test('installed shell reopens offline without caching API responses', async ({ c
   await expect(page.getByText('Local Mode · รอ Sync 1 รายการ')).toBeVisible();
   await expect(page.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeVisible();
   await expect(page.getByText('ใช้สต็อกในเครื่องระหว่างรอ Sync')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeEnabled();
 
   await page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' }).click();
-  await page.getByRole('button', { name: 'เงินสด' }).click();
-  await page.getByRole('button', { name: 'Exact' }).click();
-  await page.getByRole('button', { name: 'ยืนยันรับเงิน' }).click();
+  await page.getByRole('button', { name: 'QR พร้อมเพย์' }).click();
+  const reconnectedPromptPay = page.getByRole('dialog', { name: 'QR พร้อมเพย์' });
+  await expect(reconnectedPromptPay.getByText('Local Mode · สร้าง QR ในเครื่อง')).toBeVisible();
+  await expect(reconnectedPromptPay.getByRole('img')).toBeVisible();
+  await reconnectedPromptPay.getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' }).click();
   await expect(page.getByText('Local Mode · รอ Sync 2 รายการ')).toBeVisible();
   await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toContainText('คงเหลือ 16 ชิ้น');
   const reconnectedSale = await readCatalogSnapshot(page);
   expect(reconnectedSale?.orders).toHaveLength(2);
+  expect(reconnectedSale?.orders[1]).toMatchObject({ paymentMethod: 'transfer', paymentConfirmation: 'manual' });
+  const offlineKeys = (reconnectedSale?.orders ?? []).map((entry) => entry.idempotencyKey);
+  expect(offlineKeys.every(Boolean)).toBe(true);
+  expect(new Set(offlineKeys).size).toBe(offlineKeys.length);
   expect(reconnectedSale?.productStocks['E2E Original']).toBe(16);
   expect(offlineOrderRequests).toHaveLength(0);
 

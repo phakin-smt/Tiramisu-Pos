@@ -1,7 +1,8 @@
 import type { VitePWAOptions } from 'vite-plugin-pwa';
 
 export const pwaOptions: Partial<VitePWAOptions> = {
-  registerType: 'autoUpdate',
+  // The app decides when an update may take over — see src/pwa/updateGate.ts.
+  registerType: 'prompt',
   injectRegister: null,
   manifest: {
     name: 'Baannoi-POS',
@@ -38,7 +39,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   workbox: {
     cleanupOutdatedCaches: true,
     clientsClaim: true,
-    skipWaiting: true,
+    // A new worker waits until the gate releases it, so it cannot swap assets
+    // out from under an open cart.
+    skipWaiting: false,
     navigateFallback: '/next/index.html',
     navigateFallbackDenylist: [/^\/api(?:\/|$)/],
     globPatterns: ['**/*.{html,js,css,png,svg,woff2}'],
