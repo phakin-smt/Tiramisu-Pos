@@ -10,7 +10,7 @@ import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import { AuthProvider } from '../auth/AuthContext';
 import { readConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshot } from '../../offline/catalogSnapshot';
 import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
-import { getOfflineOrderByIdempotencyKey, getOfflineOrderDetails, getPendingOfflineOrderCount, getRecentOfflineOrders, recordOfflineCashSale } from '../../offline/offlineOrders';
+import { getOfflineOrderByIdempotencyKey, getOfflineOrderDetails, getPendingOfflineOrderCount, getRecentOfflineOrders, getUnsyncedOfflineOrderCount, recordOfflineCashSale } from '../../offline/offlineOrders';
 import {
   isCheckoutActive,
   queueServiceWorkerUpdate,
@@ -83,6 +83,11 @@ function confirmCashExact() {
 }
 function transferButton() { return screen.getByRole('button', { name: /QR พร้อมเพย์/ }); }
 function orderCalls(fetchMock: ReturnType<typeof vi.fn>) { return fetchMock.mock.calls.filter(([url, init]) => url === '/api/orders' && (init as RequestInit).method === 'POST'); }
+function bodyOf(init: RequestInit) { return JSON.parse(String(init.body ?? '{}')) as { offline?: { businessDate: string; createdAt: string }; items: Array<{ productId: number; qty: number; giveawayQty: number }> }; }
+function isReplay(init: RequestInit) { return Boolean(bodyOf(init).offline); }
+/** Cloud checkouts only, excluding replays of sales already made offline. */
+function saleCalls(fetchMock: ReturnType<typeof vi.fn>) { return orderCalls(fetchMock).filter(([, init]) => !isReplay(init as RequestInit)); }
+function replayCalls(fetchMock: ReturnType<typeof vi.fn>) { return orderCalls(fetchMock).filter(([, init]) => isReplay(init as RequestInit)); }
 function idempotencyKeyOf(call: unknown[]) { return ((call[1] as RequestInit).headers as Record<string, string>)['Idempotency-Key']; }
 function cartTotals() { return screen.getByRole('region', { name: 'ยอดรวมตะกร้า' }); }
 
@@ -187,6 +192,8 @@ describe('Sell checkout', () => {
       await renderCheckout();
       add(2);
       confirmCashExact();
+      // The timeout is armed inside the request, so wait for it to be sent.
+      await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
       await vi.advanceTimersByTimeAsync(CHECKOUT_API_TIMEOUT_MS);
 
       expect(await screen.findByRole('alert')).toHaveTextContent(REQUEST_TIMEOUT_MESSAGE);
@@ -214,6 +221,7 @@ describe('Sell checkout', () => {
       await renderCheckout();
       add();
       confirmCashExact();
+      await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
       await vi.advanceTimersByTimeAsync(CHECKOUT_API_TIMEOUT_MS);
       expect(await screen.findByRole('alert')).toHaveTextContent(REQUEST_TIMEOUT_MESSAGE);
 
@@ -288,27 +296,110 @@ describe('Sell checkout', () => {
       amountTendered: 100,
       changeAmount: 31,
     });
-    const fetchMock = mockCheckout();
+    // The server refuses this replay outright, so the queue cannot drain and
+    // Local Mode stays latched — unsynced revenue keeps owning local stock.
+    const fetchMock = mockCheckout((url, init) => (
+      url === '/api/orders' && init.method === 'POST' && isReplay(init)
+        ? json({ error: 'สินค้าในตะกร้าหรือจำนวนแถมไม่ถูกต้อง' }, 400)
+        : undefined
+    ));
 
     render(<SellPage />);
     expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
     expect(screen.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 9 ชิ้น');
     expect(transferButton()).toBeEnabled();
+    await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(1));
 
     add();
     confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
     await vi.waitFor(() => expect(screen.getByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument());
-    expect(await getPendingOfflineOrderCount()).toBe(2);
     expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
-    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(saleCalls(fetchMock)).toHaveLength(0);
 
     cleanup();
     render(<SellPage />);
     expect(await screen.findByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 8 ชิ้น');
-    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(saleCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it('drains the offline queue on reconnect, releases Local Mode, and sells to the server again', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    await recordOfflineCashSale({
+      identity: {
+        localOrderId: '550e8400-e29b-41d4-a716-446655440000',
+        localOrderNumber: 'OFF-20260821-143522-0000',
+        createdAt: '2026-08-21T07:35:22.000Z',
+        businessDate: '2026-08-21',
+      },
+      idempotencyKey: 'aa11bb22-0000-4000-8000-00000000cccc',
+      order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+      amountTendered: 200,
+      changeAmount: 62,
+    });
+    const fetchMock = mockCheckout();
+
+    render(<SellPage />);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(() => expect(screen.queryByText(/Local Mode/)).not.toBeInTheDocument());
+
+    const [[, replayInit]] = replayCalls(fetchMock);
+    const replay = bodyOf(replayInit as RequestInit);
+    expect(replay.offline).toMatchObject({ businessDate: '2026-08-21', createdAt: '2026-08-21T07:35:22.000Z' });
+    // Stored qty is net of giveaways; the API expects the gross quantity.
+    expect(replay.items).toEqual([{ productId: 1, qty: 3, giveawayQty: 1 }]);
+    expect(((replayInit as RequestInit).headers as Record<string, string>)['Idempotency-Key'])
+      .toBe('aa11bb22-0000-4000-8000-00000000cccc');
+    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect((await getRecentOfflineOrders(1))[0]).toMatchObject({ syncStatus: 'synced', serverOrderNumber: order.orderNumber });
+
+    // Local Mode released, so the next sale goes straight to the server.
+    add();
+    confirmCashExact();
+    expect(await screen.findByText(/บันทึกออเดอร์ #/)).toBeInTheDocument();
+    expect(saleCalls(fetchMock)).toHaveLength(1);
+    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+  });
+
+  it('stops the drain and keeps the rest pending when the network dies mid-queue', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await refreshOfflineAuthorization();
+    for (const [index, suffix] of ['1111', '2222'].entries()) {
+      await recordOfflineCashSale({
+        identity: {
+          localOrderId: `550e8400-e29b-41d4-a716-44665544${suffix}`,
+          localOrderNumber: `OFF-20260821-14352${index}-${suffix}`,
+          createdAt: `2026-08-21T07:3${index}:00.000Z`,
+          businessDate: '2026-08-21',
+        },
+        idempotencyKey: `aa11bb22-0000-4000-8000-0000000${suffix}`,
+        order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
+        totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+        amountTendered: 100,
+        changeAmount: 31,
+      });
+    }
+    let replays = 0;
+    const fetchMock = mockCheckout((url, init) => {
+      if (url !== '/api/orders' || init.method !== 'POST' || !isReplay(init)) return undefined;
+      replays += 1;
+      return replays === 1 ? json(order) : Promise.reject(new TypeError('Failed to fetch'));
+    });
+
+    render(<SellPage />);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(2));
+
+    // The first is banked; the second stays pending for the next reconnect.
+    await vi.waitFor(async () => expect(await getPendingOfflineOrderCount()).toBe(1));
+    expect(await getUnsyncedOfflineOrderCount()).toBe(1);
+    expect(await screen.findByText(/Local Mode · รอ Sync 1 รายการ/)).toBeInTheDocument();
   });
 
   it('creates an atomic local PromptPay sale while online Local Mode is latched by a pending order', async () => {
@@ -328,10 +419,15 @@ describe('Sell checkout', () => {
       amountTendered: 100,
       changeAmount: 31,
     });
-    const fetchMock = mockCheckout();
+    const fetchMock = mockCheckout((url, init) => (
+      url === '/api/orders' && init.method === 'POST' && isReplay(init)
+        ? json({ error: 'สินค้าในตะกร้าหรือจำนวนแถมไม่ถูกต้อง' }, 400)
+        : undefined
+    ));
 
     render(<SellPage />);
     expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
+    await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(1));
     add();
     fireEvent.click(transferButton());
     const modal = screen.getByRole('dialog', { name: 'QR พร้อมเพย์' });
@@ -344,12 +440,12 @@ describe('Sell checkout', () => {
     fireEvent.click(confirm);
 
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
-    expect(await getPendingOfflineOrderCount()).toBe(2);
+    expect(await getUnsyncedOfflineOrderCount()).toBe(2);
     expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
     const [latest] = await getRecentOfflineOrders(1);
     expect(latest).toMatchObject({ paymentMethod: 'transfer', paymentConfirmation: 'manual', syncStatus: 'pending' });
     expect((await getOfflineOrderDetails(latest.localOrderId))?.movements).toHaveLength(1);
-    expect(orderCalls(fetchMock)).toHaveLength(0);
+    expect(saleCalls(fetchMock)).toHaveLength(0);
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
   });
 

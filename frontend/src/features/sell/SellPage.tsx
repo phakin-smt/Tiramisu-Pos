@@ -14,6 +14,8 @@ import type { CatalogProduct } from '../../types/products';
 import { OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE } from '../../offline/offlineAuthorization';
 import { LOCAL_MODE_MESSAGE, PENDING_OFFLINE_ORDERS_MESSAGE } from '../../offline/offlineOrders';
 import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
+import { getPendingStockReviewCount, STOCK_REVIEW_HEADING } from '../../offline/stockReconciliation';
+import { useOfflineSync } from '../../offline/useOfflineSync';
 import { setCheckoutActive } from '../../pwa/updateGate';
 import { Cart } from './Cart';
 import { CashPaymentModal } from './CashPaymentModal';
@@ -39,7 +41,7 @@ export function SellPage() {
   const { isOnline, isBackendOnline } = useConnectivity();
   const offlineAuthorization = useOfflineAuthorization();
   const productsQuery = useProducts();
-  const localMode = productsQuery.pendingOfflineOrderCount > 0;
+  const localMode = productsQuery.unsyncedOfflineOrderCount > 0;
   const dailySummary = useDailySummary();
   const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active || product.stock > 0), [productsQuery.data]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -89,6 +91,24 @@ export function SellPage() {
     setCheckoutActive(checkoutActive);
     return () => setCheckoutActive(false);
   }, [checkoutActive]);
+  // Never drains mid-sale, and only once the backend is genuinely reachable.
+  const refreshProducts = productsQuery.refresh;
+  // Read from IndexedDB, not from the last sync result, so an outstanding review
+  // survives reload and stays visible until it is actually reconciled.
+  const [stockReviewCount, setStockReviewCount] = useState(0);
+  const loadStockReviews = useCallback(async () => {
+    try { setStockReviewCount(await getPendingStockReviewCount()); } catch { setStockReviewCount(0); }
+  }, []);
+  useEffect(() => { void loadStockReviews(); }, [loadStockReviews]);
+  const onSyncSettled = useCallback(() => {
+    refreshProducts();
+    void loadStockReviews();
+  }, [loadStockReviews, refreshProducts]);
+  const offlineSync = useOfflineSync(
+    productsQuery.unsyncedOfflineOrderCount,
+    checkoutActive,
+    onSyncSettled,
+  );
   // Only ever latches towards Local: an open payment modal must never flip back
   // to Cloud under a customer who is already scanning.
   useEffect(() => {
@@ -206,7 +226,8 @@ export function SellPage() {
     <OpeningFloatCard cashSales={dailySummary.data?.cashTotal ?? null} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
     {productsQuery.storageError && <div className="catalog-storage-warning" role="alert">{productsQuery.storageError}</div>}
-    {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.pendingOfflineOrderCount} รายการ</strong><span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span></div>}
+    {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.unsyncedOfflineOrderCount} รายการ</strong><span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span>{offlineSync.error && <span>{offlineSync.error}</span>}<button type="button" className="secondary-button" disabled={offlineSync.syncing || !isBackendOnline || checkoutActive} onClick={() => { void offlineSync.runSync(); }}>{offlineSync.syncing ? 'กำลัง Sync...' : 'Sync ตอนนี้'}</button></div>}
+    {stockReviewCount > 0 && <div className="catalog-storage-warning" role="alert"><strong>{STOCK_REVIEW_HEADING} · {stockReviewCount} รายการ</strong><span>Sync แล้ว แต่สต็อกบนระบบไม่พอ · ไปที่หน้าจัดการสต็อกเพื่อตรวจนับและยืนยัน</span></div>}
     <div className="sell-workspace">
       <section className="sell-catalog" aria-labelledby="catalog-title">
         <div className="section-heading catalog-heading"><div><h2 id="catalog-title">เมนูของหวาน</h2><span>{products.length} รายการ</span></div><button type="button" className="secondary-button" disabled={productsQuery.loading} onClick={productsQuery.refresh}>{isOnline ? 'รีเฟรชสินค้า' : 'อ่านข้อมูลออฟไลน์อีกครั้ง'}</button></div>

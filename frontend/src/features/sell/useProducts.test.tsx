@@ -105,7 +105,7 @@ describe('useProducts offline snapshot behavior', () => {
     const { result } = renderHook(() => useProducts(), { wrapper });
     await waitFor(() => expect(result.current.source).toBe('cache-pending-sync'));
     expect(result.current.data?.[0].stock).toBe(7);
-    expect(result.current.pendingOfflineOrderCount).toBe(1);
+    expect(result.current.unsyncedOfflineOrderCount).toBe(1);
     expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
   });
 });

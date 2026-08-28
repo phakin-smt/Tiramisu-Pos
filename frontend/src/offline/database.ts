@@ -55,7 +55,32 @@ export interface OfflineOrder {
   changeAmount?: number;
   paymentConfirmation?: 'manual';
   status: 'completed';
-  syncStatus: 'pending';
+  /**
+   * `failed` is a sale the server refused for a reason retrying cannot fix. It
+   * still counts as unsynced revenue, so it keeps Local Mode latched until a
+   * human deals with it.
+   */
+  syncStatus: 'pending' | 'synced' | 'failed';
+  syncedAt?: string;
+  syncError?: string;
+  /** Server order number assigned when the sale was accepted. */
+  serverOrderNumber?: string;
+  /** The server floored stock at zero for this sale; someone must reconcile it. */
+  stockReview?: boolean;
+  /** What the server could not deduct, per product, exactly as it reported it. */
+  stockShortfalls?: OfflineStockShortfall[];
+  /**
+   * Products whose review a physical count has already settled. Resolution is
+   * additive so the shortfall history above is never rewritten or erased.
+   */
+  stockReviewResolvedProductIds?: number[];
+  stockReviewResolvedAt?: string;
+}
+
+export interface OfflineStockShortfall {
+  productId: number;
+  productName: string;
+  shortfall: number;
 }
 
 export interface OfflineOrderItem {
@@ -141,6 +166,15 @@ export function openBaannoiPosDatabase(): Promise<IDBPDatabase<BaannoiPosDatabas
         transaction.objectStore('offlineOrders')
           .createIndex('by-idempotency-key', 'idempotencyKey', { unique: true });
       }
+    },
+    /**
+     * Yield the moment another context needs to upgrade or delete the database.
+     * Without this an idle connection — a second tab, or the Safari tab beside
+     * the installed app — blocks that request forever, and every offline read
+     * hangs with no error to show.
+     */
+    blocking(_currentVersion, _blockedVersion, event) {
+      (event.target as IDBDatabase | null)?.close();
     },
   });
 }

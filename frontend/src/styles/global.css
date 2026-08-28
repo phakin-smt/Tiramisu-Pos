@@ -705,3 +705,27 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .mobile-cart-bar { min-height: 62px; padding-inline: 20px; border-radius: var(--radius-pill); background: linear-gradient(135deg, #39704b, #28563a); box-shadow: 0 9px 24px rgba(35,73,48,.3); }
   .promptpay-modal, .close-day-modal { border-radius: 22px 22px 0 0; }
 }
+
+/* Offline stock reconciliation: owner counts the shelf and confirms the delta. */
+.stock-reconciliation { border: 1px solid var(--danger); }
+.stock-reconciliation .section-heading > div span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 12px; }
+.reconciliation-resolved { margin: 0 0 12px; padding: 9px 12px; border-radius: var(--radius-md); color: #1f5c46; background: #e5f0eb; font-size: 13px; }
+.reconciliation-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.reconciliation-item { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.reconciliation-product { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.reconciliation-product span { color: var(--text-soft); font-size: 12px; }
+.reconciliation-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0; }
+.reconciliation-figures div { display: grid; gap: 2px; }
+.reconciliation-figures dt { color: var(--text-soft); font-size: 12px; }
+.reconciliation-figures dd { margin: 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.reconciliation-figures dd.is-negative { color: var(--danger); }
+.reconciliation-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reconciliation-entry label { flex: 0 0 auto; font-weight: 700; font-size: 13px; }
+/* 44px targets and 16px text keep this usable on iPad without zoom-on-focus. */
+.reconciliation-entry input { flex: 1 1 120px; min-width: 100px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); font-size: 16px; text-align: right; font-variant-numeric: tabular-nums; }
+.reconciliation-entry button { flex: 0 0 auto; min-height: 44px; padding: 10px 18px; }
+.reconciliation-error { margin: 0; color: var(--danger); font-size: 13px; }
+@media (max-width: 640px) {
+  .reconciliation-entry { align-items: stretch; }
+  .reconciliation-entry input, .reconciliation-entry button { flex: 1 1 100%; }
+}

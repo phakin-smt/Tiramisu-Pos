@@ -59,9 +59,14 @@ export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
   );
 
   try {
-    const pendingCount = await transaction.objectStore('offlineOrders')
-      .index('by-sync-status')
-      .count('pending');
+    // Anything the server has not accepted still owns the local stock numbers,
+    // whether it is waiting to sync or was rejected outright.
+    const syncStatus = transaction.objectStore('offlineOrders').index('by-sync-status');
+    const [pending, failed] = await Promise.all([
+      syncStatus.count('pending'),
+      syncStatus.count('failed'),
+    ]);
+    const pendingCount = pending + failed;
     if (pendingCount > 0) {
       await transaction.done;
       return null;

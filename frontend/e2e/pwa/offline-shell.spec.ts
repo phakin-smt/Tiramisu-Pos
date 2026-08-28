@@ -30,7 +30,7 @@ async function readCatalogSnapshot(page: Page) {
         undefined | { products: Array<{ id: number; name: string; stock: number }> },
         undefined | { lastSuccessfulCatalogSyncAt: string; schemaVersion: number },
         undefined | { enabledAt: string; expiresAt: string },
-        Array<{ localOrderId: string; localOrderNumber: string; syncStatus: string; paymentMethod: string; paymentConfirmation?: string; idempotencyKey?: string }>,
+        Array<{ localOrderId: string; localOrderNumber: string; syncStatus: string; paymentMethod: string; paymentConfirmation?: string; idempotencyKey?: string; serverOrderNumber?: string }>,
         Array<{ localOrderId: string; productId: number; qty: number; giveawayQty: number }>,
         Array<{ localOrderId: string; semanticType: string; quantity: number }>,
         undefined | { merchantAccountInfo: string; version: number; provisionedAt: string },
@@ -55,12 +55,17 @@ async function readCatalogSnapshot(page: Page) {
 
 test('installed shell reopens offline without caching API responses', async ({ context, page }) => {
   const offlineOrderRequests: string[] = [];
+  const replayRequests: string[] = [];
   const offlinePromptPayRequests: string[] = [];
   let trackOfflineRequests = false;
   page.on('request', (request) => {
     if (!trackOfflineRequests) return;
     const path = new URL(request.url()).pathname;
-    if (path === '/api/orders' && request.method() === 'POST') offlineOrderRequests.push(request.url());
+    if (path === '/api/orders' && request.method() === 'POST') {
+      // A replay carries the device's own stamp; a cloud sale does not.
+      const replay = Boolean(JSON.parse(request.postData() ?? '{}').offline);
+      (replay ? replayRequests : offlineOrderRequests).push(request.url());
+    }
     if (path === '/api/payment-qr') offlinePromptPayRequests.push(request.url());
   });
 
@@ -186,40 +191,40 @@ test('installed shell reopens offline without caching API responses', async ({ c
     window.dispatchEvent(new Event('online'));
   });
   await expect(page.locator('.connectivity-status.is-online').first()).toContainText('Online');
-  await expect(page.getByText('Local Mode · รอ Sync 1 รายการ')).toBeVisible();
-  await expect(page.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeVisible();
-  await expect(page.getByText('ใช้สต็อกในเครื่องระหว่างรอ Sync')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeEnabled();
 
+  // Reconnecting drains the queue and releases Local Mode.
+  await expect.poll(() => replayRequests.length, { timeout: 15_000 }).toBe(1);
+  await expect(page.getByText(/Local Mode · รอ Sync/)).toBeHidden();
+  expect(offlineOrderRequests).toHaveLength(0);
+  const drained = await readCatalogSnapshot(page);
+  expect(drained?.orders).toHaveLength(1);
+  expect(drained?.orders[0].syncStatus).toBe('synced');
+  expect(drained?.orders[0].idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
+
+  // With the queue empty the next sale goes to the server again.
   await page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' }).click();
   await page.getByRole('button', { name: 'QR พร้อมเพย์' }).click();
   const reconnectedPromptPay = page.getByRole('dialog', { name: 'QR พร้อมเพย์' });
-  await expect(reconnectedPromptPay.getByText('Local Mode · สร้าง QR ในเครื่อง')).toBeVisible();
+  await expect(reconnectedPromptPay.getByText('Local Mode · สร้าง QR ในเครื่อง')).toBeHidden();
   await expect(reconnectedPromptPay.getByRole('img')).toBeVisible();
   await reconnectedPromptPay.getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' }).click();
-  await expect(page.getByText('Local Mode · รอ Sync 2 รายการ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toContainText('คงเหลือ 16 ชิ้น');
-  const reconnectedSale = await readCatalogSnapshot(page);
-  expect(reconnectedSale?.orders).toHaveLength(2);
-  expect(reconnectedSale?.orders[1]).toMatchObject({ paymentMethod: 'transfer', paymentConfirmation: 'manual' });
-  const offlineKeys = (reconnectedSale?.orders ?? []).map((entry) => entry.idempotencyKey);
-  expect(offlineKeys.every(Boolean)).toBe(true);
-  expect(new Set(offlineKeys).size).toBe(offlineKeys.length);
-  expect(reconnectedSale?.productStocks['E2E Original']).toBe(16);
-  expect(offlineOrderRequests).toHaveLength(0);
+  await expect(page.getByText(/บันทึกออเดอร์ #/)).toBeVisible();
+  expect(offlineOrderRequests).toHaveLength(1);
+  expect(offlinePromptPayRequests.length).toBeGreaterThan(0);
+  const afterCloudSale = await readCatalogSnapshot(page);
+  expect(afterCloudSale?.orders).toHaveLength(1);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('.connectivity-status.is-online').first()).toContainText('Online');
-  await expect(page.getByText('Local Mode · รอ Sync 2 รายการ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toContainText('คงเหลือ 16 ชิ้น');
-  expect((await readCatalogSnapshot(page))?.orders).toHaveLength(2);
-  expect(offlineOrderRequests).toHaveLength(0);
+  await expect(page.getByText(/Local Mode · รอ Sync/)).toBeHidden();
+  expect((await readCatalogSnapshot(page))?.orders).toHaveLength(1);
+  expect(replayRequests).toHaveLength(1);
 
   await page.goto('/next/orders', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/next\/orders$/);
   await expect(page.getByRole('heading', { name: 'ออเดอร์', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'เมนูหลัก' })).toBeVisible();
-  expect(offlineOrderRequests).toHaveLength(0);
+  expect(replayRequests).toHaveLength(1);
 });
 
 test('offline first run does not invent a catalog', async ({ context, page }) => {

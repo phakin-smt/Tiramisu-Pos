@@ -39,7 +39,12 @@ function mockStockRoutes(handler?: (url: string, init: RequestInit) => Response 
 }
 
 describe('StockPage', () => {
-  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date('2026-08-16T18:30:00Z')); });
+  // The page now reads offline stock reviews from IndexedDB, whose event loop
+  // runs on setImmediate — faking that would stall every database request.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    vi.setSystemTime(new Date('2026-08-16T18:30:00Z'));
+  });
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   it('defaults to the Bangkok business date and exposes current-day controls', async () => {

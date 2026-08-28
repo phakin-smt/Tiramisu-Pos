@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getProducts } from '../../api/products';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
 import { readConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshotIfNoPendingOrders } from '../../offline/catalogSnapshot';
-import { getPendingOfflineOrderCount } from '../../offline/offlineOrders';
+import { getUnsyncedOfflineOrderCount } from '../../offline/offlineOrders';
 import type { CatalogProduct } from '../../types/products';
 
 export type CatalogDataSource = 'server' | 'cache-offline' | 'cache-fallback' | 'cache-pending-sync';
@@ -15,7 +15,7 @@ interface ProductsState {
   storageError: string;
   source: CatalogDataSource | null;
   lastSuccessfulCatalogSyncAt: string | null;
-  pendingOfflineOrderCount: number;
+  unsyncedOfflineOrderCount: number;
 }
 
 const initialState: ProductsState = {
@@ -25,7 +25,7 @@ const initialState: ProductsState = {
   storageError: '',
   source: null,
   lastSuccessfulCatalogSyncAt: null,
-  pendingOfflineOrderCount: 0,
+  unsyncedOfflineOrderCount: 0,
 };
 
 function errorMessage(error: unknown, fallback: string) {
@@ -46,9 +46,9 @@ export function useProducts() {
     async function loadProducts() {
       if (!isOnline) {
         try {
-          const [snapshot, pendingOfflineOrderCount] = await Promise.all([
+          const [snapshot, unsyncedOfflineOrderCount] = await Promise.all([
             readConfirmedCatalogSnapshot(),
-            getPendingOfflineOrderCount(),
+            getUnsyncedOfflineOrderCount(),
           ]);
           if (!current) return;
           setState({
@@ -58,7 +58,7 @@ export function useProducts() {
             storageError: '',
             source: snapshot ? 'cache-offline' : null,
             lastSuccessfulCatalogSyncAt: snapshot?.metadata.lastSuccessfulCatalogSyncAt ?? null,
-            pendingOfflineOrderCount,
+            unsyncedOfflineOrderCount,
           });
         } catch (error) {
           if (!current) return;
@@ -69,7 +69,7 @@ export function useProducts() {
             storageError: errorMessage(error, 'ไม่สามารถอ่านข้อมูลสินค้าออฟไลน์ได้'),
             source: null,
             lastSuccessfulCatalogSyncAt: null,
-            pendingOfflineOrderCount: 0,
+            unsyncedOfflineOrderCount: 0,
           });
         }
         return;
@@ -91,13 +91,13 @@ export function useProducts() {
             storageError: errorMessage(error, 'ไม่สามารถบันทึกข้อมูลสินค้าออฟไลน์ได้'),
             source: 'server',
             lastSuccessfulCatalogSyncAt: previous.lastSuccessfulCatalogSyncAt,
-            pendingOfflineOrderCount: previous.pendingOfflineOrderCount,
+            unsyncedOfflineOrderCount: previous.unsyncedOfflineOrderCount,
           }));
           return;
         }
         if (!current) return;
         if (!metadata) {
-          const pendingOfflineOrderCount = await getPendingOfflineOrderCount();
+          const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount();
           const snapshot = await readConfirmedCatalogSnapshot();
           if (!current) return;
           setState({
@@ -107,7 +107,7 @@ export function useProducts() {
             storageError: '',
             source: snapshot ? 'cache-pending-sync' : null,
             lastSuccessfulCatalogSyncAt: snapshot?.metadata.lastSuccessfulCatalogSyncAt ?? null,
-            pendingOfflineOrderCount,
+            unsyncedOfflineOrderCount,
           });
           return;
         }
@@ -119,15 +119,15 @@ export function useProducts() {
           storageError: '',
           source: 'server',
           lastSuccessfulCatalogSyncAt: metadata.lastSuccessfulCatalogSyncAt,
-          pendingOfflineOrderCount: 0,
+          unsyncedOfflineOrderCount: 0,
         }));
       } catch (error) {
         if (!current || controller.signal.aborted) return;
         const networkError = errorMessage(error, 'ไม่สามารถโหลดข้อมูลสินค้าได้');
         try {
-          const [snapshot, pendingOfflineOrderCount] = await Promise.all([
+          const [snapshot, unsyncedOfflineOrderCount] = await Promise.all([
             readConfirmedCatalogSnapshot(),
-            getPendingOfflineOrderCount(),
+            getUnsyncedOfflineOrderCount(),
           ]);
           if (!current) return;
           setState((previous) => ({
@@ -138,7 +138,7 @@ export function useProducts() {
             source: snapshot ? 'cache-fallback' : previous.source,
             lastSuccessfulCatalogSyncAt: snapshot?.metadata.lastSuccessfulCatalogSyncAt
               ?? previous.lastSuccessfulCatalogSyncAt,
-            pendingOfflineOrderCount,
+            unsyncedOfflineOrderCount,
           }));
         } catch (storageError) {
           if (!current) return;

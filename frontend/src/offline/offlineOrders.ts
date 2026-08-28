@@ -10,6 +10,7 @@ import {
   type OfflineOrder,
   type OfflineOrderItem,
   type OfflineStockMovement,
+  type OfflineStockShortfall,
 } from './database';
 import { OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE } from './offlineAuthorization';
 
@@ -208,6 +209,117 @@ export async function getPendingOfflineOrderCount(): Promise<number> {
   const database = await openBaannoiPosDatabase();
   try {
     return await database.countFromIndex('offlineOrders', 'by-sync-status', 'pending');
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * Everything the server has not accepted yet, retryable or not. This is what
+ * keeps Local Mode latched and the catalog snapshot protected — a sale the
+ * server rejected is still money that has not been recorded upstream.
+ */
+export async function getUnsyncedOfflineOrderCount(): Promise<number> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    const transaction = database.transaction('offlineOrders', 'readonly');
+    const index = transaction.objectStore('offlineOrders').index('by-sync-status');
+    const [pending, failed] = await Promise.all([
+      index.count('pending'),
+      index.count('failed'),
+      transaction.done,
+    ]);
+    return pending + failed;
+  } finally {
+    database.close();
+  }
+}
+
+export async function getOfflineOrdersToSync(): Promise<OfflineOrder[]> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    const orders = await database.getAllFromIndex('offlineOrders', 'by-sync-status', 'pending');
+    // Oldest first, so the server sees the day in the order it was sold.
+    return orders.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * Gives a pre-v4 order a replay key and persists it before it is ever sent.
+ *
+ * Such an order was only ever written on this device, so the server has never
+ * seen it and a fresh key is safe. Persisting first is what makes it safe: a
+ * drain interrupted after the POST still finds the same key next time.
+ */
+export async function ensureOfflineOrderIdempotencyKey(localOrderId: string): Promise<string | null> {
+  const database = await openBaannoiPosDatabase();
+  const transaction = database.transaction('offlineOrders', 'readwrite');
+  try {
+    const store = transaction.objectStore('offlineOrders');
+    const order = await store.get(localOrderId);
+    if (!order) {
+      await transaction.done;
+      return null;
+    }
+    if (order.idempotencyKey) {
+      await transaction.done;
+      return order.idempotencyKey;
+    }
+    const idempotencyKey = createClientUuid();
+    await store.put({ ...order, idempotencyKey });
+    await transaction.done;
+    return idempotencyKey;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The browser may already have aborted it. */ }
+    throw error;
+  } finally {
+    database.close();
+  }
+}
+
+export interface OfflineOrderSyncResult {
+  syncStatus: 'synced' | 'failed';
+  serverOrderNumber?: string;
+  syncError?: string;
+  stockReview?: boolean;
+  stockShortfalls?: OfflineStockShortfall[];
+}
+
+/**
+ * Records the outcome of one replay in its own transaction, so a failure part
+ * way through a drain never rolls back the orders already accepted.
+ */
+export async function markOfflineOrderSynced(
+  localOrderId: string,
+  result: OfflineOrderSyncResult,
+  syncedAt = new Date().toISOString(),
+): Promise<OfflineOrder | null> {
+  const database = await openBaannoiPosDatabase();
+  const transaction = database.transaction('offlineOrders', 'readwrite');
+  try {
+    const store = transaction.objectStore('offlineOrders');
+    const order = await store.get(localOrderId);
+    if (!order) {
+      await transaction.done;
+      return null;
+    }
+    const updated: OfflineOrder = {
+      ...order,
+      syncStatus: result.syncStatus,
+      ...(result.syncStatus === 'synced' ? { syncedAt } : {}),
+      ...(result.serverOrderNumber ? { serverOrderNumber: result.serverOrderNumber } : {}),
+      ...(result.syncError ? { syncError: result.syncError } : {}),
+      ...(result.stockReview ? { stockReview: true } : {}),
+      ...(result.stockShortfalls?.length ? { stockShortfalls: result.stockShortfalls } : {}),
+    };
+    await store.put(updated);
+    await transaction.done;
+    return updated;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The browser may already have aborted it. */ }
+    throw error;
   } finally {
     database.close();
   }

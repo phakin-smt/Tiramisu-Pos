@@ -8,6 +8,8 @@ import type {
   HistoricalCorrectionRequest,
   HistoricalCorrectionResponse,
   StockPlan,
+  StockReconciliationRequest,
+  StockReconciliationResponse,
   StockSummaryResponse,
 } from '../types/stock';
 
@@ -21,6 +23,11 @@ export function adjustStock(payload: StockAdjustmentRequest): Promise<StockAdjus
 
 export function correctHistoricalStock(payload: HistoricalCorrectionRequest): Promise<HistoricalCorrectionResponse> {
   return postJson('/api/stock/historical-correction', payload);
+}
+
+/** Corrects current stock after an offline sync oversold it. */
+export function reconcileStock(payload: StockReconciliationRequest): Promise<StockReconciliationResponse> {
+  return postJson('/api/stock/reconcile', payload);
 }
 
 export function getStockPlans(signal?: AbortSignal): Promise<StockPlan[]> {

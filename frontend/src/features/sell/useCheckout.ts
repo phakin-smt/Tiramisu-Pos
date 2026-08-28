@@ -6,7 +6,7 @@ import type { OfflineOrder } from '../../offline/database';
 import {
   createClientUuid,
   createOfflineOrderIdentity,
-  getPendingOfflineOrderCount,
+  getUnsyncedOfflineOrderCount,
   recordOfflineSale,
   type OfflineSaleDetails,
 } from '../../offline/offlineOrders';
@@ -47,9 +47,11 @@ export function useCheckout() {
     try {
       // Re-evaluate the authoritative mode at confirmation time: live refs and a
       // fresh IndexedDB count, never a value captured at render.
-      const pendingOfflineOrderCount = await getPendingOfflineOrderCount();
+      const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount();
       const { isBackendOnline } = getSnapshot();
-      const useLocalCheckout = !isBackendOnline || pendingOfflineOrderCount > 0;
+      // Anything the server has not accepted still owns local stock, so a sale
+      // that failed to sync keeps the next one local too.
+      const useLocalCheckout = !isBackendOnline || unsyncedOfflineOrderCount > 0;
       if (!useLocalCheckout) {
         const response = await createOrder(payload, idempotencyKey);
         pendingServerKey.current = null;
