@@ -180,6 +180,8 @@ test('installed shell reopens offline without caching API responses', async ({ c
       return 'network-error';
     }
   });
+  // Still a native TypeError, which is what keeps unsynced orders pending rather
+  // than being marked permanently failed.
   expect(offlineApiResult).toBe('network-error');
 
   await page.addInitScript(() => {

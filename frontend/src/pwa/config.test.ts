@@ -15,14 +15,17 @@ describe('PWA configuration', () => {
     expect(pwaOptions.workbox?.navigateFallback).toBe('/next/index.html');
   });
 
-  it('keeps API reads network-only and out of navigation fallback', () => {
-    const apiRule = pwaOptions.workbox?.runtimeCaching?.find(
-      (rule) => rule.handler === 'NetworkOnly',
-    );
-    expect(apiRule).toMatchObject({ handler: 'NetworkOnly', method: 'GET' });
-    expect(apiRule?.urlPattern).toBeInstanceOf(RegExp);
-    expect((apiRule?.urlPattern as RegExp).test('https://example.com/api/auth/status')).toBe(true);
-    expect((apiRule?.urlPattern as RegExp).test('https://example.com/next/assets/app.js')).toBe(false);
+  it('never claims an API request, so offline failures stay native network errors', () => {
+    // Claiming /api would reject inside the worker and turn a TypeError into a
+    // console-spamming FetchEvent error; the sync engine depends on the TypeError.
+    expect(pwaOptions.workbox?.runtimeCaching ?? []).toEqual([]);
     expect(pwaOptions.workbox?.navigateFallbackDenylist?.[0].test('/api/orders')).toBe(true);
+    expect(pwaOptions.workbox?.navigateFallbackDenylist?.[0].test('/next/sell')).toBe(false);
+  });
+
+  it('precaches only build assets and never an API path', () => {
+    expect(pwaOptions.workbox?.globPatterns).toEqual(['**/*.{html,js,css,png,svg,woff2}']);
+    expect(pwaOptions.workbox?.skipWaiting).toBe(false);
+    expect(pwaOptions.registerType).toBe('prompt');
   });
 });

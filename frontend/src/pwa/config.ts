@@ -45,12 +45,12 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     navigateFallback: '/next/index.html',
     navigateFallbackDenylist: [/^\/api(?:\/|$)/],
     globPatterns: ['**/*.{html,js,css,png,svg,woff2}'],
-    runtimeCaching: [
-      {
-        urlPattern: /^https?:\/\/[^/]+\/api(?:\/|$)/,
-        handler: 'NetworkOnly',
-        method: 'GET',
-      },
-    ],
+    // No runtime route for /api on purpose. A NetworkOnly route makes the worker
+    // claim every API request and then reject it while offline, which floods the
+    // console with "FetchEvent resulted in a network error response" for calls the
+    // app expects to fail. With no matching route the worker never claims them:
+    // the browser fails them natively with a TypeError, which is exactly what
+    // isNetworkFailure() reads to keep unsynced orders pending instead of failed.
+    // Nothing caches /api either way, and navigations stay covered by the denylist.
   },
 };
