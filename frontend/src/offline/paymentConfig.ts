@@ -42,3 +42,13 @@ export async function provisionOfflinePaymentConfig(): Promise<OfflinePaymentCon
   if (!response.configured || !response.merchantAccountInfo) return null;
   return replaceOfflinePaymentConfig(response.merchantAccountInfo, response.version);
 }
+
+/** Drops the provisioned PromptPay receiver when the device is signed out. */
+export async function clearOfflinePaymentConfig(): Promise<void> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    await database.delete('offlinePaymentConfig', PROMPTPAY_CONFIG_KEY);
+  } finally {
+    database.close();
+  }
+}

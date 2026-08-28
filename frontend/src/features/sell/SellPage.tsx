@@ -16,6 +16,8 @@ import { LOCAL_MODE_MESSAGE, PENDING_OFFLINE_ORDERS_MESSAGE } from '../../offlin
 import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
 import { getPendingStockReviewCount, STOCK_REVIEW_HEADING } from '../../offline/stockReconciliation';
 import { useOfflineSync } from '../../offline/useOfflineSync';
+import { getUnsyncedOfflineOrders } from '../../offline/offlineOrders';
+import { OfflineOrderQueuePanel } from './OfflineOrderQueuePanel';
 import { setCheckoutActive } from '../../pwa/updateGate';
 import { Cart } from './Cart';
 import { CashPaymentModal } from './CashPaymentModal';
@@ -96,12 +98,22 @@ export function SellPage() {
   // Read from IndexedDB, not from the last sync result, so an outstanding review
   // survives reload and stays visible until it is actually reconciled.
   const [stockReviewCount, setStockReviewCount] = useState(0);
+  const [queueCounts, setQueueCounts] = useState({ pending: 0, failed: 0 });
+  const [queueRevision, setQueueRevision] = useState(0);
   const loadStockReviews = useCallback(async () => {
     try { setStockReviewCount(await getPendingStockReviewCount()); } catch { setStockReviewCount(0); }
+    try {
+      const unsynced = await getUnsyncedOfflineOrders();
+      setQueueCounts({
+        pending: unsynced.filter((entry) => entry.syncStatus === 'pending').length,
+        failed: unsynced.filter((entry) => entry.syncStatus === 'failed').length,
+      });
+    } catch { setQueueCounts({ pending: 0, failed: 0 }); }
   }, []);
   useEffect(() => { void loadStockReviews(); }, [loadStockReviews]);
   const onSyncSettled = useCallback(() => {
     refreshProducts();
+    setQueueRevision((current) => current + 1);
     void loadStockReviews();
   }, [loadStockReviews, refreshProducts]);
   const offlineSync = useOfflineSync(
@@ -226,7 +238,9 @@ export function SellPage() {
     <OpeningFloatCard cashSales={dailySummary.data?.cashTotal ?? null} />
     {stockNotice && <div className="stock-refresh-notice" role="status">{stockNotice}</div>}
     {productsQuery.storageError && <div className="catalog-storage-warning" role="alert">{productsQuery.storageError}</div>}
-    {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.unsyncedOfflineOrderCount} รายการ</strong><span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span>{offlineSync.error && <span>{offlineSync.error}</span>}<button type="button" className="secondary-button" disabled={offlineSync.syncing || !isBackendOnline || checkoutActive} onClick={() => { void offlineSync.runSync(); }}>{offlineSync.syncing ? 'กำลัง Sync...' : 'Sync ตอนนี้'}</button></div>}
+    {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.unsyncedOfflineOrderCount} รายการ</strong>{offlineSync.syncing && <span>กำลัง Sync</span>}{queueCounts.failed > 0 && <span className="sync-status-failed">Sync ไม่สำเร็จ {queueCounts.failed} รายการ</span>}<span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span>{offlineSync.error && <span>{offlineSync.error}</span>}<button type="button" className="secondary-button" disabled={offlineSync.syncing || !isBackendOnline || checkoutActive} onClick={() => { void offlineSync.runSync(); }}>{offlineSync.syncing ? 'กำลัง Sync...' : 'Sync ตอนนี้'}</button></div>}
+    {!localMode && offlineSync.lastOutcome && offlineSync.lastOutcome.synced > 0 && offlineSync.lastOutcome.remaining === 0 && <div className="sync-status-success" role="status">Sync สำเร็จ · {offlineSync.lastOutcome.synced} รายการ</div>}
+    <OfflineOrderQueuePanel revision={queueRevision} syncing={offlineSync.syncing} canRetry={isBackendOnline && !checkoutActive} onRetry={async () => { await offlineSync.runSync(); }} />
     {stockReviewCount > 0 && <div className="catalog-storage-warning" role="alert"><strong>{STOCK_REVIEW_HEADING} · {stockReviewCount} รายการ</strong><span>Sync แล้ว แต่สต็อกบนระบบไม่พอ · ไปที่หน้าจัดการสต็อกเพื่อตรวจนับและยืนยัน</span></div>}
     <div className="sell-workspace">
       <section className="sell-catalog" aria-labelledby="catalog-title">

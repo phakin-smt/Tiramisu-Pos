@@ -13,6 +13,7 @@ import {
   getUnsyncedOfflineOrderCount,
   recordOfflineCashSale,
   recordOfflineSale,
+  retryFailedOfflineOrder,
 } from './offlineOrders';
 import { getPendingStockReviews, resolveStockReview } from './stockReconciliation';
 import { syncPendingOfflineOrders } from './syncOfflineOrders';
@@ -237,6 +238,60 @@ describe('offline order sync', () => {
     await syncPendingOfflineOrders();
 
     expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(before);
+  });
+
+  it('replays a retried order under its original key and deducts stock once', async () => {
+    await seedSale('40013', '35');
+    let attempts = 0;
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => {
+      attempts += 1;
+      // First drain is refused; the retry then succeeds.
+      return attempts === 1
+        ? jsonResponse({ error: 'ระบบหรือฐานข้อมูลไม่พร้อมใช้งาน' }, 500)
+        : accepted('202608210013', { duplicate: attempts > 2 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncPendingOfflineOrders();
+    expect((await getRecentOfflineOrders(1))[0].syncStatus).toBe('failed');
+
+    await retryFailedOfflineOrder('550e8400-e29b-41d4-a716-446655440013');
+    await syncPendingOfflineOrders();
+    // A third drain must find nothing left to send.
+    await syncPendingOfflineOrders();
+
+    const keys = fetchMock.mock.calls.map((call) => (call[1]?.headers as Record<string, string>)['Idempotency-Key']);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toBe('aa11bb22-0000-4000-8000-0000040013');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const order = (await getRecentOfflineOrders(1))[0];
+    expect(order).toMatchObject({ syncStatus: 'synced', serverOrderNumber: '202608210013' });
+    expect(order.syncError).toBeUndefined();
+    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+  });
+
+  it('loses nothing when connectivity dies mid-drain and completes after a retry', async () => {
+    await seedSale('40014', '31');
+    await seedSale('40015', '33');
+    await seedSale('40016', '35');
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => {
+      calls += 1;
+      if (calls === 1) return accepted('202608210014');
+      throw new TypeError('Failed to fetch');
+    }));
+
+    const interrupted = await syncPendingOfflineOrders();
+    expect(interrupted).toMatchObject({ synced: 1, failed: 0, remaining: 2, stopped: 'offline' });
+    // Nothing was dropped: both survivors are still queued, not lost.
+    expect(await getPendingOfflineOrderCount()).toBe(2);
+
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210015')));
+    const completed = await syncPendingOfflineOrders();
+
+    expect(completed).toMatchObject({ synced: 2, failed: 0, remaining: 0, stopped: 'complete' });
+    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect((await getRecentOfflineOrders(3)).every((entry) => entry.syncStatus === 'synced')).toBe(true);
   });
 
   it('is a no-op with an empty queue', async () => {

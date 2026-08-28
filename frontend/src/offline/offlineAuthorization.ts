@@ -46,3 +46,18 @@ export async function readOfflineAuthorization(now = new Date()): Promise<Offlin
     database.close();
   }
 }
+
+/**
+ * Removes this device's offline authorization.
+ *
+ * Signing out must not leave a device able to sell offline for the rest of the
+ * seven-day window, so the marker is deleted rather than left to expire.
+ */
+export async function revokeOfflineAuthorization(): Promise<void> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    await database.delete('metadata', OFFLINE_AUTHORIZATION_KEY);
+  } finally {
+    database.close();
+  }
+}

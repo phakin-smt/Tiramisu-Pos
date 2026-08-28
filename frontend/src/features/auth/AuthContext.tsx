@@ -12,8 +12,9 @@ import {
 import { getAuthStatus, loginWithPin, logoutSession } from '../../api/auth';
 import { subscribeToUnauthorized } from '../../api/client';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
-import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
-import { provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
+import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
+import { refreshOfflineAuthorization, revokeOfflineAuthorization } from '../../offline/offlineAuthorization';
+import { clearOfflinePaymentConfig, provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
 import {
   requestPersistentStorage,
   type StoragePersistenceStatus,
@@ -133,6 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Match the legacy UI: local access is removed even if logout cannot reach the server.
     } finally {
+      // Revoked even when the server could not be reached, so signing out always
+      // ends this device's ability to sell offline. Unsynced orders are kept —
+      // they are recorded revenue, not credentials.
+      await Promise.allSettled([revokeOfflineAuthorization(), clearOfflinePaymentConfig()]);
+      setStoragePersistence('unknown');
       setState({ phase: 'unauthenticated', message: 'You have been logged out.' });
       setSubmitting(false);
     }
@@ -191,8 +197,32 @@ export function LoginForm() {
   );
 }
 
+export const OFFLINE_WORKSPACE_LOCKED_MESSAGE = 'อุปกรณ์นี้ยังไม่ได้รับอนุญาตให้ใช้งานออฟไลน์';
+export const OFFLINE_WORKSPACE_LOCKED_GUIDANCE = 'กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบด้วย PIN อีกครั้ง';
+
+/**
+ * Shown offline when this device holds no trusted-device authorization — after a
+ * logout, after expiry, or on a device that never provisioned.
+ *
+ * This is an authorization check on a local marker, not authentication: the PIN
+ * itself can only be verified by the server. See the offline PIN limitation note.
+ */
+function OfflineWorkspaceLocked() {
+  return (
+    <div className="login-screen">
+      <div className="login-panel" role="alert">
+        <div className="brand-mark" aria-hidden="true">BP</div>
+        <h1>Baannoi-POS</h1>
+        <p>{OFFLINE_WORKSPACE_LOCKED_MESSAGE}</p>
+        <div className="auth-message">{OFFLINE_WORKSPACE_LOCKED_GUIDANCE}</div>
+      </div>
+    </div>
+  );
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const { phase } = useAuth();
+  const offlineAuthorization = useOfflineAuthorization();
 
   if (phase === 'checking') {
     return (
@@ -202,7 +232,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (phase !== 'authenticated' && phase !== 'expired' && phase !== 'offline') return <LoginForm />;
+  if (phase === 'offline') {
+    if (offlineAuthorization.checking) {
+      return (
+        <div className="auth-loading" role="status" aria-live="polite">
+          Checking session...
+        </div>
+      );
+    }
+    // Logging out revokes the marker, so an offline device cannot simply be
+    // reopened into the workspace afterwards.
+    if (!offlineAuthorization.authorized) return <OfflineWorkspaceLocked />;
+    return <>{children}</>;
+  }
+
+  if (phase !== 'authenticated' && phase !== 'expired') return <LoginForm />;
   return <>
     <div hidden={phase === 'expired'} inert={phase === 'expired'}>{children}</div>
     {phase === 'expired' && <LoginForm />}

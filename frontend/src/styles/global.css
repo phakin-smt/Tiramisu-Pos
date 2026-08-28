@@ -729,3 +729,28 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .reconciliation-entry { align-items: stretch; }
   .reconciliation-entry input, .reconciliation-entry button { flex: 1 1 100%; }
 }
+
+/* Unsynced offline order queue: owner can see and retry every stuck sale. */
+.sync-status-failed { color: var(--danger); font-weight: 700; }
+.sync-status-success { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-md); color: #1f5c46; background: #e5f0eb; font-size: 13px; font-weight: 700; }
+.offline-queue { margin-top: 12px; }
+.offline-queue .section-heading > div span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 12px; }
+.offline-queue-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.offline-queue-item { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.offline-queue-item.is-failed { border-left-color: var(--danger); }
+.offline-queue-identity { display: grid; gap: 2px; min-width: 0; }
+.offline-queue-identity strong { overflow-wrap: anywhere; font-size: 13px; }
+.offline-queue-identity span { color: var(--text-soft); font-size: 12px; }
+.offline-queue-figures { display: grid; gap: 2px; }
+.offline-queue-figures strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.offline-queue-figures span { color: var(--text-soft); font-size: 12px; }
+.offline-queue-state { display: grid; gap: 3px; min-width: 0; font-size: 12px; }
+.offline-queue-error { color: var(--danger); font-weight: 700; overflow-wrap: anywhere; }
+.offline-queue-waiting { color: var(--text-soft); }
+.offline-queue-review { color: #6f4c15; font-weight: 700; }
+.offline-queue-item button { min-height: 44px; padding: 10px 16px; white-space: nowrap; }
+@media (max-width: 820px) {
+  .offline-queue-item { grid-template-columns: 1fr 1fr; }
+  .offline-queue-state { grid-column: 1 / -1; }
+  .offline-queue-item button { grid-column: 1 / -1; width: 100%; }
+}

@@ -325,6 +325,46 @@ export async function markOfflineOrderSynced(
   }
 }
 
+/** Everything the server has not accepted yet, oldest first, for the queue UI. */
+export async function getUnsyncedOfflineOrders(): Promise<OfflineOrder[]> {
+  const database = await openBaannoiPosDatabase();
+  try {
+    const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
+    return orders.filter((order) => order.syncStatus !== 'synced');
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * Puts a failed order back in the queue without touching anything that defines
+ * it. The identity, idempotency key, timestamps, payment method and totals are
+ * all preserved, so a retry replays the very same sale rather than creating a
+ * new one — only the failure marker is cleared.
+ */
+export async function retryFailedOfflineOrder(localOrderId: string): Promise<OfflineOrder | null> {
+  const database = await openBaannoiPosDatabase();
+  const transaction = database.transaction('offlineOrders', 'readwrite');
+  try {
+    const store = transaction.objectStore('offlineOrders');
+    const order = await store.get(localOrderId);
+    if (!order || order.syncStatus !== 'failed') {
+      await transaction.done;
+      return order ?? null;
+    }
+    const { syncError: _discarded, ...rest } = order;
+    const requeued: OfflineOrder = { ...rest, syncStatus: 'pending' };
+    await store.put(requeued);
+    await transaction.done;
+    return requeued;
+  } catch (error) {
+    try { transaction.abort(); } catch { /* The browser may already have aborted it. */ }
+    throw error;
+  } finally {
+    database.close();
+  }
+}
+
 export async function getOfflineOrderByIdempotencyKey(
   idempotencyKey: string,
 ): Promise<OfflineOrder | null> {

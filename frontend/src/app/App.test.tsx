@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectivityProvider } from '../connectivity/ConnectivityContext';
 import { AuthProvider } from '../features/auth/AuthContext';
-import { readOfflineAuthorization } from '../offline/offlineAuthorization';
+import { readOfflineAuthorization, refreshOfflineAuthorization } from '../offline/offlineAuthorization';
 import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
 
@@ -184,7 +184,8 @@ describe('authentication and application shell', () => {
     expect(screen.queryByRole('heading', { name: 'รายงาน' })).not.toBeInTheDocument();
   });
 
-  it('renders the application shell and honest status when the browser is offline', async () => {
+  it('renders the application shell and honest status when an authorized device is offline', async () => {
+    await refreshOfflineAuthorization();
     setNavigatorOnline(false);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -197,6 +198,20 @@ describe('authentication and application shell', () => {
     )).toBe(true);
     expect(screen.getByRole('note')).toHaveTextContent('ขายเงินสดและ PromptPay ได้บนอุปกรณ์ที่ได้รับอนุญาต');
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/auth/status')).toBe(false);
+  });
+
+  it('locks the offline workspace on a device that holds no trusted-device authorization', async () => {
+    setNavigatorOnline(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication('/orders');
+
+    // Airplane mode must not open the till on an unprovisioned device.
+    expect(await screen.findByText('อุปกรณ์นี้ยังไม่ได้รับอนุญาตให้ใช้งานออฟไลน์')).toBeInTheDocument();
+    expect(screen.getByText('กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบด้วย PIN อีกครั้ง')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'ออเดอร์' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('logs out and removes access to the shell with one mutation', async () => {

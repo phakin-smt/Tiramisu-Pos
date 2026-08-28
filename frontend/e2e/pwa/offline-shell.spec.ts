@@ -232,14 +232,26 @@ test('offline first run does not invent a catalog', async ({ context, page }) =>
   await page.getByLabel('PIN').fill('2468');
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toBeVisible();
+  // Clear only the catalog: the device stays authorized, so this exercises the
+  // empty-catalog state rather than the locked-workspace state.
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.deleteDatabase('BaannoiPOS');
-      request.onsuccess = () => resolve();
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('BaannoiPOS');
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error('BaannoiPOS deletion was blocked'));
     });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(['productSnapshot', 'metadata'], 'readwrite');
+        transaction.objectStore('productSnapshot').clear();
+        transaction.objectStore('metadata').delete('catalog');
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } finally {
+      database.close();
+    }
   });
   await page.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
@@ -251,4 +263,104 @@ test('offline first run does not invent a catalog', async ({ context, page }) =>
   await expect(page.getByText('ยังไม่มีข้อมูลสำหรับใช้งานออฟไลน์')).toBeVisible();
   await expect(page.getByText('กรุณาเชื่อมต่ออินเทอร์เน็ตและเปิดหน้าขายอย่างน้อย 1 ครั้ง')).toBeVisible();
   await expect(page.getByRole('button', { name: /เพิ่ม .* ลงตะกร้า/ })).toHaveCount(0);
+});
+
+
+test('logout revokes offline authorization so the workspace locks when offline', async ({ context, page }) => {
+  await page.goto('/next/');
+  await page.getByLabel('PIN').fill('2468');
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page).toHaveURL(/\/next\/sell$/);
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toBeVisible();
+
+  // Provisioned: the marker exists and carries no credential material.
+  const provisioned = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('BaannoiPOS');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const value = await new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+        const request = database.transaction('metadata', 'readonly').objectStore('metadata').get('offlineAuthorization');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return value ? Object.keys(value).sort() : null;
+    } finally {
+      database.close();
+    }
+  });
+  expect(provisioned).toEqual(['enabledAt', 'expiresAt', 'key', 'schemaVersion']);
+
+  await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+  await expect(page.getByLabel('PIN')).toBeVisible();
+
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
+  });
+  await context.setOffline(true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+
+  // Airplane mode after a logout must not reopen the till.
+  await expect(page.getByText('อุปกรณ์นี้ยังไม่ได้รับอนุญาตให้ใช้งานออฟไลน์')).toBeVisible();
+  await expect(page.getByRole('button', { name: /เพิ่ม .* ลงตะกร้า/ })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'เมนูหลัก' })).toHaveCount(0);
+});
+
+test('an oversold offline sale stays reviewable until stock is reconciled', async ({ context, page }) => {
+  await page.goto('/next/');
+  await page.getByLabel('PIN').fill('2468');
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page).toHaveURL(/\/next\/sell$/);
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toBeVisible();
+
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
+  });
+  await context.setOffline(true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: 'ขายสินค้า' })).toBeVisible();
+
+  // Sell offline, then drain the server's stock behind the device's back so the
+  // replay is accepted financially but cannot deduct in full.
+  const addOriginal = page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' });
+  for (let index = 0; index < 3; index += 1) await addOriginal.click();
+  await page.getByRole('button', { name: 'เงินสด' }).click();
+  await page.getByRole('button', { name: 'Exact' }).click();
+  await page.getByRole('button', { name: 'ยืนยันรับเงิน' }).click();
+  await expect(page.getByText(/บันทึกออเดอร์ออฟไลน์/)).toBeVisible();
+
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true });
+  });
+  await context.setOffline(false);
+  await page.evaluate(async () => {
+    await fetch('/api/stock/reconcile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: 1, verifiedStock: 1 }),
+    });
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.connectivity-status.is-online').first()).toContainText('Online');
+  await expect(page.getByText(/ต้องตรวจสอบสต็อก/).first()).toBeVisible();
+
+  // The review is inspectable on the stock page and survives a reload.
+  await page.goto('/next/stock', { waitUntil: 'domcontentloaded' });
+  const panel = page.getByRole('region', { name: 'ต้องตรวจสอบสต็อก' });
+  await expect(panel.getByText('สินค้า: E2E Original')).toBeVisible();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(panel.getByText('สินค้า: E2E Original')).toBeVisible();
+
+  await panel.getByLabel('ตรวจนับจริง').fill('4');
+  await panel.getByRole('button', { name: 'ยืนยันปรับสต็อก' }).click();
+
+  await expect(panel.getByText(/ปรับสต็อก/)).toBeVisible();
+  await expect(panel.getByText('สินค้า: E2E Original')).toHaveCount(0);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('ต้องตรวจสอบสต็อก')).toHaveCount(0);
 });
