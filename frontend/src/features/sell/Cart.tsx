@@ -14,7 +14,7 @@ interface CartProps {
   holdNotice: string;
   onClose(): void; onClear(): void; onQuantityChange(product: CatalogProduct, delta: number): void;
   onGiveawayChange(productId: number, delta: number): void; onRemove(productId: number): void;
-  onDiscountChange(value: number): void; onCustomerChange(value: CustomerType): void; onPaymentActivate(value: PaymentMethod): void;
+  onDiscountChange(value: string): void; onCustomerChange(value: CustomerType): void; onPaymentActivate(value: PaymentMethod): void;
   onHold(): void;
 }
 

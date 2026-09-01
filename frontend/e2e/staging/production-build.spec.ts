@@ -57,3 +57,26 @@ test('React production build keeps auth and all /next deep links inside its base
   await page.goto('/next/orders');
   await expect(page.getByLabel('PIN')).toBeVisible();
 });
+
+test('the sidebar stays pinned to the viewport while the page scrolls', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/next/');
+  await page.getByLabel('PIN').fill('2468');
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page).toHaveURL(/\/next\/sell$/);
+
+  const sidebar = page.locator('.sidebar');
+  const logout = sidebar.getByRole('button', { name: 'ออกจากระบบ' });
+  await expect(sidebar).toBeVisible();
+  const before = await sidebar.boundingBox();
+  expect(before?.y).toBe(0);
+
+  await page.mouse.wheel(0, 2000);
+  await expect.poll(async () => Math.round(await page.evaluate(() => window.scrollY))).toBeGreaterThan(0);
+
+  // Still anchored at the top of the viewport, and logout is still reachable.
+  const after = await sidebar.boundingBox();
+  expect(after?.y).toBe(0);
+  await expect(logout).toBeInViewport();
+  await expect(sidebar.getByRole('link', { name: /ขายสินค้า/ })).toBeInViewport();
+});

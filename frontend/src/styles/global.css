@@ -39,7 +39,11 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .login-panel > .version-label { display: flex; width: fit-content; margin: 0 auto; color: var(--text-soft); background: var(--panel-soft); }
 
 .app-shell { display: flex; min-height: 100vh; }
-.sidebar { display: flex; flex: 0 0 280px; flex-direction: column; padding: 32px 24px; color: #fbf2ea; background: #573b2d; }
+/* Pinned to the viewport: the till is scrolled constantly, and navigation plus
+   the connectivity badge and logout must stay reachable without scrolling back
+   up. align-self stops the flex stretch that would otherwise leave sticky no
+   room to work, and dvh keeps it correct when iOS collapses its browser chrome. */
+.sidebar { position: sticky; top: 0; align-self: flex-start; display: flex; flex: 0 0 280px; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; padding: 32px 24px; color: #fbf2ea; background: #573b2d; }
 .shell-brand { display: flex; align-items: center; gap: 12px; }
 .brand-title-row { display: flex; align-items: center; gap: 8px; }
 .brand-title-row strong { font-size: 21px; }
@@ -754,3 +758,105 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .offline-queue-state { grid-column: 1 / -1; }
   .offline-queue-item button { grid-column: 1 / -1; width: 100%; }
 }
+
+/* Report summary on a single row. Two classes so it beats the shared
+   .metrics-grid rules regardless of source order, and scoped so the Sell and
+   Analytics grids keep their own wrapping layout.
+   The cards are tightened to fit eight across a desktop width; below that the
+   row scrolls sideways rather than squeezing the amounts unreadably. */
+.metrics-grid.report-metrics {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+}
+.metrics-grid.report-metrics .metric { padding: 14px 12px; }
+.metrics-grid.report-metrics .metric span { font-size: 11px; }
+.metrics-grid.report-metrics .metric strong { margin-top: 6px; font-size: 18px; }
+/* Eight readable amounts need roughly 1030px of content width. Between the full
+   sidebar and that, tighten the cards rather than start scrolling. */
+@media (max-width: 1439px) {
+  .metrics-grid.report-metrics { grid-auto-columns: minmax(100px, 1fr); gap: 8px; }
+  .metrics-grid.report-metrics .metric { padding: 12px 8px; }
+  .metrics-grid.report-metrics .metric span { font-size: 10px; }
+  .metrics-grid.report-metrics .metric strong { font-size: 15px; }
+}
+
+/* Denomination pad for the opening float. Purely an input aid: it fills the
+   total field below and is never stored. */
+.denomination-pad { margin: 0 0 18px; padding: 0; border: 0; }
+.denomination-pad legend { padding: 0 0 10px; color: var(--text-soft); font-size: 13px; font-weight: 700; }
+.denomination-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 8px; }
+.denomination-row { display: grid !important; grid-template-columns: auto minmax(56px, 1fr) auto; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; }
+.denomination-row:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
+.denomination-face { color: var(--text-soft); font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* 44px target and 16px text so iPad neither mis-taps nor zooms on focus. */
+.denomination-row input { min-height: 44px; padding: 6px 8px; border: 0; border-bottom: 1px solid var(--line); outline: 0; background: transparent; color: var(--text); font-size: 16px !important; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.denomination-line { min-width: 62px; color: var(--primary-dark); font-size: 12px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .denomination-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .denomination-face { font-size: 11px; }
+}
+
+/* Larger dialogs. A till is operated at arm's length, so the payment and float
+   dialogs scale with the viewport instead of sitting at a fixed phone width,
+   while still capping so targets never spread apart on a wide desktop.
+   Each one also gets a height cap with the body scrolling inside it: the content
+   grew (nine denomination rows, for one) and an uncapped dialog would run off
+   the screen with no way to reach its footer. */
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal,
+.historical-correction-modal,
+.product-modal {
+  max-height: calc(100dvh - 40px);
+}
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.cash-payment-content,
+.opening-float-modal-content,
+.promptpay-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Near full screen. The customer scans the QR from across the counter, so the
+   code itself is the thing being maximised; the caps only stop a desktop window
+   from stretching a dialog past what is comfortable to reach. */
+.cash-payment-modal { width: min(96vw, 860px); max-width: none; }
+.opening-float-modal { width: min(96vw, 900px); max-width: none; }
+.promptpay-modal { width: min(96vw, 900px); max-width: none; }
+.historical-correction-modal { width: min(96vw, 720px); max-width: none; overflow-y: auto; }
+.product-modal { width: min(96vw, 1000px); max-width: none; }
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal,
+.historical-correction-modal,
+.product-modal { max-height: calc(100dvh - 24px); }
+/* Square, and bounded by height rather than width: in landscape the height is
+   what actually limits how large a scannable code can be. */
+.promptpay-content img { width: min(100%, 62vh); }
+
+/* The PromptPay dialog is the one screen a customer looks at, so it takes the
+   whole viewport and spends all of it on the code. Sized by height because the
+   QR is square: on any landscape screen the height is the limiting dimension. */
+.promptpay-overlay { padding: 0; }
+.promptpay-modal {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+}
+.promptpay-content {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+}
+.promptpay-content img { width: min(100%, 74vh); }

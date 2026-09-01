@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createProduct, updateProduct } from '../../api/products';
 import { MutationFeedback } from '../../components/MutationFeedback';
+import { acceptMoneyInput } from '../../domain/money';
 import type { ProductPayload } from '../../types/products';
 import type { StockSummaryItem } from '../../types/stock';
 import { useSafeMutation } from '../shared/useSafeMutation';
@@ -73,8 +74,8 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
           <label><span>รหัสเมนู</span><input ref={firstInput} value={values.code} onChange={(event) => field('code', event.target.value)} required /></label>
           <label><span>ชื่อเมนู</span><input value={values.name} onChange={(event) => field('name', event.target.value)} required /></label>
           <label className="form-wide"><span>หมวดหมู่</span><input list="product-categories" value={values.category} onChange={(event) => field('category', event.target.value)} required /><datalist id="product-categories">{categories.map((category) => <option key={category} value={category} />)}</datalist></label>
-          <label><span>ราคาขาย (บาท)</span><input type="number" min="0" step="0.01" value={values.price} onChange={(event) => field('price', event.target.value)} required /></label>
-          <label><span>ต้นทุน/ชิ้น (บาท)</span><input type="number" min="0" step="0.01" value={values.cost} onChange={(event) => field('cost', event.target.value)} /></label>
+          <label><span>ราคาขาย (บาท)</span><input type="text" inputMode="decimal" autoComplete="off" value={values.price} onChange={(event) => field('price', acceptMoneyInput(event.target.value, values.price))} required /></label>
+          <label><span>ต้นทุน/ชิ้น (บาท)</span><input type="text" inputMode="decimal" autoComplete="off" value={values.cost} onChange={(event) => field('cost', acceptMoneyInput(event.target.value, values.cost))} /></label>
           <label><span>จำนวนคงเหลือ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.stock} onChange={(event) => field('stock', event.target.value)} /></label>
           <label><span>จุดสั่งเตรียมขั้นต่ำ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.minStock} onChange={(event) => field('minStock', event.target.value)} /></label>
           <label className="active-toggle form-wide"><input type="checkbox" checked={values.active} onChange={(event) => field('active', event.target.checked)} /><span>เปิดขายเมนูนี้</span></label>

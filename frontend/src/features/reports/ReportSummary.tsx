@@ -13,7 +13,7 @@ export function ReportSummary({ report }: { report: CloseDayReport }) {
   ] as const;
 
   return (
-    <div className="metrics-grid">
+    <div className="metrics-grid report-metrics">
       {metrics.map(([label, value]) => (
         <article className="metric" key={label}>
           <span>{label}</span>

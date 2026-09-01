@@ -586,7 +586,7 @@ describe('Sell checkout', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('บันทึกไม่สำเร็จ');
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('3');
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('1');
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(5);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('5');
 
     view.rerender(<SellPage />);
     fireEvent.click(cashConfirmButton());
@@ -665,7 +665,7 @@ describe('Sell checkout', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('คงเหลือไม่พอ');
     expect(screen.getByLabelText('จำนวน Original')).toHaveTextContent('2');
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('1');
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(4);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('4');
   });
 
   it('keeps confirmed success even when stock and summary refreshes later fail', async () => {
@@ -736,7 +736,7 @@ describe('Sell checkout', () => {
 
     add(3);
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('0');
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(7);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
   });
 
   it('blocks confirmation on QR error and preserves cart when the modal closes', async () => {

@@ -68,7 +68,7 @@ describe('SellPage offline catalog', () => {
     fireEvent.click(addOriginal);
     fireEvent.click(addOriginal);
     fireEvent.click(addOriginal);
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(7);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
     expect(within(screen.getByRole('region', { name: 'ยอดรวมตะกร้า' })).getByText('฿200.00')).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: 'เงินสด' })).toBeDisabled();

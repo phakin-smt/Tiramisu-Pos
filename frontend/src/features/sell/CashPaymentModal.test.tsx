@@ -35,7 +35,7 @@ describe('CashPaymentModal', () => {
     expect(screen.getByRole('button', { name: '1000' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
-    expect(screen.getByLabelText('จำนวนเงินที่รับ')).toHaveValue(620);
+    expect(screen.getByLabelText('จำนวนเงินที่รับ')).toHaveValue('620');
     expect(screen.getByText('฿0.00')).toBeInTheDocument();
   });
 
