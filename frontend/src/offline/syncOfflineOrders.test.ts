@@ -45,7 +45,7 @@ async function seedSale(suffix: string, minute: string, overrides: Record<string
     },
     idempotencyKey: `aa11bb22-0000-4000-8000-00000${suffix}`,
     order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-    totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+    totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
     amountTendered: 100,
     changeAmount: 31,
     ...overrides,
@@ -93,7 +93,7 @@ describe('offline order sync', () => {
       },
       idempotencyKey: 'aa11bb22-0000-4000-8000-00000040002',
       order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'transfer', customerType: 'member', discount: 5 },
-      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 5, vat: 0, grandTotal: 133 },
+      totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 5, vat: 0, grandTotal: 133 },
     });
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210002'));
     vi.stubGlobal('fetch', fetchMock);

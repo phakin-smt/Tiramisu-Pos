@@ -43,7 +43,7 @@ function sale(overrides: Partial<Parameters<typeof recordOfflineCashSale>[0]> = 
       customerType: 'walkin',
       discount: 0,
     },
-    totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+    totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
     amountTendered: 500,
     changeAmount: 362,
     ...overrides,
@@ -92,7 +92,7 @@ describe('offline cash order transaction', () => {
   it('does not create a zero giveaway movement and supports an inactive stocked cached product', async () => {
     await sale({
       order: { items: [{ productId: 2, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'store', discount: 0 },
-      totals: { subtotal: 50, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 50 },
+      totals: { subtotal: 50, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 50 },
       amountTendered: 50,
       changeAmount: 0,
     });
@@ -164,7 +164,7 @@ describe('offline cash order transaction', () => {
       identity,
       idempotencyKey: 'b2f1e6d4-0000-4000-8000-00000000aaaa',
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100,
       changeAmount: 31,
     });
@@ -178,14 +178,14 @@ describe('offline cash order transaction', () => {
     const first = await recordOfflineCashSale({
       identity, idempotencyKey: key,
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100, changeAmount: 31,
     });
     const replay = await recordOfflineCashSale({
       identity: { ...identity, localOrderId: '6ba7b810-9dad-41d1-80b4-00c04fd430ff', localOrderNumber: 'OFF-20260821-143599-30FF' },
       idempotencyKey: key,
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100, changeAmount: 31,
     });
 
@@ -200,7 +200,7 @@ describe('offline cash order transaction', () => {
     const order = await recordOfflineSale({
       identity: transferIdentity,
       order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'transfer', customerType: 'member', discount: 0 },
-      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+      totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
     });
     expect(order).toMatchObject({
       paymentMethod: 'transfer', paymentConfirmation: 'manual', total: 138,

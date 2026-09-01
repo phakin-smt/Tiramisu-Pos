@@ -1,5 +1,6 @@
 import { calculateTotals } from './promotion';
 import type { CartItem, CartTotals, DiscountState, Product } from '../types/domain';
+import type { CustomerType } from '../types/checkout';
 
 export interface CartReconciliation {
   cart: CartItem[];
@@ -98,13 +99,14 @@ export function calculateCartTotals(
   products: readonly Product[],
   cart: readonly CartItem[],
   discountState?: DiscountState,
+  customerType?: CustomerType,
 ): CartTotals {
   const lines = cart.flatMap((item) => {
     const product = products.find((candidate) => candidate.id === item.productId);
     return product
-      ? [{ unitPrice: product.price, quantity: item.qty, giveawayQuantity: item.giveawayQty }]
+      ? [{ unitPrice: product.price, quantity: item.qty, giveawayQuantity: item.giveawayQty, category: product.category }]
       : [];
   });
 
-  return calculateTotals(lines, discountState);
+  return calculateTotals(lines, discountState, customerType);
 }

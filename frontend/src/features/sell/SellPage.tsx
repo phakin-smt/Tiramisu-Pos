@@ -67,7 +67,7 @@ export function SellPage() {
 
   const categories = useMemo(() => [ALL_CATEGORIES, ...new Set(products.map((product) => product.category))], [products]);
   const filteredProducts = selectedCategory === ALL_CATEGORIES ? products : products.filter((product) => product.category === selectedCategory);
-  const totals = calculateCartTotals(products, cart, discountState);
+  const totals = calculateCartTotals(products, cart, discountState, customerType);
   const totalQuantity = totalCartQuantity(cart);
   const paidQuantity = paidCartQuantity(cart);
   const promptPayQr = usePromptPayQr(promptPayOpen, totals.grandTotal, promptPayLocalMode);

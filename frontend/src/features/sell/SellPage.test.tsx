@@ -126,6 +126,35 @@ describe('SellPage', () => {
     expect(totalsRegion()).toHaveTextContent('0');
   });
 
+  it('switches to the shop wholesale rate when the customer type is ร้านค้า', async () => {
+    mockSell(); await renderSell(); add('Original'); add('Coffee', 2);
+    // Walk-in sees the three-for-200 promotion.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
+
+    fireEvent.click(screen.getByRole('button', { name: 'ร้านค้า' }));
+
+    // Three Tiramisu at 9 baht off each, and the bundle no longer applies.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('27');
+    expect(screen.getByText(/ราคาร้านค้า/)).toHaveTextContent('฿27.00');
+    expect(screen.queryByText(/ลดให้อัตโนมัติ/)).not.toBeInTheDocument();
+    expect(totalsRegion()).toHaveTextContent('180');
+
+    // Switching back restores the walk-in promotion.
+    fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }));
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
+    expect(totalsRegion()).toHaveTextContent('200');
+  });
+
+  it('leaves non-Tiramisu products out of the shop rate', async () => {
+    mockSell(); await renderSell(); add('Cookie', 2);
+    fireEvent.click(screen.getByRole('button', { name: 'ร้านค้า' }));
+
+    // Bakery is not discounted, so the shop note stays hidden.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('0');
+    expect(screen.queryByText(/ราคาร้านค้า/)).not.toBeInTheDocument();
+    expect(totalsRegion()).toHaveTextContent('100');
+  });
+
   it('excludes giveaways and non-69 products from promotion eligibility', async () => {
     mockSell(); await renderSell(); add('Original', 3);
     fireEvent.click(screen.getByLabelText('เพิ่มจำนวนแถม Original'));

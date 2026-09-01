@@ -96,7 +96,7 @@ describe('useProducts offline snapshot behavior', () => {
         businessDate: '2026-08-21',
       },
       order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+      totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
       amountTendered: 200,
       changeAmount: 62,
     });

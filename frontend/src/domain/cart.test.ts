@@ -10,7 +10,7 @@ import {
 } from './cart';
 import type { CartItem, Product } from '../types/domain';
 
-const product: Product = { id: 1, price: 69, stock: 3 };
+const product: Product = { id: 1, price: 69, stock: 3, category: 'Tiramisu' };
 
 describe('current cart invariants', () => {
   it('adds, increments, decrements, and removes an item', () => {

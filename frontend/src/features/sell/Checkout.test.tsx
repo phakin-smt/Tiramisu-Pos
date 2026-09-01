@@ -330,7 +330,7 @@ describe('Sell checkout', () => {
         businessDate: '2026-08-21',
       },
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100,
       changeAmount: 31,
     });
@@ -376,7 +376,7 @@ describe('Sell checkout', () => {
       },
       idempotencyKey: 'aa11bb22-0000-4000-8000-00000000cccc',
       order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 138, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
+      totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
       amountTendered: 200,
       changeAmount: 62,
     });
@@ -418,7 +418,7 @@ describe('Sell checkout', () => {
         },
         idempotencyKey: `aa11bb22-0000-4000-8000-0000000${suffix}`,
         order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-        totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+        totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
         amountTendered: 100,
         changeAmount: 31,
       });
@@ -453,7 +453,7 @@ describe('Sell checkout', () => {
         businessDate: '2026-08-21',
       },
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100,
       changeAmount: 31,
     });

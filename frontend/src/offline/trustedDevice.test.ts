@@ -75,7 +75,7 @@ describe('trusted device authorization', () => {
       },
       idempotencyKey: 'aa11bb22-0000-4000-8000-00000000aaaa',
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100,
       changeAmount: 31,
     })).rejects.toThrow('อุปกรณ์นี้ยังไม่พร้อมสำหรับการขายออฟไลน์');
@@ -129,7 +129,7 @@ describe('trusted device authorization', () => {
       },
       idempotencyKey: 'aa11bb22-0000-4000-8000-00000000bbbb',
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
-      totals: { subtotal: 69, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
+      totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100,
       changeAmount: 31,
     });
