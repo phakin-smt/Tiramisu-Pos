@@ -117,6 +117,9 @@ describe('Sell checkout', () => {
   afterEach(() => {
     cleanup();
     document.body.classList.remove('promptpay-open', 'sell-cart-open');
+    // Restored centrally: a test that fails before its own restore line would
+    // otherwise leave every later test believing the browser is offline.
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
@@ -150,6 +153,41 @@ describe('Sell checkout', () => {
     const [latest] = await getRecentOfflineOrders(1);
     expect(latest.idempotencyKey).toBe(sentKey);
     expect(await getOfflineOrderByIdempotencyKey(sentKey)).toMatchObject({ localOrderId: latest.localOrderId });
+    expect(await getPendingOfflineOrderCount()).toBe(1);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  it('gives a changed cart its own local identity after a failed online attempt', async () => {
+    // Same hazard on the offline half: a stale identity would make
+    // recordOfflineSale return the earlier order and drop this sale.
+    const fetchMock = mockCheckout((url, init) => (
+      url === '/api/orders' && init.method === 'POST'
+        ? Promise.reject(new TypeError('network response lost'))
+        : undefined
+    ));
+    await refreshOfflineAuthorization();
+    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    add();
+    confirmCashExact();
+    expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
+    const abandonedKey = idempotencyKeyOf(orderCalls(fetchMock)[0]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    add(2);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    fireEvent(window, new Event('offline'));
+    // Payment is briefly disabled while the trusted-device check resolves.
+    await vi.waitFor(() => expect(cashButton()).toBeEnabled());
+    confirmCashExact();
+
+    expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
+    const [recorded] = await getRecentOfflineOrders(1);
+    expect(recorded.idempotencyKey).not.toBe(abandonedKey);
+    // Priced as its own sale: three at 69 less the 7 baht bundle discount.
+    expect(recorded.subtotal).toBe(207);
+    expect(recorded.total).toBe(200);
     expect(await getPendingOfflineOrderCount()).toBe(1);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
@@ -563,6 +601,41 @@ describe('Sell checkout', () => {
     const nextKey = (orderCalls(fetchMock)[2][1] as RequestInit).headers as Record<string, string>;
     expect(nextKey['Idempotency-Key']).not.toBe(firstKey['Idempotency-Key']);
     expect(randomUUID).toHaveBeenCalledTimes(2);
+  });
+
+  it('mints a new idempotency key when the cart changes after a failed attempt', async () => {
+    // The first attempt reached the server and committed; only the response was
+    // lost. The cashier then rings up a different sale. Reusing the first key
+    // would make the server replay the old order and silently drop this one.
+    const committed = new Map<string, { orderNumber: string; total: number }>();
+    let posts = 0;
+    const fetchMock = mockCheckout((url, init) => {
+      if (url !== '/api/orders' || init.method !== 'POST') return undefined;
+      posts += 1;
+      const key = (init.headers as Record<string, string>)['Idempotency-Key'];
+      const existing = committed.get(key);
+      if (existing) return json({ ...order, ...existing, duplicate: true });
+      const record = { orderNumber: `ORDER-${posts}`, total: bodyOf(init).items.reduce((sum, item) => sum + item.qty * 69, 0) };
+      committed.set(key, record);
+      // The server keeps it, but the cashier never sees the answer.
+      return posts === 1 ? Promise.reject(new TypeError('network response lost')) : json({ ...order, ...record });
+    });
+    await renderCheckout();
+
+    add();
+    confirmCashExact();
+    expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
+
+    // A different sale entirely: three items rather than one.
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    add(2);
+    confirmCashExact();
+
+    expect(await screen.findByText(/บันทึกออเดอร์ #/)).toBeInTheDocument();
+    const keys = orderCalls(fetchMock).map(idempotencyKeyOf);
+    expect(keys[1]).not.toBe(keys[0]);
+    // The second sale is recorded on its own terms, not replayed as the first.
+    expect(await screen.findByText(/ORDER-2/)).toBeInTheDocument();
   });
 
   it('treats an idempotent duplicate response as confirmed success after an uncertain failure', async () => {

@@ -19,6 +19,21 @@ interface CheckoutState {
   offlineOrder: OfflineOrder | null;
 }
 
+/**
+ * Identifies the sale a retry key belongs to: the goods, the customer and the
+ * discount.
+ *
+ * Payment method is deliberately excluded. Switching cash to transfer for the
+ * same basket is still the same sale, and keeping the key there is what makes an
+ * already-committed order replay instead of being charged a second time.
+ */
+function saleFingerprint(payload: CreateOrderRequest): string {
+  const items = payload.items
+    .map((item) => `${item.productId}:${item.qty}:${item.giveawayQty}`)
+    .sort();
+  return JSON.stringify({ items, customerType: payload.customerType, discount: payload.discount });
+}
+
 export type CheckoutResult =
   | { mode: 'online'; response: CreateOrderResponse }
   | { mode: 'offline'; order: OfflineOrder };
@@ -26,7 +41,7 @@ export type CheckoutResult =
 export function useCheckout() {
   const { getSnapshot } = useConnectivity();
   const locked = useRef(false);
-  const pendingServerKey = useRef<string | null>(null);
+  const pendingServerKey = useRef<{ key: string; fingerprint: string } | null>(null);
   const pendingOfflineIdentity = useRef<ReturnType<typeof createOfflineOrderIdentity> | null>(null);
   const [state, setState] = useState<CheckoutState>({ pending: false, error: '', response: null, offlineOrder: null });
 
@@ -38,11 +53,22 @@ export function useCheckout() {
     locked.current = true;
     setState({ pending: true, error: '', response: null, offlineOrder: null });
 
-    // One key per checkout attempt, minted before the Cloud/Local decision. If an
-    // online POST reached the server but its response was lost, the local order
-    // written on retry carries the very same key, so a later sync can recognise
-    // the sale the server already has instead of duplicating it.
-    const idempotencyKey = (pendingServerKey.current ||= createClientUuid());
+    // One key per sale, minted before the Cloud/Local decision. If an online POST
+    // reached the server but its response was lost, the local order written on
+    // retry carries the very same key, so a later sync can recognise the sale the
+    // server already has instead of duplicating it.
+    //
+    // The key is bound to the sale's contents: once the cashier rings up
+    // something different, reusing it would make the server replay the previous
+    // order and silently drop this one.
+    const fingerprint = saleFingerprint(payload);
+    if (pendingServerKey.current?.fingerprint !== fingerprint) {
+      pendingServerKey.current = { key: createClientUuid(), fingerprint };
+      // A different sale needs its own local identity too, or recordOfflineSale
+      // would return the earlier order instead of writing this one.
+      pendingOfflineIdentity.current = null;
+    }
+    const idempotencyKey = pendingServerKey.current.key;
 
     try {
       // Re-evaluate the authoritative mode at confirmation time: live refs and a
