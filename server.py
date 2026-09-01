@@ -16,7 +16,7 @@ import qrcode
 from qrcode.constants import ERROR_CORRECT_M
 from werkzeug.exceptions import NotFound
 from database import ROOT, connect_db, execute, init_schema, is_postgres, transaction
-from promptpay_qr import PromptPayError, generate_promptpay_payload
+from promptpay_qr import PromptPayError, generate_promptpay_payload, promptpay_merchant_account_info
 
 app = Flask(__name__, static_folder=None)
 PUBLIC_ROOT = ROOT / 'public'
@@ -36,6 +36,12 @@ LOGIN_ATTEMPTS_LOCK = threading.Lock()
 LOGIN_LIMIT = 5
 LOGIN_WINDOW_SECONDS = 300
 PAYMENT_METHODS = {'cash', 'transfer'}
+STOCK_REVIEW_NOTE = 'ตรวจสอบสต็อก (Sync ออฟไลน์):'
+# Machine-readable reference_type for reconciliation movements. Existing values
+# ('order', 'giveaway', 'waste', 'correction', 'daily_prep') keep their meaning.
+STOCK_RECONCILIATION_REASON = 'offline_stock_reconciliation'
+STOCK_RECONCILIATION_NOTE = 'ตรวจนับจริงหลัง Sync ออฟไลน์:'
+VERIFIED_STOCK_ERROR = 'ยอดตรวจนับต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป'
 CATEGORY_ICONS = {'Tiramisu':'🍮', 'Cheesecake':'🍰', 'Doughnut':'🍩'}
 DEFAULT_ICON = '🧁'
 STOCK_REASONS = {
@@ -279,40 +285,69 @@ def create_order():
  try: discount=float(payload.get('discount',0) or 0)
  except (TypeError,ValueError): return error('ส่วนลดไม่ถูกต้อง')
  if discount<0: return error('ส่วนลดต้องไม่ติดลบ')
+ replay,replay_time,business_date=False,None,None
+ offline=payload.get('offline') or {}
+ if isinstance(offline,dict) and offline.get('businessDate'):
+  # A sale already completed on the device: it keeps its own business date and
+  # time, otherwise a yesterday sale synced today would land on today's report.
+  try: business_date=date.fromisoformat(str(offline.get('businessDate')).strip())
+  except (TypeError,ValueError): return error('วันที่ของออเดอร์ออฟไลน์ไม่ถูกต้อง')
+  try: replay_time=datetime.fromisoformat(str(offline.get('createdAt','')).strip().replace('Z','+00:00'))
+  except (TypeError,ValueError): return error('เวลาของออเดอร์ออฟไลน์ไม่ถูกต้อง')
+  if replay_time.tzinfo is None: replay_time=replay_time.replace(tzinfo=timezone.utc)
+  replay_time=replay_time.astimezone(BANGKOK_TZ)
+  now=datetime.now(BANGKOK_TZ)
+  if business_date>now.date() or replay_time>now: return error('ออเดอร์ออฟไลน์ระบุเวลาในอนาคต')
+  replay=True
  with transaction() as (_,cursor):
   if is_postgres():
    execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',(key,))
   duplicate=execute(cursor,'SELECT order_number,subtotal,discount,vat,total,payment_method FROM orders WHERE idempotency_key=?',(key,)).fetchone()
   if duplicate: return jsonify(orderNumber=duplicate['order_number'],subtotal=number(duplicate['subtotal']),discount=number(duplicate['discount']),vat=number(duplicate['vat']),total=number(duplicate['total']),paymentMethod=duplicate['payment_method'],duplicate=True)
-  lines=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
+  lines=[]; shortfalls=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
   for item in items:
    product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND (is_active=1 OR stock_qty>0)'+lock,(item.get('productId'),)).fetchone()
    try:
     qty=int(item.get('qty',0)); giveaway_qty=int(item.get('giveawayQty',0) or 0)
    except (TypeError,ValueError): qty=0
    if not product or qty<=0 or giveaway_qty<0 or giveaway_qty>qty: return error('สินค้าในตะกร้าหรือจำนวนแถมไม่ถูกต้อง')
-   if qty>product['stock_qty']: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
+   # A replayed sale was already paid for, so it is recorded even when another
+   # device sold the stock first; the shortfall is flagged for a human instead.
+   if qty>product['stock_qty'] and not replay: return error('{} คงเหลือไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
+   if qty>product['stock_qty']: shortfalls.append({'productId':product['id'],'productName':product['name'],'shortfall':qty-product['stock_qty']})
    paid_qty=qty-giveaway_qty; line_total=paid_qty*float(product['unit_price']); subtotal+=line_total; lines.append((product,qty,giveaway_qty,paid_qty,line_total))
   if discount>subtotal: return error('ส่วนลดมากกว่ายอดรวม')
-  total=subtotal-discount; order_time=datetime.now(BANGKOK_TZ); today=order_time.date().isoformat()
+  total=subtotal-discount
+  order_time=replay_time if replay else datetime.now(BANGKOK_TZ)
+  today=business_date.isoformat() if replay else order_time.date().isoformat()
   order_base=order_time.strftime('%Y%m%d%H%M')
   if is_postgres(): execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',('order-number:'+order_base,))
   same_minute=execute(cursor,'SELECT COUNT(*) total FROM orders WHERE order_number=? OR order_number LIKE ?',(order_base,order_base+'-%')).fetchone()['total']
   order_number=order_base if same_minute==0 else '{}-{:02d}'.format(order_base,same_minute+1)
   customer=execute(cursor,'SELECT id FROM customers WHERE customer_type=? AND is_active=1 LIMIT 1',(payload.get('customerType','walkin'),)).fetchone()
+  note=payload.get('note')
+  if shortfalls:
+   detail=', '.join('{} ขาด {} ชิ้น'.format(item['productName'],item['shortfall']) for item in shortfalls)
+   note=' | '.join([part for part in (note,STOCK_REVIEW_NOTE+' '+detail) if part])
   query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
-  result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,payload.get('note')))
+  result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,note))
   order_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
   for product,qty,giveaway_qty,paid_qty,line_total in lines:
    execute(cursor,'INSERT INTO order_items (order_id,product_id,product_name,sku,quantity,giveaway_qty,unit_price,discount,line_total) VALUES (?,?,?,?,?,?,?,0,?)',(order_id,product['id'],product['name'],product['sku'],qty,giveaway_qty,product['unit_price'],line_total))
-   updated=execute(cursor,'UPDATE products SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND stock_qty>=?',(qty,product['id'],qty))
-   if updated.rowcount!=1: raise ValueError('สต็อกเปลี่ยนแปลง กรุณาลองใหม่')
+   if replay:
+    # stock_qty carries CHECK (stock_qty >= 0) on both engines, so a replayed
+    # oversell floors at zero and the difference is reported in the order note.
+    floor='GREATEST(stock_qty-?,0)' if is_postgres() else 'MAX(stock_qty-?,0)'
+    execute(cursor,'UPDATE products SET stock_qty='+floor+',updated_at=CURRENT_TIMESTAMP WHERE id=?',(qty,product['id']))
+   else:
+    updated=execute(cursor,'UPDATE products SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND stock_qty>=?',(qty,product['id'],qty))
+    if updated.rowcount!=1: raise ValueError('สต็อกเปลี่ยนแปลง กรุณาลองใหม่')
    if paid_qty:
     execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,\'sale\',?,\'order\',?,NULL)',(product['id'],-paid_qty,order_number))
    if giveaway_qty:
     execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_out',?,'giveaway',?,'แถมในออเดอร์')",(product['id'],-giveaway_qty,order_number))
   execute(cursor,'INSERT INTO payments (order_id,payment_method,paid_amount,change_amount,payment_reference) VALUES (?,?,?,0,?)',(order_id,payment,total,order_number))
- return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment)
+ return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment,stockReview=bool(shortfalls),stockShortfalls=shortfalls)
 
 @app.post('/api/orders/<int:order_id>/cancel')
 def cancel_order(order_id):
@@ -391,6 +426,34 @@ def historical_stock_correction():
    execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_current,product['id']))
    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note,created_at) VALUES (?,'adjust',?,'correction',NULL,?,?)",(product['id'],delta,str(payload.get('note','')).strip() or 'ปรับยอดย้อนหลัง',effective_at))
  return jsonify(productId=product['id'],date=raw_date,previousStock=historical_stock,targetStock=target_stock,delta=delta,currentStock=new_current,noChange=delta==0)
+
+@app.post('/api/stock/reconcile')
+def reconcile_stock():
+ """Correct current stock after an offline sync oversold it.
+
+ Only products and stock_movements are touched: orders, their movements, revenue,
+ giveaway and waste totals all stay exactly as they were recorded.
+ """
+ payload=request.get_json(silent=True) or {}; raw_verified=payload.get('verifiedStock')
+ if isinstance(raw_verified,bool): return error(VERIFIED_STOCK_ERROR)
+ try: verified_stock=int(raw_verified)
+ except (TypeError,ValueError): return error(VERIFIED_STOCK_ERROR)
+ # Rejecting a value that does not round-trip keeps 5.5 and '5abc' out.
+ if verified_stock<0 or str(verified_stock)!=str(raw_verified).strip(): return error(VERIFIED_STOCK_ERROR)
+ reconciliation_id=str(payload.get('reconciliationId') or '').strip()[:100] or None
+ with transaction() as (_,cursor):
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  if not product: return error('ไม่พบสินค้า',404)
+  previous_stock=product['stock_qty']; delta=verified_stock-previous_stock
+  if delta:
+   # quantity carries CHECK (quantity != 0), so an unchanged count records no
+   # movement — the reconciliation is simply a no-op.
+   execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(verified_stock,product['id']))
+   note='{} {} → {}'.format(STOCK_RECONCILIATION_NOTE,previous_stock,verified_stock)
+   supplied=str(payload.get('note','')).strip()
+   if supplied: note=note+' | '+supplied
+   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'adjust',?,?,?,?)",(product['id'],delta,STOCK_RECONCILIATION_REASON,reconciliation_id,note))
+ return jsonify(productId=product['id'],productName=product['name'],previousStock=previous_stock,verifiedStock=verified_stock,delta=delta,currentStock=verified_stock,noChange=delta==0,reason=STOCK_RECONCILIATION_REASON)
 
 @app.get('/api/reports/daily-summary')
 def daily_summary():
@@ -551,8 +614,35 @@ def react_asset(filename):
 @app.get('/next/')
 @app.get('/next/<path:route>')
 def react_index(route=None):
+ if route:
+  try: response=send_from_directory(REACT_ROOT,route)
+  except NotFound: response=None
+  if response is not None:
+   if route in {'sw.js','index.html','manifest.webmanifest'}: response.headers['Cache-Control']='no-cache'
+   elif route.startswith('workbox-') and route.endswith('.js'): response.headers['Cache-Control']='public, max-age=31536000, immutable'
+   else: response.headers['Cache-Control']='public, max-age=3600'
+   return response
  response=send_from_directory(REACT_ROOT,'index.html')
  response.headers['Cache-Control']='no-cache'
+ return response
+
+@app.get('/api/offline-payment-config')
+def offline_payment_config():
+ promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
+ configured=False
+ merchant_account_info=None
+ if promptpay_id:
+  try:
+   merchant_account_info=promptpay_merchant_account_info(promptpay_id)
+   configured=True
+  except PromptPayError:
+   pass
+ payload={'configured':configured,'version':1}
+ if merchant_account_info is not None:
+  payload['merchantAccountInfo']=merchant_account_info
+ response=jsonify(payload)
+ response.headers['Cache-Control']='private, no-store'
+ response.headers['X-Content-Type-Options']='nosniff'
  return response
 
 @app.get('/<path:filename>')

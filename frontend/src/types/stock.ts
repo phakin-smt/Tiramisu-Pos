@@ -61,3 +61,21 @@ export interface CreateStockPlanRequest {
 
 export interface CreateStockPlanResponse { id: number; }
 export interface CancelStockPlanResponse { id: number; cancelled: boolean; }
+
+export interface StockReconciliationRequest {
+  productId: number;
+  verifiedStock: number;
+  reconciliationId?: string;
+  note?: string;
+}
+
+export interface StockReconciliationResponse {
+  productId: number;
+  productName: string;
+  previousStock: number;
+  verifiedStock: number;
+  delta: number;
+  currentStock: number;
+  noChange: boolean;
+  reason: string;
+}

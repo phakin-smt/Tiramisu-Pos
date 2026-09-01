@@ -39,6 +39,20 @@ export function formatTime(value: string | null): string {
   return match?.[0] ?? '-';
 }
 
+export function formatThaiDateTime(value: string | null): string {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('th-TH', {
+    timeZone: APP_TIME_ZONE,
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed);
+}
+
 export function addDaysISO(date: string, days: number): string {
   const [year, month, day] = date.split('-').map(Number);
   const result = new Date(Date.UTC(year, month - 1, day + days));

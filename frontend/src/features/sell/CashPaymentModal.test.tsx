@@ -35,7 +35,7 @@ describe('CashPaymentModal', () => {
     expect(screen.getByRole('button', { name: '1000' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
-    expect(screen.getByLabelText('จำนวนเงินที่รับ')).toHaveValue(620);
+    expect(screen.getByLabelText('จำนวนเงินที่รับ')).toHaveValue('620');
     expect(screen.getByText('฿0.00')).toBeInTheDocument();
   });
 
@@ -45,6 +45,7 @@ describe('CashPaymentModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '100' }));
     fireEvent.click(screen.getByRole('button', { name: 'ยืนยันรับเงิน' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledWith({ amountTendered: 100, changeAmount: 31 });
 
     view.rerender(<CashPaymentModal open amount={69} checkoutError="" submitting onClose={vi.fn()} onConfirm={onConfirm} />);
     expect(screen.getByRole('button', { name: 'ยืนยันรับเงิน' })).toBeDisabled();

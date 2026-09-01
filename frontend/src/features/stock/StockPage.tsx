@@ -13,6 +13,7 @@ import { useSafeMutation } from '../shared/useSafeMutation';
 import type { StockAdjustmentReason } from '../../types/stock';
 import type { StockSummaryItem } from '../../types/stock';
 import { HistoricalCorrectionModal } from './HistoricalCorrectionModal';
+import { StockReconciliationPanel } from './StockReconciliationPanel';
 
 const actionLabels: Record<StockAdjustmentReason, string> = {
   prepare: 'เตรียมเพิ่ม', undo_prepare: 'ยกเลิกเตรียม', giveaway: 'บันทึกแถม',
@@ -53,6 +54,10 @@ export function StockPage() {
       </div>
       <MutationFeedback error={mutation.error} success={mutation.success} />
       <MutationFeedback error="" success={correctionSuccess} />
+      <StockReconciliationPanel
+        serverStock={new Map((query.data?.items ?? []).map((item) => [item.productId, item.stockNow]))}
+        onReconciled={() => setStockRevision((current) => current + 1)}
+      />
       <div aria-live="polite">
         {query.loading && <LoadingState label="กำลังโหลดข้อมูลสต็อก" />}
         {query.error && <ErrorState message={query.error} />}

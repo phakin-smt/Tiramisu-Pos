@@ -39,7 +39,11 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .login-panel > .version-label { display: flex; width: fit-content; margin: 0 auto; color: var(--text-soft); background: var(--panel-soft); }
 
 .app-shell { display: flex; min-height: 100vh; }
-.sidebar { display: flex; flex: 0 0 280px; flex-direction: column; padding: 32px 24px; color: #fbf2ea; background: #573b2d; }
+/* Pinned to the viewport: the till is scrolled constantly, and navigation plus
+   the connectivity badge and logout must stay reachable without scrolling back
+   up. align-self stops the flex stretch that would otherwise leave sticky no
+   room to work, and dvh keeps it correct when iOS collapses its browser chrome. */
+.sidebar { position: sticky; top: 0; align-self: flex-start; display: flex; flex: 0 0 280px; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; padding: 32px 24px; color: #fbf2ea; background: #573b2d; }
 .shell-brand { display: flex; align-items: center; gap: 12px; }
 .brand-title-row { display: flex; align-items: center; gap: 8px; }
 .brand-title-row strong { font-size: 21px; }
@@ -52,8 +56,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .navigation-marker { display: grid; width: 26px; height: 26px; flex: 0 0 26px; border: 1px solid currentColor; border-radius: 50%; place-items: center; font-size: 10px; font-weight: 800; }
 .navigation-label-short { display: none; }
 .sidebar-status { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.18); }
-.sidebar-status span { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.sidebar-status i { width: 8px; height: 8px; border-radius: 50%; background: #5fa777; }
+.connectivity-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.connectivity-status i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #5fa777; }
+.connectivity-status.is-offline { color: #ffe1a8; }
+.connectivity-status.is-offline i { background: #efad4e; }
+.mobile-header-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-header .connectivity-status { color: #27633c; font-weight: 700; }
+.mobile-header .connectivity-status.is-offline { color: #8a5415; }
+.offline-foundation-message { margin: 0 auto 16px; padding: 10px 14px; border: 1px solid #e7c983; border-radius: 8px; color: #6f4c15; background: #fff6dd; font-size: 13px; line-height: 1.45; }
 .sidebar-status button { width: 100%; margin-top: 14px; padding: 9px 12px; color: #fbf2ea; background: rgba(255, 255, 255, 0.12); }
 .main-content { min-width: 0; flex: 1; padding: 28px; }
 .page-header { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
@@ -165,7 +175,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 @media (min-width: 768px) and (max-width: 1199px) {
   .sidebar { flex-basis: 112px; padding: 22px 12px; }
   .sidebar .shell-brand { justify-content: center; }
-  .sidebar .shell-brand > div:last-child, .navigation-heading, .navigation-label-full, .sidebar-status span { display: none; }
+  .sidebar .shell-brand > div:last-child, .navigation-heading, .navigation-label-full, .sidebar-status .connectivity-status { display: none; }
   .sidebar-navigation { margin-top: 34px; }
   .navigation-link { flex-direction: column; gap: 4px; padding: 9px 4px; text-align: center; }
   .navigation-label-short { display: block; font-size: 11px; }
@@ -185,6 +195,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .mobile-header .brand-mark { width: 40px; height: 40px; }
   .mobile-header .brand-title-row strong { font-size: 17px; }
   .mobile-header .brand-subtitle, .mobile-header .version-label { display: none; }
+  .mobile-header .connectivity-status { font-size: 11px; }
   .mobile-header button { padding: 8px 12px; color: var(--primary-dark); background: var(--panel-soft); font-weight: 700; }
   .main-content { padding: 20px 14px calc(90px + env(safe-area-inset-bottom)); }
   .page-header h1 { font-size: 23px; }
@@ -264,6 +275,13 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .sell-metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); }
 .sell-metrics .metric:first-child { border-color: #b7d4c0; background: #f1f8f3; }
 .stock-refresh-notice { margin-top: 14px; padding: 10px 12px; border: 1px solid #d2b562; border-radius: 8px; color: #665019; background: #fff9df; font-size: 13px; }
+.cached-catalog-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 12px; padding: 9px 12px; border: 1px solid #e7c983; border-radius: var(--radius-md); color: #6f4c15; background: #fff8e8; font-size: 12px; }
+.cached-catalog-status strong { font-size: 13px; }
+.cached-catalog-status span:last-child:not(:nth-child(2)) { width: 100%; }
+.catalog-storage-warning { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-md); color: var(--danger); background: var(--danger-soft); font-size: 13px; }
+.offline-catalog-empty { min-height: 180px; align-content: center; gap: 8px; }
+.offline-catalog-empty strong, .offline-catalog-empty span { display: block; }
+.offline-checkout-message { margin: 0; padding: 9px 16px; color: #6f4c15; background: #fff6dd; font-size: 12px; line-height: 1.4; }
 .sell-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 400px); align-items: start; gap: 20px; padding-top: 18px; }
 .sell-catalog { min-width: 0; }
 .catalog-heading { margin: 0 0 12px; }
@@ -691,3 +709,154 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .mobile-cart-bar { min-height: 62px; padding-inline: 20px; border-radius: var(--radius-pill); background: linear-gradient(135deg, #39704b, #28563a); box-shadow: 0 9px 24px rgba(35,73,48,.3); }
   .promptpay-modal, .close-day-modal { border-radius: 22px 22px 0 0; }
 }
+
+/* Offline stock reconciliation: owner counts the shelf and confirms the delta. */
+.stock-reconciliation { border: 1px solid var(--danger); }
+.stock-reconciliation .section-heading > div span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 12px; }
+.reconciliation-resolved { margin: 0 0 12px; padding: 9px 12px; border-radius: var(--radius-md); color: #1f5c46; background: #e5f0eb; font-size: 13px; }
+.reconciliation-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.reconciliation-item { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.reconciliation-product { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.reconciliation-product span { color: var(--text-soft); font-size: 12px; }
+.reconciliation-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0; }
+.reconciliation-figures div { display: grid; gap: 2px; }
+.reconciliation-figures dt { color: var(--text-soft); font-size: 12px; }
+.reconciliation-figures dd { margin: 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.reconciliation-figures dd.is-negative { color: var(--danger); }
+.reconciliation-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reconciliation-entry label { flex: 0 0 auto; font-weight: 700; font-size: 13px; }
+/* 44px targets and 16px text keep this usable on iPad without zoom-on-focus. */
+.reconciliation-entry input { flex: 1 1 120px; min-width: 100px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); font-size: 16px; text-align: right; font-variant-numeric: tabular-nums; }
+.reconciliation-entry button { flex: 0 0 auto; min-height: 44px; padding: 10px 18px; }
+.reconciliation-error { margin: 0; color: var(--danger); font-size: 13px; }
+@media (max-width: 640px) {
+  .reconciliation-entry { align-items: stretch; }
+  .reconciliation-entry input, .reconciliation-entry button { flex: 1 1 100%; }
+}
+
+/* Unsynced offline order queue: owner can see and retry every stuck sale. */
+.sync-status-failed { color: var(--danger); font-weight: 700; }
+.sync-status-success { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-md); color: #1f5c46; background: #e5f0eb; font-size: 13px; font-weight: 700; }
+.offline-queue { margin-top: 12px; }
+.offline-queue .section-heading > div span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 12px; }
+.offline-queue-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.offline-queue-item { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: var(--radius-md); background: var(--panel); }
+.offline-queue-item.is-failed { border-left-color: var(--danger); }
+.offline-queue-identity { display: grid; gap: 2px; min-width: 0; }
+.offline-queue-identity strong { overflow-wrap: anywhere; font-size: 13px; }
+.offline-queue-identity span { color: var(--text-soft); font-size: 12px; }
+.offline-queue-figures { display: grid; gap: 2px; }
+.offline-queue-figures strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.offline-queue-figures span { color: var(--text-soft); font-size: 12px; }
+.offline-queue-state { display: grid; gap: 3px; min-width: 0; font-size: 12px; }
+.offline-queue-error { color: var(--danger); font-weight: 700; overflow-wrap: anywhere; }
+.offline-queue-waiting { color: var(--text-soft); }
+.offline-queue-review { color: #6f4c15; font-weight: 700; }
+.offline-queue-item button { min-height: 44px; padding: 10px 16px; white-space: nowrap; }
+@media (max-width: 820px) {
+  .offline-queue-item { grid-template-columns: 1fr 1fr; }
+  .offline-queue-state { grid-column: 1 / -1; }
+  .offline-queue-item button { grid-column: 1 / -1; width: 100%; }
+}
+
+/* Report summary on a single row. Two classes so it beats the shared
+   .metrics-grid rules regardless of source order, and scoped so the Sell and
+   Analytics grids keep their own wrapping layout.
+   The cards are tightened to fit eight across a desktop width; below that the
+   row scrolls sideways rather than squeezing the amounts unreadably. */
+.metrics-grid.report-metrics {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+}
+.metrics-grid.report-metrics .metric { padding: 14px 12px; }
+.metrics-grid.report-metrics .metric span { font-size: 11px; }
+.metrics-grid.report-metrics .metric strong { margin-top: 6px; font-size: 18px; }
+/* Eight readable amounts need roughly 1030px of content width. Between the full
+   sidebar and that, tighten the cards rather than start scrolling. */
+@media (max-width: 1439px) {
+  .metrics-grid.report-metrics { grid-auto-columns: minmax(100px, 1fr); gap: 8px; }
+  .metrics-grid.report-metrics .metric { padding: 12px 8px; }
+  .metrics-grid.report-metrics .metric span { font-size: 10px; }
+  .metrics-grid.report-metrics .metric strong { font-size: 15px; }
+}
+
+/* Denomination pad for the opening float. Purely an input aid: it fills the
+   total field below and is never stored. */
+.denomination-pad { margin: 0 0 18px; padding: 0; border: 0; }
+.denomination-pad legend { padding: 0 0 10px; color: var(--text-soft); font-size: 13px; font-weight: 700; }
+.denomination-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 8px; }
+.denomination-row { display: grid !important; grid-template-columns: auto minmax(56px, 1fr) auto; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; }
+.denomination-row:focus-within { border-color: var(--primary); box-shadow: var(--focus-ring); }
+.denomination-face { color: var(--text-soft); font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* 44px target and 16px text so iPad neither mis-taps nor zooms on focus. */
+.denomination-row input { min-height: 44px; padding: 6px 8px; border: 0; border-bottom: 1px solid var(--line); outline: 0; background: transparent; color: var(--text); font-size: 16px !important; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.denomination-line { min-width: 62px; color: var(--primary-dark); font-size: 12px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) {
+  .denomination-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .denomination-face { font-size: 11px; }
+}
+
+/* Larger dialogs. A till is operated at arm's length, so the payment and float
+   dialogs scale with the viewport instead of sitting at a fixed phone width,
+   while still capping so targets never spread apart on a wide desktop.
+   Each one also gets a height cap with the body scrolling inside it: the content
+   grew (nine denomination rows, for one) and an uncapped dialog would run off
+   the screen with no way to reach its footer. */
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal,
+.historical-correction-modal,
+.product-modal {
+  max-height: calc(100dvh - 40px);
+}
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.cash-payment-content,
+.opening-float-modal-content,
+.promptpay-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Near full screen. The customer scans the QR from across the counter, so the
+   code itself is the thing being maximised; the caps only stop a desktop window
+   from stretching a dialog past what is comfortable to reach. */
+.cash-payment-modal { width: min(96vw, 860px); max-width: none; }
+.opening-float-modal { width: min(96vw, 900px); max-width: none; }
+.promptpay-modal { width: min(96vw, 900px); max-width: none; }
+.historical-correction-modal { width: min(96vw, 720px); max-width: none; overflow-y: auto; }
+.product-modal { width: min(96vw, 1000px); max-width: none; }
+.cash-payment-modal,
+.opening-float-modal,
+.promptpay-modal,
+.historical-correction-modal,
+.product-modal { max-height: calc(100dvh - 24px); }
+/* Square, and bounded by height rather than width: in landscape the height is
+   what actually limits how large a scannable code can be. */
+.promptpay-content img { width: min(100%, 62vh); }
+
+/* The PromptPay dialog is the one screen a customer looks at, so it takes the
+   whole viewport and spends all of it on the code. Sized by height because the
+   QR is square: on any landscape screen the height is the limiting dimension. */
+.promptpay-overlay { padding: 0; }
+.promptpay-modal {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+}
+.promptpay-content {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+}
+.promptpay-content img { width: min(100%, 74vh); }

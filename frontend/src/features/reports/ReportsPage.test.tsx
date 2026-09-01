@@ -65,7 +65,13 @@ describe('ReportsPage', () => {
   });
 
   it('routes a report 401 through the existing session-expiry behavior', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(json({ authenticated: true, configured: true })).mockResolvedValueOnce(json({ error: 'หมดอายุ' }, 401));
+    const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
+      if (url === '/api/offline-payment-config') return Promise.resolve(json({ configured: false, version: 1 }));
+      if (url === '/api/reports/days') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      throw new Error(`Unexpected request: ${url}`);
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<AuthProvider><MemoryRouter initialEntries={['/reports']}><AppRoutes /></MemoryRouter></AuthProvider>);
     expect(await screen.findByRole('alert')).toHaveTextContent('Session expired');

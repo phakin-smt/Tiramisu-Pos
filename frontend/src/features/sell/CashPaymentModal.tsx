@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { formatCurrency } from '../../domain/format';
+import { acceptMoneyInput } from '../../domain/money';
 
 interface CashPaymentModalProps {
   open: boolean;
@@ -8,7 +9,7 @@ interface CashPaymentModalProps {
   checkoutError: string;
   submitting: boolean;
   onClose(): void;
-  onConfirm(): void;
+  onConfirm(details: { amountTendered: number; changeAmount: number }): void;
 }
 
 const CASH_PRESETS = [100, 500, 1000] as const;
@@ -39,12 +40,12 @@ export function CashPaymentModal({ open, amount, checkoutError, submitting, onCl
       <header><div><h2 id="cash-payment-title">รับชำระเงินสด</h2><span>ตรวจสอบยอดก่อนยืนยันออเดอร์</span></div><button type="button" className="icon-button" aria-label="ปิดรับชำระเงินสด" disabled={submitting} onClick={onClose}>×</button></header>
       <div className="cash-payment-content">
         <div className="cash-total"><span>ยอดชำระ</span><strong>{formatCurrency(amount)}</strong></div>
-        <label className="cash-received-field"><span>รับเงินมา</span><div><span aria-hidden="true">฿</span><input autoFocus aria-label="จำนวนเงินที่รับ" type="number" min="0" step="0.01" inputMode="decimal" value={received} disabled={submitting} onChange={(event) => setReceived(event.target.value)} /></div></label>
+        <label className="cash-received-field"><span>รับเงินมา</span><div><span aria-hidden="true">฿</span><input autoFocus aria-label="จำนวนเงินที่รับ" type="text" inputMode="decimal" autoComplete="off" value={received} disabled={submitting} onChange={(event) => setReceived(acceptMoneyInput(event.target.value, received))} /></div></label>
         <div className="cash-quick-buttons" aria-label="จำนวนเงินด่วน"><button type="button" disabled={submitting} onClick={() => setReceived(String(amount))}>Exact</button>{presets.map((preset) => <button key={preset} type="button" disabled={submitting} onClick={() => setReceived(String(preset))}>{preset}</button>)}</div>
         <div className={`cash-change${validReceived ? ' is-ready' : ''}`} aria-live="polite"><span>เงินทอน</span><strong>{formatCurrency(change)}</strong></div>
         {checkoutError && <div className="qr-status is-error" role="alert">{checkoutError}</div>}
       </div>
-      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!validReceived || submitting} onClick={onConfirm}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
+      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!validReceived || submitting} onClick={() => onConfirm({ amountTendered: receivedAmount, changeAmount: change })}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
     </section>
   </div>;
 }

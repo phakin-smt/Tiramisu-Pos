@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bangkokDateISO, formatThaiDate } from './date';
+import { bangkokDateISO, formatThaiDate, formatThaiDateTime } from './date';
 
 describe('bangkokDateISO', () => {
   it('advances the business date after Bangkok midnight before UTC rollover', () => {
@@ -27,5 +27,16 @@ describe('formatThaiDate', () => {
 
   it('uses a safe fallback for a missing date', () => {
     expect(formatThaiDate(null)).toBe('—');
+  });
+});
+
+describe('formatThaiDateTime', () => {
+  it('formats an ISO snapshot time in Bangkok time', () => {
+    expect(formatThaiDateTime('2026-08-21T04:30:00.000Z')).toMatch(/21.*ส\.ค\..*11:30/);
+  });
+
+  it('uses a safe fallback for missing or unexpected values', () => {
+    expect(formatThaiDateTime(null)).toBe('—');
+    expect(formatThaiDateTime('unexpected')).toBe('unexpected');
   });
 });

@@ -119,24 +119,53 @@ describe('SellPage', () => {
 
   it('applies the pure pooled 69-baht promotion and keeps VAT zero', async () => {
     mockSell(); await renderSell(); add('Original'); add('Coffee', 2);
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(7);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
     expect(screen.getByText(/ลดให้อัตโนมัติ/)).toHaveTextContent('฿7.00');
     expect(totalsRegion()).toHaveTextContent('200');
     expect(totalsRegion()).toHaveTextContent('VAT');
     expect(totalsRegion()).toHaveTextContent('0');
   });
 
+  it('switches to the shop wholesale rate when the customer type is ร้านค้า', async () => {
+    mockSell(); await renderSell(); add('Original'); add('Coffee', 2);
+    // Walk-in sees the three-for-200 promotion.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
+
+    fireEvent.click(screen.getByRole('button', { name: 'ร้านค้า' }));
+
+    // Three Tiramisu at 9 baht off each, and the bundle no longer applies.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('27');
+    expect(screen.getByText(/ราคาร้านค้า/)).toHaveTextContent('฿27.00');
+    expect(screen.queryByText(/ลดให้อัตโนมัติ/)).not.toBeInTheDocument();
+    expect(totalsRegion()).toHaveTextContent('180');
+
+    // Switching back restores the walk-in promotion.
+    fireEvent.click(screen.getByRole('button', { name: 'Walk-in' }));
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
+    expect(totalsRegion()).toHaveTextContent('200');
+  });
+
+  it('leaves non-Tiramisu products out of the shop rate', async () => {
+    mockSell(); await renderSell(); add('Cookie', 2);
+    fireEvent.click(screen.getByRole('button', { name: 'ร้านค้า' }));
+
+    // Bakery is not discounted, so the shop note stays hidden.
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('0');
+    expect(screen.queryByText(/ราคาร้านค้า/)).not.toBeInTheDocument();
+    expect(totalsRegion()).toHaveTextContent('100');
+  });
+
   it('excludes giveaways and non-69 products from promotion eligibility', async () => {
     mockSell(); await renderSell(); add('Original', 3);
     fireEvent.click(screen.getByLabelText('เพิ่มจำนวนแถม Original'));
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(0);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('0');
     add('Cookie', 2);
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(0);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('0');
   });
 
   it('applies two bundle discounts for six eligible paid units', async () => {
     mockSell(); await renderSell(); add('Original', 6);
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(14);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('14');
     expect(totalsRegion()).toHaveTextContent('400');
   });
 
@@ -144,13 +173,13 @@ describe('SellPage', () => {
     mockSell(); await renderSell(); add('Original', 3);
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '5' } });
     add('Original');
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(5);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('5');
     expect(screen.queryByText(/ลดให้อัตโนมัติ/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '9999' } });
     expect(totalsRegion()).toHaveTextContent('฿0.00');
     fireEvent.click(screen.getByRole('button', { name: 'ล้าง' }));
     add('Original', 3);
-    expect(screen.getByLabelText('ส่วนลด')).toHaveValue(7);
+    expect(screen.getByLabelText('ส่วนลด')).toHaveValue('7');
   });
 
   it('loads and collapses daily metrics from the read-only summary endpoint', async () => {

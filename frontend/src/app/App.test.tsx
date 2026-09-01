@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ConnectivityProvider } from '../connectivity/ConnectivityContext';
 import { AuthProvider } from '../features/auth/AuthContext';
+import { readOfflineAuthorization, refreshOfflineAuthorization } from '../offline/offlineAuthorization';
+import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
 
 interface MockResponse {
@@ -28,12 +31,21 @@ function mockResponses(...items: MockResponse[]) {
 
 function renderApplication(path = '/') {
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <AppRoutes />
-      </MemoryRouter>
-    </AuthProvider>,
+    <ConnectivityProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AuthProvider>
+    </ConnectivityProvider>,
   );
+}
+
+function setNavigatorOnline(value: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', {
+    configurable: true,
+    value,
+  });
 }
 
 async function submitPin(pin = '2468') {
@@ -45,13 +57,22 @@ describe('authentication and application shell', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    setNavigatorOnline(true);
   });
 
   it('shows the application shell for an initially authenticated session', async () => {
-    mockResponses({ body: { authenticated: true, configured: true } });
+    mockResponses(
+      { body: { authenticated: true, configured: true } },
+      { body: { configured: true, merchantAccountInfo: '0016A00000067701011101130066801234567', version: 1 } },
+    );
     renderApplication('/sell');
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'เมนูหลัก' })).toBeInTheDocument();
+    await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+    await vi.waitFor(async () => expect(await readOfflinePaymentConfig()).toMatchObject({
+      merchantAccountInfo: '0016A00000067701011101130066801234567',
+      version: 1,
+    }));
   });
 
   it('shows login and denies shell access for an unauthenticated session', async () => {
@@ -70,15 +91,68 @@ describe('authentication and application shell', () => {
     await submitPin();
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     view.rerender(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/sell']}>
-          <AppRoutes />
-        </MemoryRouter>
-      </AuthProvider>,
+      <ConnectivityProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/sell']}>
+            <AppRoutes />
+          </MemoryRouter>
+        </AuthProvider>
+      </ConnectivityProvider>,
     );
     const loginCalls = fetchMock.mock.calls.filter(([url, init]) =>
       url === '/api/auth/login' && (init as RequestInit).method === 'POST');
     expect(loginCalls).toHaveLength(1);
+    await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+  });
+
+  const storageScenarios: Array<[string, Partial<StorageManager> | undefined]> = [
+    ['rejects the request', { persist: async (): Promise<boolean> => { throw new Error('permission database unavailable'); } }],
+    ['refuses persistence', { persist: async () => false, persisted: async () => false }],
+    ['has no Storage API', undefined],
+  ];
+
+  it.each(storageScenarios)('logs in and provisions the device even when the browser %s', async (_label, storage) => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'storage');
+    Object.defineProperty(navigator, 'storage', { configurable: true, value: storage });
+    try {
+      mockResponses(
+        { body: { authenticated: false, configured: true } },
+        { body: { authenticated: true, configured: true } },
+      );
+      renderApplication('/sell');
+      await submitPin();
+
+      expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
+      // Trusted-device provisioning must survive a storage failure beside it.
+      await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+      expect(await screen.findByText(/อุปกรณ์นี้อาจลบข้อมูลออฟไลน์/)).toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'storage', original);
+      else Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'storage');
+    }
+  });
+
+  it('reports durable storage without warning the cashier when persistence is granted', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'storage');
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: { persist: async () => true, persisted: async () => false },
+    });
+    try {
+      mockResponses(
+        { body: { authenticated: false, configured: true } },
+        { body: { authenticated: true, configured: true } },
+      );
+      renderApplication('/sell');
+      await submitPin();
+
+      expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
+      await vi.waitFor(async () => expect((await readOfflineAuthorization()).authorized).toBe(true));
+      expect(screen.queryByText(/อุปกรณ์นี้อาจลบข้อมูลออฟไลน์/)).not.toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'storage', original);
+      else Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'storage');
+    }
   });
 
   it.each([
@@ -108,6 +182,36 @@ describe('authentication and application shell', () => {
     renderApplication('/reports');
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to connect to the server.');
     expect(screen.queryByRole('heading', { name: 'รายงาน' })).not.toBeInTheDocument();
+  });
+
+  it('renders the application shell and honest status when an authorized device is offline', async () => {
+    await refreshOfflineAuthorization();
+    setNavigatorOnline(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication('/orders');
+
+    expect(await screen.findByRole('heading', { name: 'ออเดอร์' })).toBeInTheDocument();
+    expect(screen.getAllByRole('status').some(
+      (status) => status.textContent?.includes('Offline'),
+    )).toBe(true);
+    expect(screen.getByRole('note')).toHaveTextContent('ขายเงินสดและ PromptPay ได้บนอุปกรณ์ที่ได้รับอนุญาต');
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/auth/status')).toBe(false);
+  });
+
+  it('locks the offline workspace on a device that holds no trusted-device authorization', async () => {
+    setNavigatorOnline(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderApplication('/orders');
+
+    // Airplane mode must not open the till on an unprovisioned device.
+    expect(await screen.findByText('อุปกรณ์นี้ยังไม่ได้รับอนุญาตให้ใช้งานออฟไลน์')).toBeInTheDocument();
+    expect(screen.getByText('กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเข้าสู่ระบบด้วย PIN อีกครั้ง')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'ออเดอร์' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('logs out and removes access to the shell with one mutation', async () => {
