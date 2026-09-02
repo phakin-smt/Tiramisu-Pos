@@ -1,5 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build",
-  "regions": ["sin1"]
+  "regions": ["sin1"],
+  "functions": {
+    "backend/server.py": {
+      "includeFiles": "{backend/schema/**,public/**,frontend/dist/**}"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/backend/server.py" },
+    { "source": "/next", "destination": "/backend/server.py" },
+    { "source": "/next/(.*)", "destination": "/backend/server.py" },
+    { "source": "/(app.js|styles.css)", "destination": "/backend/server.py" },
+    { "source": "/", "destination": "/backend/server.py" }
+  ]
 }

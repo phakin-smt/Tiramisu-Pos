@@ -4,7 +4,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent
+BACKEND_ROOT = Path(__file__).resolve().parent
+# ROOT stays the project root: server.py serves public/ and frontend/dist from
+# it, and the local SQLite file lives beside them rather than inside backend/.
+ROOT = BACKEND_ROOT.parent
 SQLITE_PATH = Path(os.getenv("SQLITE_PATH", str(ROOT / "pos.db")))
 
 
@@ -62,7 +65,7 @@ def transaction():
 
 def init_schema():
     schema_name = "schema_postgres.sql" if is_postgres() else "schema.sql"
-    schema = (ROOT / "schema" / schema_name).read_text(encoding="utf-8")
+    schema = (BACKEND_ROOT / "schema" / schema_name).read_text(encoding="utf-8")
     connection = connect_db()
     try:
         if is_postgres():

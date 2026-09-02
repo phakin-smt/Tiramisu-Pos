@@ -29,7 +29,7 @@ os.environ["SECRET_KEY"] = "playwright-only-secret-key"
 os.environ["PROMPTPAY_ID"] = "0801234567"
 os.environ["APP_TIMEZONE"] = "Asia/Bangkok"
 os.environ.pop("VERCEL", None)
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 import database  # noqa: E402
 
