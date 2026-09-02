@@ -43,7 +43,7 @@
 
 ## 7. ฐานข้อมูล (Database)
 - รองรับ 2 แบบ: SQLite (ใช้ตอน dev/local) และ PostgreSQL เช่น Supabase (production) — สลับอัตโนมัติตามว่ามี `DATABASE_URL` หรือไม่
-- มี schema แยก 2 ไฟล์ (schema.sql / schema_postgres.sql) โครงสร้างตารางเหมือนกัน: products, customers, orders, order_items, payments, stock_movements
+- มี schema แยก 2 ไฟล์ (`schema/schema.sql` / `schema/schema_postgres.sql`) โครงสร้างตารางเหมือนกัน: products, customers, orders, order_items, payments, stock_movements
 - `init_db.py` seed สินค้าจริง 18 SKU พร้อมราคา/ต้นทุน และลูกค้าตัวอย่าง 3 ราย
 - `verify_supabase.py` เป็นสคริปต์ smoke test สำหรับตรวจสอบ deployment บน Postgres/Supabase (health, checkout, idempotency, concurrency, reports)
 - `GET /api/health` บอกว่าตอนนี้ backend ใช้ DB แบบไหนอยู่

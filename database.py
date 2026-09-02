@@ -62,7 +62,7 @@ def transaction():
 
 def init_schema():
     schema_name = "schema_postgres.sql" if is_postgres() else "schema.sql"
-    schema = (ROOT / schema_name).read_text(encoding="utf-8")
+    schema = (ROOT / "schema" / schema_name).read_text(encoding="utf-8")
     connection = connect_db()
     try:
         if is_postgres():

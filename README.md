@@ -67,13 +67,14 @@ Tiramisu-Pos/
 │   ├── index.html            # โครงสร้างหน้าเว็บ
 │   ├── app.js                # Logic ฝั่งหน้าเว็บ
 │   └── styles.css            # รูปแบบและ Responsive UI
+├── schema/                   # Schema SQL แยกตามชนิดฐานข้อมูล
+│   ├── schema.sql            # SQLite
+│   └── schema_postgres.sql   # PostgreSQL
 ├── tests/                    # เทสต์ฝั่ง Backend (unittest)
 ├── server.py                 # Flask application, API routes และการเสิร์ฟทั้งสองแอป
 ├── promptpay_qr.py           # สร้าง EMVCo payload สำหรับ QR พร้อมเพย์
 ├── database.py               # การเชื่อมต่อ SQLite/PostgreSQL
 ├── init_db.py                # สร้างฐานข้อมูลและข้อมูลเริ่มต้น
-├── schema.sql                # Schema สำหรับ SQLite
-├── schema_postgres.sql       # Schema สำหรับ PostgreSQL
 ├── verify_supabase.py        # Smoke test สำหรับ PostgreSQL/Supabase
 ├── requirements.txt          # Python dependencies
 ├── .env.example              # ตัวอย่าง Environment Variables
