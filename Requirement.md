@@ -26,7 +26,7 @@
 
 ## 4. การชำระเงิน (Payment)
 - รองรับ 2 วิธี: เงินสด (cash) และ โอน/พร้อมเพย์ (transfer)
-- QR พร้อมเพย์ generate ตามยอดของแต่ละออเดอร์ — `promptpay_qr.py` สร้าง EMVCo payload + CRC16 เอง แล้ว `GET /api/payment-qr?amount=` render เป็น PNG (ไฟล์รูป static เดิมที่ `private_data/payment_qr.py` ไม่ได้ใช้แล้ว)
+- QR พร้อมเพย์ generate ตามยอดของแต่ละออเดอร์ — `promptpay_qr.py` สร้าง EMVCo payload + CRC16 เอง แล้ว `GET /api/payment-qr?amount=` render เป็น PNG
 - **ไม่มี payment gateway จริง** — ไม่มีการเชื่อมต่อธนาคารหรือตรวจสอบยอดที่โอนเข้ามา
 - แคชเชียร์ต้องกดยืนยันเองว่า "โอนแล้ว" ไม่มีการตรวจสอบการโอนอัตโนมัติ/webhook ใดๆ
 
