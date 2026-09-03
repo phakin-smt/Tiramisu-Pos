@@ -3,10 +3,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import { replaceConfirmedCatalogSnapshot } from '../../offline/catalogSnapshot';
+import { saveSelectedStore } from '../../offline/selectedStore';
 import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
 import { getOfflineOrderDetails, getPendingOfflineOrderCount, getRecentOfflineOrders } from '../../offline/offlineOrders';
 import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
+import { StoreProvider } from '../stores/StoreContext';
+
+// A device that has been online at least once knows which store it sells for and
+// on what terms, the same way it knows the catalogue.
+const cachedStore = {
+  storeId: 1,
+  storeName: 'Baannoi',
+  rules: {
+    bundle: { unitPrice: 69, quantity: 3, price: 200 },
+    wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+  },
+};
 
 const cachedProducts: CatalogProduct[] = [
   { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
@@ -22,7 +35,9 @@ function setNavigatorOnline(value: boolean) {
 function renderOfflineSell() {
   return render(
     <ConnectivityProvider>
-      <SellPage />
+      <StoreProvider>
+        <SellPage />
+      </StoreProvider>
     </ConnectivityProvider>,
   );
 }
@@ -48,6 +63,7 @@ describe('SellPage offline catalog', () => {
   });
 
   it('uses cached categories and stock while blocking every checkout path without authorization', async () => {
+    await saveSelectedStore(cachedStore);
     await replaceConfirmedCatalogSnapshot(cachedProducts, '2026-08-21T04:30:00.000Z');
     setNavigatorOnline(false);
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('offline'));
@@ -83,6 +99,7 @@ describe('SellPage offline catalog', () => {
   });
 
   it('completes an authorized offline cash sale without order or QR requests and reloads reduced stock', async () => {
+    await saveSelectedStore(cachedStore);
     await replaceConfirmedCatalogSnapshot(cachedProducts, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     setNavigatorOnline(false);

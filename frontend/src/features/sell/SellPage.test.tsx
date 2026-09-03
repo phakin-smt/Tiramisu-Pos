@@ -7,6 +7,14 @@ import { AppRoutes } from '../../app/router';
 import { AuthProvider } from '../auth/AuthContext';
 import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
+import { StoreProvider } from '../stores/StoreContext';
+
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
 
 const products: CatalogProduct[] = [
   { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
@@ -30,6 +38,8 @@ function mockSell(handler?: (url: string, init: RequestInit) => Response | Promi
     if (url === '/api/products') return Promise.resolve(json(products));
     if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
     if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -37,7 +47,7 @@ function mockSell(handler?: (url: string, init: RequestInit) => Response | Promi
 }
 
 async function renderSell() {
-  const view = render(<SellPage />);
+  const view = render(<StoreProvider><SellPage /></StoreProvider>);
   await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
   return view;
 }
@@ -199,7 +209,7 @@ describe('SellPage', () => {
       if (url === '/api/reports/daily-summary') return json({ error: 'โหลดสรุปไม่ได้' }, 500);
       return undefined;
     });
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     expect(await screen.findByText('โหลดสินค้าไม่ได้')).toHaveAttribute('role', 'alert');
     expect(await screen.findByText('โหลดสรุปไม่ได้')).toHaveAttribute('role', 'alert');
   });
@@ -207,7 +217,7 @@ describe('SellPage', () => {
   it('announces the daily-summary loading state', async () => {
     const pending = new Promise<Response>(() => undefined);
     mockSell((url) => url === '/api/reports/daily-summary' ? pending : undefined);
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     expect(screen.getByText('กำลังโหลดสรุปยอดวันนี้')).toHaveAttribute('role', 'status');
     expect(await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toBeInTheDocument();
   });
@@ -219,6 +229,8 @@ describe('SellPage', () => {
       if (url === '/api/products') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
       if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -269,7 +281,7 @@ describe('SellPage', () => {
     fireEvent.change(screen.getByLabelText('ส่วนลด'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'รีเฟรชสินค้า' }));
     await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/products')).toHaveLength(2));
-    view.rerender(<SellPage />);
+    view.rerender(<StoreProvider><SellPage /></StoreProvider>);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/orders'))).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/payment-qr'))).toBe(false);
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);

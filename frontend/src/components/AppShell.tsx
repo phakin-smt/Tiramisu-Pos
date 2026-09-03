@@ -4,11 +4,14 @@ import { Outlet } from 'react-router-dom';
 import { useConnectivity } from '../connectivity/ConnectivityContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { isStorageDurable, STORAGE_NOT_PERSISTED_MESSAGE } from '../offline/storagePersistence';
+import { isCheckoutActive } from '../pwa/updateGate';
+import { useStore } from '../features/stores/StoreContext';
 import { MobileNavigation } from './MobileNavigation';
 import { SidebarNavigation } from './SidebarNavigation';
 import { useTabletSwipeNavigation } from './useTabletSwipeNavigation';
 
 function Brand() {
+  const { storeName } = useStore();
   return (
     <div className="shell-brand">
       <div className="brand-mark" aria-hidden="true">BP</div>
@@ -17,9 +20,30 @@ function Brand() {
           <strong>Baannoi-POS</strong>
           <span className="version-label">v1.1.0</span>
         </div>
-        <span className="brand-subtitle">ระบบขายของหวาน</span>
+        {/* Which shop this till is ringing up for, kept in sight rather than
+            behind a menu: everything on screen belongs to it. */}
+        <span className="brand-subtitle">{storeName || 'ระบบขายของหวาน'}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * Offered only when there is somewhere else to go, and never mid-sale -- the
+ * cart belongs to the store that is open, and switching clears it.
+ */
+function StoreSwitch({ compact = false }: { compact?: boolean }) {
+  const { stores, requestSwitch } = useStore();
+  if (stores.length < 2) return null;
+  return (
+    <button
+      type="button"
+      className="store-switch"
+      disabled={isCheckoutActive()}
+      onClick={requestSwitch}
+    >
+      {compact ? 'ร้าน' : 'เปลี่ยนร้าน'}
+    </button>
   );
 }
 
@@ -50,6 +74,7 @@ export function AppShell() {
         <SidebarNavigation />
         <div className="sidebar-status">
           <ConnectivityStatus />
+          <StoreSwitch />
           <button type="button" onClick={logout} disabled={submitting}>
             ออกจากระบบ
           </button>
@@ -60,6 +85,7 @@ export function AppShell() {
         <Brand />
         <div className="mobile-header-actions">
           <ConnectivityStatus compact />
+          <StoreSwitch compact />
           <button type="button" onClick={logout} disabled={submitting} aria-label="ออกจากระบบ">
             ออก
           </button>

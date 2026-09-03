@@ -8,6 +8,7 @@ export const PRODUCT_SNAPSHOT_KEY = 'confirmed';
 export const CATALOG_METADATA_KEY = 'catalog';
 export const OFFLINE_AUTHORIZATION_KEY = 'offlineAuthorization';
 export const PROMPTPAY_CONFIG_KEY = 'promptpay';
+export const PRICING_RULES_KEY = 'pricingRules';
 
 export interface ProductSnapshotRecord {
   key: typeof PRODUCT_SNAPSHOT_KEY;
@@ -25,6 +26,20 @@ export interface OfflineAuthorizationRecord {
   enabledAt: string;
   expiresAt: string;
   schemaVersion: number;
+}
+
+/**
+ * The selling store's automatic discounts, kept so an offline till prices a cart
+ * the same way the server would. Lives in the existing metadata store, which
+ * needs no schema version bump to hold another key.
+ */
+export interface PricingRulesRecord {
+  key: typeof PRICING_RULES_KEY;
+  storeId: number;
+  storeName: string;
+  bundle: { unitPrice: number; quantity: number; price: number } | null;
+  wholesale: { category: string; discountPerItem: number } | null;
+  savedAt: string;
 }
 
 export interface OfflinePaymentConfigRecord {
@@ -113,7 +128,7 @@ export interface BaannoiPosDatabase extends DBSchema {
   };
   metadata: {
     key: string;
-    value: CatalogSnapshotMetadata | OfflineAuthorizationRecord;
+    value: CatalogSnapshotMetadata | OfflineAuthorizationRecord | PricingRulesRecord;
   };
   offlineOrders: {
     key: string;

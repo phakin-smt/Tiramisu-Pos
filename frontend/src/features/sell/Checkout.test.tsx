@@ -19,6 +19,14 @@ import {
 import { replaceOfflinePaymentConfig } from '../../offline/paymentConfig';
 import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
+import { StoreProvider } from '../stores/StoreContext';
+
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
 
 vi.mock('qrcode', () => ({
   default: { toString: vi.fn(async () => '<svg xmlns="http://www.w3.org/2000/svg"/>') },
@@ -57,6 +65,8 @@ function mockCheckout(handler?: Handler) {
     if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
     if (url.startsWith('/api/payment-qr?')) return Promise.resolve(png());
     if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(json(order));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -64,7 +74,7 @@ function mockCheckout(handler?: Handler) {
 }
 
 async function renderCheckout() {
-  const view = render(<SellPage />);
+  const view = render(<StoreProvider><SellPage /></StoreProvider>);
   await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
   return view;
 }
@@ -135,7 +145,7 @@ describe('Sell checkout', () => {
         : undefined
     ));
     await refreshOfflineAuthorization();
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
     add();
@@ -166,7 +176,7 @@ describe('Sell checkout', () => {
         : undefined
     ));
     await refreshOfflineAuthorization();
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
     add();
@@ -199,7 +209,7 @@ describe('Sell checkout', () => {
         : undefined
     ));
     await refreshOfflineAuthorization();
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
     add();
@@ -298,7 +308,7 @@ describe('Sell checkout', () => {
   it('routes one open cash confirmation locally when connectivity disappears before confirm', async () => {
     const fetchMock = mockCheckout();
     await refreshOfflineAuthorization();
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
     add();
@@ -342,7 +352,7 @@ describe('Sell checkout', () => {
         : undefined
     ));
 
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
     expect(screen.getByText('มีออเดอร์ออฟไลน์ที่ยังไม่ได้ Sync การขายจะยังบันทึกในเครื่อง')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 9 ชิ้น');
@@ -357,7 +367,7 @@ describe('Sell checkout', () => {
     expect(saleCalls(fetchMock)).toHaveLength(0);
 
     cleanup();
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     expect(await screen.findByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 8 ชิ้น');
     expect(saleCalls(fetchMock)).toHaveLength(0);
@@ -382,7 +392,7 @@ describe('Sell checkout', () => {
     });
     const fetchMock = mockCheckout();
 
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(() => expect(screen.queryByText(/Local Mode/)).not.toBeInTheDocument());
 
@@ -430,7 +440,7 @@ describe('Sell checkout', () => {
       return replays === 1 ? json(order) : Promise.reject(new TypeError('Failed to fetch'));
     });
 
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(2));
 
@@ -463,7 +473,7 @@ describe('Sell checkout', () => {
         : undefined
     ));
 
-    render(<SellPage />);
+    render(<StoreProvider><SellPage /></StoreProvider>);
     expect(await screen.findByText('Local Mode · รอ Sync 1 รายการ')).toBeInTheDocument();
     await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(1));
     add();
@@ -492,7 +502,7 @@ describe('Sell checkout', () => {
     const fetchMock = mockCheckout((url) => url.startsWith('/api/payment-qr') ? qrPending.promise : undefined);
     await refreshOfflineAuthorization();
     await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
     add();
@@ -520,7 +530,7 @@ describe('Sell checkout', () => {
     await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     const fetchMock = mockCheckout();
-    render(<ConnectivityProvider><SellPage /></ConnectivityProvider>);
+    render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
     add();
     fireEvent.click(transferButton());
@@ -545,7 +555,7 @@ describe('Sell checkout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exact' }));
     fireEvent.click(cashConfirmButton());
     fireEvent.click(cashConfirmButton());
-    view.rerender(<SellPage />);
+    view.rerender(<StoreProvider><SellPage /></StoreProvider>);
 
     await vi.waitFor(() => expect(orderCalls(fetchMock)).toHaveLength(1));
     const [, init] = orderCalls(fetchMock)[0];
@@ -588,7 +598,7 @@ describe('Sell checkout', () => {
     expect(screen.getByLabelText('จำนวนแถม Original')).toHaveTextContent('1');
     expect(screen.getByLabelText('ส่วนลด')).toHaveValue('5');
 
-    view.rerender(<SellPage />);
+    view.rerender(<StoreProvider><SellPage /></StoreProvider>);
     fireEvent.click(cashConfirmButton());
     expect(await screen.findByText(/บันทึกออเดอร์ #ORDER-2/)).toBeInTheDocument();
     const firstKey = (orderCalls(fetchMock)[0][1] as RequestInit).headers as Record<string, string>;
@@ -686,9 +696,9 @@ describe('Sell checkout', () => {
 
   it('does not submit from render, rerender, effects, or React Strict Mode', async () => {
     const fetchMock = mockCheckout();
-    const view = render(<StrictMode><SellPage /></StrictMode>);
+    const view = render(<StrictMode><StoreProvider><SellPage /></StoreProvider></StrictMode>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    view.rerender(<StrictMode><SellPage /></StrictMode>);
+    view.rerender(<StrictMode><StoreProvider><SellPage /></StoreProvider></StrictMode>);
     expect(orderCalls(fetchMock)).toHaveLength(0);
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
   });
@@ -800,6 +810,8 @@ describe('Sell checkout', () => {
       if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url === '/api/auth/login') return Promise.resolve(json({ authenticated: true }));
       if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(++posts === 1 ? json({ error: 'หมดอายุ' }, 401) : json(order));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -827,6 +839,8 @@ describe('Sell checkout', () => {
       if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url.startsWith('/api/payment-qr')) return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/auth/login') return Promise.resolve(json({ authenticated: true }));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
