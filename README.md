@@ -18,39 +18,84 @@
 - วางแผนเตรียมสต็อกล่วงหน้า
 - ดูออเดอร์และรายงานยอดขายตามวันที่
 - สรุปยอดปิดการขาย แยกเงินสด เงินโอน ส่วนลด ต้นทุน และกำไรขั้นต้น
+- ราคาส่งสำหรับลูกค้าประเภทร้านค้า
+- ตั้งเงินทอนตั้งต้นประจำวัน และเทียบกับยอดเงินสดที่ควรมีตอนปิดยอด
+- ขายแบบออฟไลน์บนแอป React (PWA) และ Sync ออเดอร์ขึ้นเซิร์ฟเวอร์อัตโนมัติเมื่อกลับมาออนไลน์
 - UI แบบ Responsive พร้อมตะกร้าแบบ Bottom Sheet บนมือถือ
 - รองรับ SQLite สำหรับใช้งานบนเครื่อง และ PostgreSQL/Supabase สำหรับ Production
 - รองรับการ Deploy บน Vercel
 
 ## เทคโนโลยีที่ใช้
 
-- Backend: Python 3.12 และ Flask
-- Frontend: HTML, CSS และ Vanilla JavaScript
-- Database: SQLite หรือ PostgreSQL
-- Production hosting: Vercel
+**Backend**
 
-โปรเจกต์นี้ไม่มีขั้นตอน `npm build` เนื่องจากหน้าเว็บเป็นไฟล์ Static ที่ Flask ให้บริการโดยตรง
+- Python 3.12 และ Flask 3.1
+- SQLite สำหรับใช้งานบนเครื่อง หรือ PostgreSQL/Supabase สำหรับ Production สลับอัตโนมัติตาม `DATABASE_URL`
+- สร้าง QR พร้อมเพย์เอง (EMVCo payload + CRC16) ด้วย `qrcode`
+
+**Frontend**
+
+- แอปหลัก: React 19 + TypeScript + Vite build เป็น PWA (`vite-plugin-pwa`) และใช้ IndexedDB ผ่าน `idb` สำหรับการขายออฟไลน์
+- แอปเดิม: HTML, CSS และ Vanilla JavaScript ที่ Flask เสิร์ฟตรงจาก `public/`
+- เทสต์: Vitest + Testing Library และ Playwright สำหรับ E2E
+
+**Deploy**
+
+- Vercel (region `sin1`) โดย Vercel เป็นผู้ build ฝั่ง React ให้ตามที่กำหนดใน `vercel.json`
 
 ## โครงสร้างโปรเจกต์
 
 ```text
 Tiramisu-Pos/
-├── public/
-│   ├── index.html          # โครงสร้างหน้าเว็บ
-│   ├── app.js              # Logic ฝั่งหน้าเว็บ
-│   └── styles.css          # รูปแบบและ Responsive UI
-├── private_data/
-│   └── payment_qr.py       # รูป QR พร้อมเพย์ที่ฝังไว้ในระบบ
-├── server.py               # Flask application และ API routes
-├── database.py             # การเชื่อมต่อ SQLite/PostgreSQL
-├── init_db.py              # สร้างฐานข้อมูลและข้อมูลเริ่มต้น
-├── schema.sql              # Schema สำหรับ SQLite
-├── schema_postgres.sql     # Schema สำหรับ PostgreSQL
-├── verify_supabase.py      # Smoke test สำหรับ PostgreSQL/Supabase
-├── requirements.txt        # Python dependencies
-├── .env.example            # ตัวอย่าง Environment Variables
-└── vercel.json             # การตั้งค่า Vercel
+├── frontend/                 # แอปหลัก React PWA เสิร์ฟที่ /next/
+│   ├── src/
+│   │   ├── api/              # HTTP client (timeout, 401, reachability) และ endpoint แต่ละกลุ่ม
+│   │   ├── app/              # App shell และ router
+│   │   ├── components/       # Layout, navigation และส่วนประกอบที่ใช้ร่วมกัน
+│   │   ├── connectivity/     # สถานะออนไลน์ และการเข้าถึง backend จริง
+│   │   ├── domain/           # ตรรกะล้วน: ตะกร้า โปรโมชั่น จำนวนเงิน วันที่
+│   │   ├── features/         # แยกตามหน้าจอ: sell, stock, orders, reports, analytics, products-admin, auth
+│   │   ├── offline/          # IndexedDB, catalog snapshot, ออเดอร์ออฟไลน์, การ Sync, trusted device
+│   │   ├── pwa/              # ตั้งค่า Service Worker และ update gate
+│   │   ├── types/            # TypeScript types ที่ตรงกับ API
+│   │   └── styles/           # global.css
+│   ├── e2e/                  # Playwright: specs, pwa, staging และ backend สำหรับเทสต์
+│   ├── public/               # ไอคอน PWA
+│   ├── vite.config.ts        # Base path /next/ และ dev proxy ไป Flask
+│   └── package.json          # สคริปต์ dev / build / test
+├── public/                   # แอปเดิม Vanilla JS เสิร์ฟที่ /
+│   ├── index.html            # โครงสร้างหน้าเว็บ
+│   ├── app.js                # Logic ฝั่งหน้าเว็บ
+│   └── styles.css            # รูปแบบและ Responsive UI
+├── schema/                   # Schema SQL แยกตามชนิดฐานข้อมูล
+│   ├── schema.sql            # SQLite
+│   └── schema_postgres.sql   # PostgreSQL
+├── tests/                    # เทสต์ฝั่ง Backend (unittest)
+├── server.py                 # Flask application, API routes และการเสิร์ฟทั้งสองแอป
+├── promptpay_qr.py           # สร้าง EMVCo payload สำหรับ QR พร้อมเพย์
+├── database.py               # การเชื่อมต่อ SQLite/PostgreSQL
+├── init_db.py                # สร้างฐานข้อมูลและข้อมูลเริ่มต้น
+├── verify_supabase.py        # Smoke test สำหรับ PostgreSQL/Supabase
+├── requirements.txt          # Python dependencies
+├── .env.example              # ตัวอย่าง Environment Variables
+└── vercel.json               # การตั้งค่า Vercel
 ```
+
+## สองแอปบน Backend เดียว
+
+Flask ตัวเดียวให้บริการหน้าเว็บสองชุด ซึ่งแยกโค้ดออกจากกันโดยสิ้นเชิงและใช้ API ชุดเดียวกัน
+
+| | แอปเดิม | แอปหลัก |
+|---|---|---|
+| URL | `/` | `/next/` |
+| โค้ด | `public/` | `frontend/src/` |
+| เทคโนโลยี | Vanilla JavaScript | React 19 + TypeScript |
+| ขั้นตอน Build | ไม่มี — Flask เสิร์ฟไฟล์ตรง | ต้อง `npm run build` ให้ได้ `frontend/dist` ก่อน |
+| ใช้งานออฟไลน์ | ไม่ได้ | ได้ ผ่าน Service Worker และ IndexedDB |
+
+ทั้งสองแอปเรียก API ชุดเดียวกันที่ `/api/*` และใช้ Flask session ร่วมกัน การเข้าสู่ระบบที่แอปหนึ่งจึงมีผลกับอีกแอปด้วย ส่วนฝั่งไฟล์ Static นั้น Flask อนุญาตให้เข้าถึงเฉพาะ `app.js` และ `styles.css` ของแอปเดิมเท่านั้น
+
+> ฟีเจอร์ที่พัฒนาหลังย้ายมา React มีเฉพาะบน `/next/` ได้แก่ การขายออฟไลน์และการ Sync, ราคาส่งสำหรับลูกค้าร้านค้า และเงินทอนตั้งต้นประจำวัน หากเปิดใช้งานที่ `/` จะยังไม่ได้ฟีเจอร์เหล่านี้
 
 ## การติดตั้งและรันบนเครื่อง
 
@@ -103,6 +148,25 @@ python server.py
 เปิดเว็บที่ [http://localhost:8000](http://localhost:8000) และเข้าสู่ระบบด้วยค่าที่ตั้งไว้ใน `POS_PIN`
 
 เมื่อแก้ Environment Variables ต้องหยุดเซิร์ฟเวอร์ด้วย `Ctrl + C` แล้วเปิดใหม่
+
+ที่ขั้นตอนนี้จะใช้ได้เฉพาะแอปเดิมที่ `/` ส่วน `/next/` ต้อง Build ก่อนตามขั้นตอนถัดไป
+
+### 7. Build แอป React
+
+```powershell
+npm --prefix frontend ci
+npm --prefix frontend run build
+```
+
+จากนั้นเปิด [http://localhost:8000/next/](http://localhost:8000/next/) ได้เลย ต้อง Build ใหม่ทุกครั้งที่แก้โค้ดใน `frontend/src`
+
+### 8. โหมดพัฒนา Frontend
+
+ระหว่างพัฒนาไม่ต้อง Build ซ้ำทุกครั้ง ให้เปิด Flask ทิ้งไว้ที่ port 8000 แล้วเปิด Vite dev server อีกหน้าต่างหนึ่ง (Vite จะ proxy `/api` ไปให้ Flask เอง):
+
+```powershell
+npm --prefix frontend run dev
+```
 
 ## Environment Variables
 
@@ -160,17 +224,38 @@ python verify_supabase.py
 
 ## การตรวจสอบระบบ
 
-ตรวจ syntax ของ Python:
+### Backend
+
+รันเทสต์ทั้งหมด:
 
 ```powershell
-python -m compileall -q database.py server.py init_db.py private_data
+python -m unittest discover -s tests
 ```
 
-ตรวจ syntax ของ JavaScript:
+ตรวจ syntax:
+
+```powershell
+python -m compileall -q database.py server.py promptpay_qr.py init_db.py
+```
+
+### Frontend
+
+```powershell
+npm --prefix frontend run test        # Vitest + Testing Library
+npm --prefix frontend run typecheck   # TypeScript
+npm --prefix frontend run test:e2e    # Playwright (เปิด Flask และ Vite ให้เอง)
+npm --prefix frontend run test:pwa    # ทดสอบโหมดออฟไลน์บน Production Build
+```
+
+Playwright จะสร้างฐานข้อมูล SQLite ของตัวเองใน `frontend/.playwright/` และปฏิเสธที่จะรันหากตั้ง `DATABASE_URL` ไว้ เพื่อไม่ให้เทสต์แตะฐานข้อมูลจริง
+
+ตรวจ syntax ของแอปเดิม:
 
 ```powershell
 node --check public/app.js
 ```
+
+### ระบบโดยรวม
 
 ตรวจสถานะระบบหลังเปิดเซิร์ฟเวอร์:
 
@@ -188,10 +273,9 @@ curl.exe http://localhost:8000/api/health
 
 - ใช้ PIN กลางเพียงชุดเดียว ยังไม่มีบัญชีผู้ใช้หรือการแบ่งสิทธิ์ตามบทบาท
 - ไม่มี Payment Gateway หรือการตรวจสอบยอดโอนอัตโนมัติ
-- QR พร้อมเพย์เป็นรูปภาพคงที่ ไม่ได้ฝังยอดของออเดอร์
 - ปุ่มพักออเดอร์ยังไม่ได้บันทึกออเดอร์ไว้จริง
-- ยังไม่มีระบบพิมพ์ใบเสร็จหรือหน้าใบเสร็จรายออเดอร์
-- React PWA บันทึกการขายเงินสดและ PromptPay แบบยืนยันด้วยพนักงานใน Local Mode ได้ ส่วนการ Sync ออเดอร์ขึ้นเซิร์ฟเวอร์ยังไม่เปิดใช้งาน
+- ยังไม่มีระบบพิมพ์ใบเสร็จ และค้นหาออเดอร์ข้ามวันไม่ได้ (ดูออเดอร์รายใบตามวันที่ที่เลือกได้แล้ว)
+- ออเดอร์ออฟไลน์ที่ Sync แล้วแต่สต็อกบนเซิร์ฟเวอร์ไม่พอ ระบบจะบันทึกออเดอร์ให้และตัดสต็อกเหลือ 0 แล้วแจ้งให้ตรวจนับ ต้องมีคนยืนยันยอดจริงในหน้าจัดการสต็อก
 
 ## การอนุญาตขายออฟไลน์บน React PWA
 
