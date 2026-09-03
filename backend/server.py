@@ -101,8 +101,8 @@ STORELESS_API={'/api/health','/api/auth/login','/api/auth/status','/api/auth/log
  '/api/stores','/api/auth/select-store','/api/payment-qr','/api/offline-payment-config'}
 
 def active_stores():
- return [{'id':r['id'],'code':r['code'],'name':r['name']}
-         for r in rows('SELECT id,code,name FROM stores WHERE is_active=1 ORDER BY id')]
+ return [{'id':r['id'],'code':r['code'],'name':r['name'],'logoUrl':r['logo_url']}
+         for r in rows('SELECT id,code,name,logo_url FROM stores WHERE is_active=1 ORDER BY id')]
 
 def current_store():
  """The store this request works on. Read from the signed session, never the client."""
@@ -711,6 +711,14 @@ def offline_payment_config():
  response=jsonify(payload)
  response.headers['Cache-Control']='private, no-store'
  response.headers['X-Content-Type-Options']='nosniff'
+ return response
+
+@app.get('/logos/<path:filename>')
+def store_logo(filename):
+ """A shop's own mark. Public on purpose: it is shown before anyone signs in."""
+ try: response=send_from_directory(PUBLIC_ROOT / 'logos',filename)
+ except NotFound: return '',404
+ response.headers['Cache-Control']='public, max-age=86400'
  return response
 
 @app.get('/<path:filename>')

@@ -9,7 +9,7 @@ import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
 import { saveSelectedStore } from '../offline/selectedStore';
 
-const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi', logoUrl: null }], storeId: 1 };
 const STORE_PRICING = {
   storeId: 1,
   bundle: { unitPrice: 69, quantity: 3, price: 200 },
@@ -205,7 +205,7 @@ describe('authentication and application shell', () => {
     await refreshOfflineAuthorization();
     // A device that has been online knows its store, the same way it knows it is
     // authorized. Without that it would be asked to pick one it cannot reach.
-    await saveSelectedStore({ storeId: 1, storeName: 'Baannoi', rules: STORE_PRICING });
+    await saveSelectedStore({ storeId: 1, storeName: 'Baannoi', storeLogoUrl: null, rules: STORE_PRICING });
     setNavigatorOnline(false);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

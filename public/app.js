@@ -105,7 +105,8 @@ function renderStoreOptions(choosingId = null) {
     // that was pressed rather than leaving the screen looking untouched.
     const note = store.id === choosingId ? '<span>กำลังเปลี่ยน...</span>'
       : store.id === currentStoreId ? '<span>กำลังใช้อยู่</span>' : '';
-    button.innerHTML = `<strong>${store.name}</strong>` + note;
+    const mark = store.logoUrl ? `<img class="store-option-logo" src="${store.logoUrl}" alt="" />` : '';
+    button.innerHTML = mark + `<strong>${store.name}</strong>` + note;
     button.disabled = choosingId !== null;
     if (store.id === choosingId) button.setAttribute('aria-busy', 'true');
     button.addEventListener('click', () => chooseStore(store.id));
@@ -151,6 +152,17 @@ async function chooseStore(storeId) {
 function applyStoreChrome() {
   const store = stores.find((item) => item.id === currentStoreId);
   if (store) document.getElementById('storeNameText').textContent = store.name;
+  const icon = document.getElementById('brandIcon');
+  // A shop without a mark of its own keeps the default rather than borrowing
+  // another shop's.
+  if (icon && store && store.logoUrl) {
+    icon.innerHTML = '';
+    const image = document.createElement('img');
+    image.className = 'brand-logo';
+    image.src = store.logoUrl;
+    image.alt = '';
+    icon.appendChild(image);
+  }
   document.getElementById('storeSwitchButton').hidden = stores.length < 2;
 }
 

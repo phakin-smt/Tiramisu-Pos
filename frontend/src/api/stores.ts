@@ -5,6 +5,8 @@ export interface Store {
   id: number;
   code: string;
   name: string;
+  /** The shop's own mark, or null to fall back to its initials. */
+  logoUrl: string | null;
 }
 
 export interface StoresResponse {

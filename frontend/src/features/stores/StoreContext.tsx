@@ -17,6 +17,7 @@ interface StoreState {
   stores: Store[];
   storeId: number | null;
   storeName: string;
+  storeLogoUrl: string | null;
   /**
    * The selling store's automatic discounts. Starts as none and only becomes the
    * store's own once they are known -- a till that has not learned its rules
@@ -42,6 +43,7 @@ const initialState: StoreState = {
   stores: [],
   storeId: null,
   storeName: '',
+  storeLogoUrl: null,
   rules: NO_PRICING_RULES,
   loading: true,
   error: '',
@@ -70,9 +72,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const cached = await readSelectedStore();
           if (!active) return;
           setState({
-            stores: cached ? [{ id: cached.storeId, code: '', name: cached.storeName }] : [],
+            stores: cached
+              ? [{ id: cached.storeId, code: '', name: cached.storeName, logoUrl: cached.storeLogoUrl }]
+              : [],
             storeId: cached?.storeId ?? null,
             storeName: cached?.storeName ?? '',
+            storeLogoUrl: cached?.storeLogoUrl ?? null,
             rules: cached?.rules ?? NO_PRICING_RULES,
             loading: false,
             error: '',
@@ -94,10 +99,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         const chosen = listed.stores.find((store) => store.id === listed.storeId);
         const storeName = chosen?.name ?? '';
+        const storeLogoUrl = chosen?.logoUrl ?? null;
         setState({
           stores: listed.stores,
           storeId: listed.storeId,
           storeName,
+          storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
           loading: false,
           error: '',
@@ -105,6 +112,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await saveSelectedStore({
           storeId: listed.storeId,
           storeName,
+          storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
         });
       } catch (error) {
@@ -123,16 +131,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const rules = await getPricingRules();
       setSwitching(false);
       setState((previous) => {
-        const storeName = previous.stores.find((store) => store.id === storeId)?.name ?? '';
+        const chosen = previous.stores.find((store) => store.id === storeId);
+        const storeName = chosen?.name ?? '';
+        const storeLogoUrl = chosen?.logoUrl ?? null;
         void saveSelectedStore({
           storeId,
           storeName,
+          storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
         });
         return {
           ...previous,
           storeId,
           storeName,
+          storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
           loading: false,
           error: '',

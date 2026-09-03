@@ -3570,3 +3570,19 @@ input {
   font-size: 0.9rem;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
+
+/* A store's own mark, filling the space the default icon occupies. */
+.brand-icon .brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
+.store-option-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
+}

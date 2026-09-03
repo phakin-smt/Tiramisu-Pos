@@ -20,6 +20,12 @@ test('one store is not a question, so the till opens straight onto the menu', as
   // The shop being rung up for is named, and there is nowhere else to switch to.
   await expect(page.locator('#storeNameText')).toHaveText('Baannoi');
   await expect(page.locator('#storeSwitchButton')).toBeHidden();
+
+  // Its mark is on screen and actually served, rather than a broken image.
+  const logo = page.locator('#brandIcon img');
+  await expect(logo).toHaveAttribute('src', '/logos/promtak.png');
+  const served = await page.request.get('http://127.0.0.1:8011/logos/promtak.png');
+  expect(served.status()).toBe(200);
 });
 
 test('the promotion the till applies is the one the server holds for this store', async ({ page }) => {

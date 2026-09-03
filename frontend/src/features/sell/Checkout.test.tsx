@@ -22,7 +22,7 @@ import type { CatalogProduct } from '../../types/products';
 import { SellPage } from './SellPage';
 import { StoreProvider } from '../stores/StoreContext';
 
-const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi', logoUrl: null }], storeId: 1 };
 const STORE_PRICING = {
   storeId: 1,
   bundle: { unitPrice: 69, quantity: 3, price: 200 },
@@ -534,7 +534,7 @@ describe('Sell checkout', () => {
     // catalogue and that it is authorized.
     await saveSelectedStore({
       storeId: 1,
-      storeName: 'Baannoi',
+      storeName: 'Baannoi', storeLogoUrl: null,
       rules: { bundle: { unitPrice: 69, quantity: 3, price: 200 }, wholesale: null },
     });
     const fetchMock = mockCheckout();

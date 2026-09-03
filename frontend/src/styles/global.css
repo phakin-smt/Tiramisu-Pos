@@ -27,6 +27,11 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .auth-loading { display: grid; min-height: 100vh; place-items: center; color: var(--text-soft); font-weight: 600; }
 .login-screen { display: grid; min-height: 100vh; padding: 24px; place-items: center; }
 .login-panel { width: min(100%, 380px); padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 12px 32px rgba(61, 43, 34, 0.1); }
+/* A store's own mark, sized to sit exactly where the initials did, in both the
+   sidebar and the picker. */
+.brand-logo { width: 46px; height: 46px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
+.store-option-logo { width: 44px; height: 44px; border-radius: 50%; object-fit: contain; flex-shrink: 0; }
+
 .brand-mark { display: grid; width: 46px; height: 46px; border-radius: 8px; place-items: center; background: var(--accent); color: #fffaf5; font-size: 15px; font-weight: 800; }
 .login-panel .brand-mark { margin: 0 auto; }
 
@@ -453,6 +458,7 @@ button:not(.mobile-cart-backdrop):active:not(:disabled) { transform: scale(0.98)
   background: linear-gradient(180deg, #493126 0%, #684733 66%, #98572c 100%);
   box-shadow: 10px 0 34px rgba(61, 43, 34, 0.12);
 }
+.brand-logo { width: 50px; height: 50px; border-radius: 15px; }
 .brand-mark { width: 50px; height: 50px; border-radius: 15px; background: linear-gradient(145deg, #dda562, #b97135); box-shadow: 0 8px 18px rgba(22, 13, 9, 0.2); font-size: 16px; }
 .brand-title-row strong { font-size: 23px; letter-spacing: -0.02em; }
 .version-label { border-radius: var(--radius-pill); }

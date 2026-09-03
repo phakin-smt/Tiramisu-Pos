@@ -50,6 +50,7 @@ function StorePicker() {
                 aria-busy={choosing === store.id}
                 onClick={() => { void pick(store.id); }}
               >
+                {store.logoUrl && <img className="store-option-logo" src={store.logoUrl} alt="" aria-hidden="true" />}
                 <strong>{store.name}</strong>
                 {choosing === store.id
                   ? <span>กำลังเปลี่ยน...</span>
