@@ -20,6 +20,7 @@
 ## 3. ตะกร้าสินค้า/หน้าขาย (Cart & Checkout)
 - ตะกร้าเก็บเป็น array ฝั่ง client, คำนวณยอดรวมแบบ real-time
 - โปรโมชั่นบิ้วท์อิน: ซื้อครบ 3 ชิ้นราคา ฿69 → ลดเหลือ ฿200 อัตโนมัติ (ปิดได้ถ้าผู้ใช้แก้ยอดส่วนลดเอง)
+- ลูกค้าประเภทร้านค้า (`store`) ได้ราคาส่ง ลด ฿9 ต่อชิ้นสำหรับหมวด Tiramisu โดย**ใช้แทน**โปรฯ 3 ชิ้น ไม่ทบกัน — ใช้เกณฑ์เดียวกันทั้งแอปเดิมและ React
 - VAT มีในระบบ (schema/UI) แต่ยังไม่เปิดใช้งาน (hardcode เป็น 0)
 - `POST /api/orders` สร้างออเดอร์แบบ transaction เดียว: insert orders + order_items + stock_movements + payments, ตัด stock พร้อม guard กันขายเกินสต็อก (`stock_qty >= ?`)
 - รองรับ **Idempotency**: client ส่ง `Idempotency-Key` header กันการกดส่งซ้ำ/double submit; ฝั่ง Postgres ใช้ advisory lock เพิ่มเติมกันชนกันตอนมี concurrent request
