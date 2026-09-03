@@ -2656,6 +2656,18 @@ body {
   box-shadow: var(--shadow);
 }
 
+/* Store selection reuses the login card: it is the same moment, deciding what
+   this session is allowed to work on. */
+.store-card { max-width: 440px; }
+.store-options { display: grid; gap: 10px; margin: 12px 0 8px; }
+.store-option { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 56px; padding: 14px 18px; border: 1px solid var(--border, #e2d9d3);
+  border-radius: 10px; background: #fff; cursor: pointer; font: inherit; text-align: left; }
+.store-option:hover { border-color: var(--primary, #8a5a44); }
+.store-option.is-current { border-color: var(--primary, #8a5a44); }
+.store-option strong { font-size: 1.05rem; }
+.store-option span { font-size: 0.85rem; opacity: 0.7; }
+
 .login-card h1 {
   margin-top: 12px;
 }
