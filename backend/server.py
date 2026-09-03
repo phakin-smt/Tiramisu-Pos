@@ -95,6 +95,32 @@ def record_failed_login(key):
  with LOGIN_ATTEMPTS_LOCK:
   LOGIN_ATTEMPTS.setdefault(key,[]).append(time.monotonic())
 
+# Endpoints that answer before a store has been chosen: signing in, asking which
+# stores exist, choosing one, and configuration that is not store-specific.
+STORELESS_API={'/api/health','/api/auth/login','/api/auth/status','/api/auth/logout',
+ '/api/stores','/api/auth/select-store','/api/payment-qr','/api/offline-payment-config'}
+
+def active_stores():
+ return [{'id':r['id'],'code':r['code'],'name':r['name']}
+         for r in rows('SELECT id,code,name FROM stores WHERE is_active=1 ORDER BY id')]
+
+def current_store():
+ """The store this request works on. Read from the signed session, never the client."""
+ return session.get('store_id')
+
+def adopt_only_store():
+ """Give a session without a store the only one there is.
+
+ Sessions created before store selection existed -- including every cashier
+ already signed in when this ships -- carry no store. While one shop exists
+ there is nothing to ask them, so they keep working instead of being turned
+ away. Once a second store is added this stops matching and the selector
+ becomes the way in.
+ """
+ if session.get('store_id'): return
+ stores=active_stores()
+ if len(stores)==1: session['store_id']=stores[0]['id']
+
 @app.before_request
 def protect_private_routes():
  public_api={'/api/health','/api/auth/login','/api/auth/status'}
@@ -102,6 +128,10 @@ def protect_private_routes():
  if (request.path.startswith('/api/') and request.path not in public_api) or protected_qr:
   if not session.get('authenticated'):
    return error('กรุณาเข้าสู่ระบบใหม่',401)
+ if request.path.startswith('/api/') and request.path not in STORELESS_API:
+  adopt_only_store()
+  if not current_store():
+   return error('กรุณาเลือกร้านก่อนใช้งาน',409)
 
 @app.get('/api/auth/status')
 def auth_status():
@@ -123,7 +153,24 @@ def login():
  session.clear()
  session['authenticated']=True
  session.permanent=True
- return jsonify(authenticated=True)
+ # With a single shop there is nothing to choose, so the session is ready to use
+ # immediately -- the selector only appears once a second store exists.
+ stores=active_stores()
+ if len(stores)==1: session['store_id']=stores[0]['id']
+ return jsonify(authenticated=True,stores=stores,storeId=current_store())
+
+@app.get('/api/stores')
+def list_stores():
+ return jsonify(stores=active_stores(),storeId=current_store())
+
+@app.post('/api/auth/select-store')
+def select_store():
+ payload=request.get_json(silent=True) or {}
+ try: store_id=int(payload.get('storeId'))
+ except (TypeError,ValueError): return error('กรุณาเลือกร้าน')
+ if store_id not in {store['id'] for store in active_stores()}: return error('ไม่พบร้านนี้',404)
+ session['store_id']=store_id
+ return jsonify(storeId=store_id)
 
 @app.post('/api/auth/logout')
 def logout():
