@@ -4,8 +4,14 @@ import os
 import runpy
 import threading
 import uuid
+from pathlib import Path
 
 from database import connect_db, execute, transaction
+
+
+# Resolved from this file rather than the working directory, so the script runs
+# the same whether it is started from the repository root or from backend/.
+INIT_DB_SCRIPT = str(Path(__file__).resolve().parent / "init_db.py")
 
 
 EXPECTED_TABLES = {
@@ -108,7 +114,7 @@ def run():
 
         CURRENT_TEST = 'repeat_seed'
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            runpy.run_path('init_db.py', run_name='__supabase_seed_repeat__')
+            runpy.run_path(INIT_DB_SCRIPT, run_name='__supabase_seed_repeat__')
 
         connection = connect_db()
         try:

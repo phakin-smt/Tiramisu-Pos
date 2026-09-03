@@ -47,6 +47,17 @@
 
 ```text
 Tiramisu-Pos/
+├── backend/                  # Flask API และทุกอย่างฝั่งเซิร์ฟเวอร์
+│   ├── __init__.py           # ผูก sys.path ให้ import ได้ทั้งแบบ package และ script
+│   ├── server.py             # Flask application, API routes และการเสิร์ฟทั้งสองแอป
+│   ├── database.py           # การเชื่อมต่อ SQLite/PostgreSQL และจุดอ้างอิง path ของโปรเจกต์
+│   ├── promptpay_qr.py       # สร้าง EMVCo payload สำหรับ QR พร้อมเพย์
+│   ├── init_db.py            # สร้างฐานข้อมูลและข้อมูลเริ่มต้น
+│   ├── verify_supabase.py    # Smoke test สำหรับ PostgreSQL/Supabase
+│   ├── schema/               # Schema SQL แยกตามชนิดฐานข้อมูล
+│   │   ├── schema.sql        # SQLite
+│   │   └── schema_postgres.sql
+│   └── tests/                # เทสต์ฝั่ง Backend (unittest)
 ├── frontend/                 # แอปหลัก React PWA เสิร์ฟที่ /next/
 │   ├── src/
 │   │   ├── api/              # HTTP client (timeout, 401, reachability) และ endpoint แต่ละกลุ่ม
@@ -67,15 +78,7 @@ Tiramisu-Pos/
 │   ├── index.html            # โครงสร้างหน้าเว็บ
 │   ├── app.js                # Logic ฝั่งหน้าเว็บ
 │   └── styles.css            # รูปแบบและ Responsive UI
-├── schema/                   # Schema SQL แยกตามชนิดฐานข้อมูล
-│   ├── schema.sql            # SQLite
-│   └── schema_postgres.sql   # PostgreSQL
-├── tests/                    # เทสต์ฝั่ง Backend (unittest)
-├── server.py                 # Flask application, API routes และการเสิร์ฟทั้งสองแอป
-├── promptpay_qr.py           # สร้าง EMVCo payload สำหรับ QR พร้อมเพย์
-├── database.py               # การเชื่อมต่อ SQLite/PostgreSQL
-├── init_db.py                # สร้างฐานข้อมูลและข้อมูลเริ่มต้น
-├── verify_supabase.py        # Smoke test สำหรับ PostgreSQL/Supabase
+├── server.py                 # Entrypoint ของ Vercel (re-export app จาก backend/)
 ├── requirements.txt          # Python dependencies
 ├── .env.example              # ตัวอย่าง Environment Variables
 └── vercel.json               # การตั้งค่า Vercel
@@ -134,7 +137,7 @@ $env:SECRET_KEY="replace-with-a-long-random-secret"
 ### 5. เตรียมฐานข้อมูล
 
 ```powershell
-python init_db.py
+python backend/init_db.py
 ```
 
 หากไม่กำหนด `DATABASE_URL` ระบบจะใช้ไฟล์ SQLite `pos.db` ในโฟลเดอร์โปรเจกต์โดยอัตโนมัติ
@@ -142,7 +145,7 @@ python init_db.py
 ### 6. เปิดเซิร์ฟเวอร์
 
 ```powershell
-python server.py
+python backend/server.py
 ```
 
 เปิดเว็บที่ [http://localhost:8000](http://localhost:8000) และเข้าสู่ระบบด้วยค่าที่ตั้งไว้ใน `POS_PIN`
@@ -186,7 +189,7 @@ $env:POS_PIN="1234"
 $env:SECRET_KEY="replace-with-a-long-random-secret"
 $env:PROMPTPAY_ID="0801234567"
 $env:SESSION_MINUTES="480"
-python server.py
+python backend/server.py
 ```
 
 > QR พร้อมเพย์ฝังยอดชำระตามออเดอร์ แต่การรับเงินยังเป็นการยืนยันด้วยพนักงาน ไม่มีการตรวจสอบธนาคารหรือ payment gateway อัตโนมัติ
@@ -197,14 +200,14 @@ python server.py
 
 ```powershell
 $env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE"
-python init_db.py
-python server.py
+python backend/init_db.py
+python backend/server.py
 ```
 
 ตรวจสอบการเชื่อมต่อด้วย:
 
 ```powershell
-python verify_supabase.py
+python backend/verify_supabase.py
 ```
 
 ระบบจะเลือกฐานข้อมูลอัตโนมัติ:
@@ -222,6 +225,15 @@ python verify_supabase.py
 
 สำหรับ Production ควรใช้ PostgreSQL/Supabase เพราะ filesystem ของ Vercel ไม่เหมาะกับการเก็บฐานข้อมูล SQLite แบบถาวร
 
+### ข้อควรรู้เรื่อง Entrypoint
+
+Vercel หา Flask application ด้วย framework detection ซึ่งมองหาไฟล์ในตำแหน่งมาตรฐานไม่กี่แห่ง และ `server.py` ที่ root คือหนึ่งในนั้น หลังย้ายโค้ดเข้า `backend/` จึงคง `server.py` ไว้ที่ root เป็นไฟล์บาง ๆ ที่ re-export app มาจาก `backend/server.py`
+
+มีสองกับดักที่เคยทำให้ deploy ล้มเหลว อย่าเดินซ้ำ:
+
+- **อย่าใส่ `rewrites` ที่ชี้ไปไฟล์ Python** — Vercel จะส่ง path ปลายทางเข้า Flask แทน path จริงที่ผู้ใช้เรียก ทำให้ทุก route ไม่ตรง (build log จะเตือนเรื่องนี้ไว้)
+- **อย่าเพิ่ม `pyproject.toml` เพื่อประกาศ `[tool.vercel] entrypoint`** — การมีไฟล์นี้ทำให้ Vercel สลับจาก `requirements.txt` ไปติดตั้ง dependency ด้วย `uv` แล้วล้มเหลวเพราะไม่มี `[project]` table
+
 ## การตรวจสอบระบบ
 
 ### Backend
@@ -229,13 +241,16 @@ python verify_supabase.py
 รันเทสต์ทั้งหมด:
 
 ```powershell
+cd backend
 python -m unittest discover -s tests
 ```
+
+เทสต์ต้องรันจากโฟลเดอร์ `backend` เพราะแต่ละไฟล์ `import database` และ `import server` โดยตรง
 
 ตรวจ syntax:
 
 ```powershell
-python -m compileall -q database.py server.py promptpay_qr.py init_db.py
+python -m compileall -q backend
 ```
 
 ### Frontend
