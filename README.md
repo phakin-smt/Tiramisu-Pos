@@ -78,8 +78,8 @@ Tiramisu-Pos/
 │   ├── index.html            # โครงสร้างหน้าเว็บ
 │   ├── app.js                # Logic ฝั่งหน้าเว็บ
 │   └── styles.css            # รูปแบบและ Responsive UI
+├── server.py                 # Entrypoint ของ Vercel (re-export app จาก backend/)
 ├── requirements.txt          # Python dependencies
-├── pyproject.toml            # ประกาศ Flask entrypoint ให้ Vercel
 ├── .env.example              # ตัวอย่าง Environment Variables
 └── vercel.json               # การตั้งค่า Vercel
 ```
@@ -225,14 +225,14 @@ python backend/verify_supabase.py
 
 สำหรับ Production ควรใช้ PostgreSQL/Supabase เพราะ filesystem ของ Vercel ไม่เหมาะกับการเก็บฐานข้อมูล SQLite แบบถาวร
 
-Vercel ใช้ Flask framework detection ในการหา application เอง ไม่ได้ใช้ `rewrites` เนื่องจาก `server.py` ไม่ได้อยู่ที่ root แล้ว จึงต้องประกาศ entrypoint ไว้ใน `pyproject.toml`:
+### ข้อควรรู้เรื่อง Entrypoint
 
-```toml
-[tool.vercel]
-entrypoint = "backend.server:app"
-```
+Vercel หา Flask application ด้วย framework detection ซึ่งมองหาไฟล์ในตำแหน่งมาตรฐานไม่กี่แห่ง และ `server.py` ที่ root คือหนึ่งในนั้น หลังย้ายโค้ดเข้า `backend/` จึงคง `server.py` ไว้ที่ root เป็นไฟล์บาง ๆ ที่ re-export app มาจาก `backend/server.py`
 
-ห้ามใส่ `rewrites` ที่ชี้ไปยังไฟล์ Python เพราะ Vercel จะส่ง path ปลายทางเข้า Flask แทน path จริงที่ผู้ใช้เรียก ทำให้ทุก route ไม่ตรง
+มีสองกับดักที่เคยทำให้ deploy ล้มเหลว อย่าเดินซ้ำ:
+
+- **อย่าใส่ `rewrites` ที่ชี้ไปไฟล์ Python** — Vercel จะส่ง path ปลายทางเข้า Flask แทน path จริงที่ผู้ใช้เรียก ทำให้ทุก route ไม่ตรง (build log จะเตือนเรื่องนี้ไว้)
+- **อย่าเพิ่ม `pyproject.toml` เพื่อประกาศ `[tool.vercel] entrypoint`** — การมีไฟล์นี้ทำให้ Vercel สลับจาก `requirements.txt` ไปติดตั้ง dependency ด้วย `uv` แล้วล้มเหลวเพราะไม่มี `[project]` table
 
 ## การตรวจสอบระบบ
 

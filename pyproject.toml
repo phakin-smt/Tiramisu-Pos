@@ -1,6 +1,0 @@
-[tool.vercel]
-# The Flask app used to sit at the repository root, where Vercel's framework
-# detection found it without being told. Now that it lives under backend/, the
-# entrypoint has to be named explicitly or the build fails with
-# "No Flask entrypoint found in default locations".
-entrypoint = "backend.server:app"
