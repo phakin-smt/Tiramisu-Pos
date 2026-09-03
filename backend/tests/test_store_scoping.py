@@ -164,6 +164,34 @@ class StoreScopingTests(unittest.TestCase):
         self.assertEqual(200, self.client.post('/api/stock/adjust',
                                                json={'productId': other, 'reason': 'prepare', 'quantity': 5}).status_code)
 
+    # --- pricing rules -----------------------------------------------------
+
+    def test_the_dessert_shop_keeps_the_rules_that_were_hardcoded(self):
+        self.use(1)
+        rules = self.client.get('/api/pricing-rules').get_json()
+        # Unchanged from the constants the application used to carry: any item
+        # priced 69, three for 200, and 9 off each Tiramisu for a shop customer.
+        self.assertEqual({'unitPrice': 69, 'quantity': 3, 'price': 200}, rules['bundle'])
+        self.assertEqual({'category': 'Tiramisu', 'discountPerItem': 9}, rules['wholesale'])
+
+    def test_a_new_store_starts_with_no_automatic_discount(self):
+        self.use(2)
+        rules = self.client.get('/api/pricing-rules').get_json()
+        self.assertIsNone(rules['bundle'])
+        self.assertIsNone(rules['wholesale'])
+
+    def test_a_69_baht_item_in_the_other_store_earns_no_bundle(self):
+        connection = database.connect_db()
+        try:
+            # Priced exactly at the dessert shop's bundle trigger.
+            connection.execute("INSERT INTO products (store_id, sku, name, category, unit_price, stock_qty)"
+                               " VALUES (2, 'P69', 'Aglio e Olio', 'Pasta', 69, 10)")
+            connection.commit()
+        finally:
+            connection.close()
+        self.use(2)
+        self.assertIsNone(self.client.get('/api/pricing-rules').get_json()['bundle'])
+
     def test_stock_summary_and_plans_are_separate(self):
         self.use(1)
         plan = self.client.post('/api/stock/plans',

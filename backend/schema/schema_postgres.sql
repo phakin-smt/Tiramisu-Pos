@@ -1,6 +1,11 @@
+-- Automatic pricing lives per store. A NULL trigger switches the rule off, which
+-- is how a new store starts: manual discounts only until someone decides what
+-- its promotions should be.
 CREATE TABLE IF NOT EXISTS stores (
  id BIGSERIAL PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+ bundle_unit_price NUMERIC(12,2), bundle_quantity INTEGER, bundle_price NUMERIC(12,2),
+ wholesale_category TEXT, wholesale_discount NUMERIC(12,2),
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- store_id defaults to the first store so that every statement written before
@@ -69,6 +74,17 @@ INSERT INTO stores (id, code, name)
  SELECT 1, 'baannoi', 'Baannoi'
  WHERE NOT EXISTS (SELECT 1 FROM stores WHERE id = 1);
 SELECT setval(pg_get_serial_sequence('stores', 'id'), GREATEST((SELECT MAX(id) FROM stores), 1));
+
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bundle_unit_price NUMERIC(12,2);
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bundle_quantity INTEGER;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS bundle_price NUMERIC(12,2);
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS wholesale_category TEXT;
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS wholesale_discount NUMERIC(12,2);
+-- The first store keeps the rules that were compiled into the application, so
+-- nothing about its pricing changes.
+UPDATE stores SET bundle_unit_price=69, bundle_quantity=3, bundle_price=200,
+ wholesale_category='Tiramisu', wholesale_discount=9
+ WHERE id=1 AND bundle_unit_price IS NULL AND wholesale_category IS NULL;
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id);

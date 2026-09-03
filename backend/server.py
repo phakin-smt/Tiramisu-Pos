@@ -163,6 +163,25 @@ def login():
 def list_stores():
  return jsonify(stores=active_stores(),storeId=current_store())
 
+@app.get('/api/pricing-rules')
+def pricing_rules():
+ """The automatic discounts this store applies.
+
+ The bundle deliberately triggers on unit price, not category: at the dessert
+ shop any 69 baht item counts towards three-for-200. Holding the rule against
+ the store is what stops it reaching a shop that never agreed to it.
+ """
+ result=rows('SELECT bundle_unit_price,bundle_quantity,bundle_price,wholesale_category,wholesale_discount FROM stores WHERE id=?',(current_store(),))
+ if not result: return error('ไม่พบร้านนี้',404)
+ store=result[0]
+ bundle=None
+ if store['bundle_unit_price'] is not None and store['bundle_quantity'] and store['bundle_price'] is not None:
+  bundle={'unitPrice':number(store['bundle_unit_price']),'quantity':store['bundle_quantity'],'price':number(store['bundle_price'])}
+ wholesale=None
+ if store['wholesale_category'] and store['wholesale_discount'] is not None:
+  wholesale={'category':store['wholesale_category'],'discountPerItem':number(store['wholesale_discount'])}
+ return jsonify(storeId=current_store(),bundle=bundle,wholesale=wholesale)
+
 @app.post('/api/auth/select-store')
 def select_store():
  payload=request.get_json(silent=True) or {}

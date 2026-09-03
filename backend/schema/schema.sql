@@ -5,6 +5,14 @@ CREATE TABLE IF NOT EXISTS stores (
     code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    -- Automatic pricing, per store. A NULL trigger switches the rule off, which
+    -- is how a new store starts: manual discounts only until someone decides
+    -- what its promotions should be.
+    bundle_unit_price REAL,
+    bundle_quantity INTEGER,
+    bundle_price REAL,
+    wholesale_category TEXT,
+    wholesale_discount REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
