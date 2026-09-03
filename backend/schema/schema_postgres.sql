@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS stores (
  id BIGSERIAL PRIMARY KEY, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
  bundle_unit_price NUMERIC(12,2), bundle_quantity INTEGER, bundle_price NUMERIC(12,2),
- wholesale_category TEXT, wholesale_discount NUMERIC(12,2),
+ wholesale_category TEXT, wholesale_discount NUMERIC(12,2), logo_url TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- store_id defaults to the first store so that every statement written before
@@ -80,6 +80,7 @@ ALTER TABLE stores ADD COLUMN IF NOT EXISTS bundle_quantity INTEGER;
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS bundle_price NUMERIC(12,2);
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS wholesale_category TEXT;
 ALTER TABLE stores ADD COLUMN IF NOT EXISTS wholesale_discount NUMERIC(12,2);
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS logo_url TEXT;
 -- The first store keeps the rules that were compiled into the application, so
 -- nothing about its pricing changes.
 UPDATE stores SET bundle_unit_price=69, bundle_quantity=3, bundle_price=200,

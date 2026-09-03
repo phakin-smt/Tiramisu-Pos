@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS stores (
     bundle_price REAL,
     wholesale_category TEXT,
     wholesale_discount REAL,
+    -- Served from public/logos. NULL falls back to the store initials.
+    logo_url TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

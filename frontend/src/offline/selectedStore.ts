@@ -8,6 +8,8 @@ import {
 export interface CachedStore {
   storeId: number;
   storeName: string;
+  /** Cached with the rest so an offline till still shows its own shop's mark. */
+  storeLogoUrl: string | null;
   rules: PricingRules;
 }
 
@@ -28,6 +30,7 @@ export async function saveSelectedStore(
     key: PRICING_RULES_KEY,
     storeId: store.storeId,
     storeName: store.storeName,
+    storeLogoUrl: store.storeLogoUrl,
     bundle: store.rules.bundle,
     wholesale: store.rules.wholesale,
     savedAt,
@@ -48,6 +51,7 @@ export async function readSelectedStore(): Promise<CachedStore | null> {
     return {
       storeId: value.storeId,
       storeName: value.storeName,
+      storeLogoUrl: value.storeLogoUrl ?? null,
       rules: { bundle: value.bundle, wholesale: value.wholesale },
     };
   } finally {

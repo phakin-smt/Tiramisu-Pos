@@ -43,6 +43,7 @@ export interface PricingRulesRecord {
   key: typeof PRICING_RULES_KEY;
   storeId: number;
   storeName: string;
+  storeLogoUrl?: string | null;
   bundle: { unitPrice: number; quantity: number; price: number } | null;
   wholesale: { category: string; discountPerItem: number } | null;
   savedAt: string;

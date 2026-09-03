@@ -3,6 +3,7 @@
     python backend/manage_stores.py list
     python backend/manage_stores.py rename 1 "พร้อมตัก" --code promtak
     python backend/manage_stores.py add promtom "พร้อมต้ม"
+    python backend/manage_stores.py logo 1 /logos/promtak.png
     python backend/manage_stores.py pricing 2 --bundle 120:3:330
     python backend/manage_stores.py pricing 2 --clear
 
@@ -18,6 +19,7 @@ hours, and tell the people at the tills first.
 
 import argparse
 import sys
+from pathlib import Path
 
 from database import connect_db, execute, is_postgres, transaction
 
@@ -38,7 +40,7 @@ def rows(query, params=()):
 
 
 def show(_args):
-    listed = rows('SELECT id, code, name, is_active, bundle_unit_price, bundle_quantity,'
+    listed = rows('SELECT id, code, name, is_active, logo_url, bundle_unit_price, bundle_quantity,'
                   ' bundle_price, wholesale_category, wholesale_discount FROM stores ORDER BY id')
     if not listed:
         print('No stores yet.')
@@ -46,6 +48,7 @@ def show(_args):
     for store in listed:
         state = 'active' if store['is_active'] else 'inactive'
         print('[{}] {} ({}) - {}'.format(store['id'], store['name'], store['code'], state))
+        print('      logo: {}'.format(store['logo_url'] or 'none, shows initials'))
         if store['bundle_unit_price'] is not None:
             print('      bundle: {} x {} for {}'.format(
                 store['bundle_unit_price'], store['bundle_quantity'], store['bundle_price']))
@@ -94,6 +97,39 @@ def add(args):
     if active > 1:
         print()
         print('There are now {} active stores, so every sign-in asks which one.'.format(active))
+    return 0
+
+
+LOGO_PREFIX = '/logos/'
+
+
+def logo(args):
+    if not args.clear:
+        # Some shells rewrite a leading slash into a filesystem path. Catching it
+        # here beats storing something the browser can never fetch.
+        if not args.url:
+            print('Give the path to the logo, or pass --clear.', file=sys.stderr)
+            return 1
+        if not args.url.startswith(LOGO_PREFIX):
+            print('Expected a path beginning "{}", got "{}".'.format(LOGO_PREFIX, args.url), file=sys.stderr)
+            print('The file belongs in public/logos, and the value is what the browser asks for.',
+                  file=sys.stderr)
+            return 1
+        served = Path(__file__).resolve().parent.parent / 'public' / 'logos' / args.url[len(LOGO_PREFIX):]
+        if not served.is_file():
+            print('No such file: {}'.format(served), file=sys.stderr)
+            return 1
+    with transaction() as (_, cursor):
+        found = execute(cursor, 'SELECT id FROM stores WHERE id=?', (args.store_id,)).fetchone()
+        if not found:
+            print('No store with id {}'.format(args.store_id), file=sys.stderr)
+            return 1
+        # Stored as the path the browser asks for, not a filesystem location, so
+        # the same row works from any machine serving the app.
+        execute(cursor, 'UPDATE stores SET logo_url=? WHERE id=?',
+                (None if args.clear else args.url, args.store_id))
+    print('Cleared the logo for store {}.'.format(args.store_id) if args.clear
+          else 'Store {} now shows {}.'.format(args.store_id, args.url))
     return 0
 
 
@@ -159,6 +195,12 @@ def main(argv=None):
     adder.add_argument('code')
     adder.add_argument('name')
     adder.set_defaults(run=add)
+
+    logos = commands.add_parser('logo', help='point a store at its mark, or remove it')
+    logos.add_argument('store_id', type=int)
+    logos.add_argument('url', nargs='?', help='the path the browser requests, e.g. /logos/promtak.png')
+    logos.add_argument('--clear', action='store_true')
+    logos.set_defaults(run=logo)
 
     prices = commands.add_parser('pricing', help='set or clear a store automatic discounts')
     prices.add_argument('store_id', type=int)

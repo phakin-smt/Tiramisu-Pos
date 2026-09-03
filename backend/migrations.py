@@ -72,6 +72,8 @@ PRICING_COLUMNS = (
     ('bundle_price', 'REAL'),
     ('wholesale_category', 'TEXT'),
     ('wholesale_discount', 'REAL'),
+    # Optional, and nullable: a store without one shows its initials instead.
+    ('logo_url', 'TEXT'),
 )
 DEFAULT_STORE_PRICING = (69, 3, 200, 'Tiramisu', 9)
 

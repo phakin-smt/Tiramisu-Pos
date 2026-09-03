@@ -11,10 +11,14 @@ import { SidebarNavigation } from './SidebarNavigation';
 import { useTabletSwipeNavigation } from './useTabletSwipeNavigation';
 
 function Brand() {
-  const { storeName } = useStore();
+  const { storeName, storeLogoUrl } = useStore();
   return (
     <div className="shell-brand">
-      <div className="brand-mark" aria-hidden="true">BP</div>
+      {/* A shop without a mark of its own keeps the initials rather than
+          borrowing another shop's. */}
+      {storeLogoUrl
+        ? <img className="brand-logo" src={storeLogoUrl} alt="" aria-hidden="true" />
+        : <div className="brand-mark" aria-hidden="true">BP</div>}
       <div>
         <div className="brand-title-row">
           <strong>Baannoi-POS</strong>

@@ -14,7 +14,7 @@ import { StoreProvider } from '../stores/StoreContext';
 // on what terms, the same way it knows the catalogue.
 const cachedStore = {
   storeId: 1,
-  storeName: 'Baannoi',
+  storeName: 'Baannoi', storeLogoUrl: null,
   rules: {
     bundle: { unitPrice: 69, quantity: 3, price: 200 },
     wholesale: { category: 'Tiramisu', discountPerItem: 9 },
