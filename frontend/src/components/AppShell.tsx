@@ -75,8 +75,8 @@ export function AppShell() {
         <div className="sidebar-status">
           <ConnectivityStatus />
           <StoreSwitch />
-          <button type="button" onClick={logout} disabled={submitting}>
-            ออกจากระบบ
+          <button type="button" onClick={logout} disabled={submitting} aria-busy={submitting}>
+            {submitting ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}
           </button>
         </div>
       </aside>
@@ -86,8 +86,8 @@ export function AppShell() {
         <div className="mobile-header-actions">
           <ConnectivityStatus compact />
           <StoreSwitch compact />
-          <button type="button" onClick={logout} disabled={submitting} aria-label="ออกจากระบบ">
-            ออก
+          <button type="button" onClick={logout} disabled={submitting} aria-busy={submitting} aria-label="ออกจากระบบ">
+            {submitting ? '...' : 'ออก'}
           </button>
         </div>
       </header>

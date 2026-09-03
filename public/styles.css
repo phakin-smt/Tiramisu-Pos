@@ -3554,3 +3554,19 @@ input {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+/* Shown for the whole time a request is in flight, so a press that takes a
+   moment does not look like a press that did nothing. */
+.busy-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  padding: 8px 20px;
+  border-radius: 0 0 10px 10px;
+  background: var(--primary, #8a5a44);
+  color: #fff;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
