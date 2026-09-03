@@ -1,19 +1,8 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS stores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
--- store_id defaults to the first store so that every statement written before
--- multi-store support keeps inserting valid rows without being rewritten.
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
-    sku TEXT NOT NULL,
+    sku TEXT UNIQUE NOT NULL,
     barcode TEXT,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -24,8 +13,7 @@ CREATE TABLE IF NOT EXISTS products (
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     image_url TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (store_id, sku)
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -41,10 +29,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
-    order_number TEXT NOT NULL,
-    -- Stays globally unique: the key is a client-generated UUID, and offline
-    -- replay relies on one key naming one sale across the whole system.
+    order_number TEXT UNIQUE NOT NULL,
     idempotency_key TEXT UNIQUE,
     order_date TEXT NOT NULL DEFAULT (date('now')),
     customer_id INTEGER,
@@ -56,8 +41,7 @@ CREATE TABLE IF NOT EXISTS orders (
     status TEXT NOT NULL DEFAULT 'completed',
     note TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (customer_id) REFERENCES customers(id),
-    UNIQUE (store_id, order_number)
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -88,7 +72,6 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE TABLE IF NOT EXISTS stock_movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
     product_id INTEGER NOT NULL,
     movement_type TEXT NOT NULL CHECK (movement_type IN ('sale', 'stock_in', 'stock_out', 'adjust')),
     quantity INTEGER NOT NULL CHECK (quantity != 0),
@@ -100,24 +83,19 @@ CREATE TABLE IF NOT EXISTS stock_movements (
 );
 
 CREATE TABLE IF NOT EXISTS daily_closures (
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
-    report_date TEXT NOT NULL,
-    closed_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (store_id, report_date)
+    report_date TEXT PRIMARY KEY,
+    closed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS cash_days (
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
-    report_date TEXT NOT NULL,
+    report_date TEXT PRIMARY KEY,
     opening_float REAL NOT NULL CHECK (opening_float >= 0),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (store_id, report_date)
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS stock_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
     product_id INTEGER NOT NULL,
     plan_date TEXT NOT NULL,
     quantity INTEGER NOT NULL CHECK (quantity > 0),

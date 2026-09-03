@@ -18,6 +18,19 @@ export function productCard(page: Page, name: string): Locator {
   return page.getByRole('button', { name: `เพิ่ม ${name} ลงตะกร้า` });
 }
 
+/**
+ * Completes a cash sale through the payment modal.
+ *
+ * Choosing เงินสด opens the change calculator rather than submitting the order,
+ * so a test that only clicks that button never reaches the server.
+ */
+export async function payWithCash(page: Page) {
+  await page.getByRole('button', { name: 'เงินสด' }).click();
+  const modal = page.getByRole('dialog', { name: 'รับชำระเงินสด' });
+  await modal.getByRole('button', { name: 'Exact' }).click();
+  await modal.getByRole('button', { name: 'ยืนยันรับเงิน' }).click();
+}
+
 export function orderCard(page: Page, orderNumber: string): Locator {
   return page.locator('.order-card').filter({ has: page.getByText(`#${orderNumber}`, { exact: true }) });
 }

@@ -3,6 +3,8 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from migrations import apply_store_migration
+
 
 BACKEND_ROOT = Path(__file__).resolve().parent
 # ROOT stays the project root: server.py serves public/ and frontend/dist from
@@ -80,6 +82,8 @@ def init_schema():
             item_columns = {row[1] for row in connection.execute('PRAGMA table_info(order_items)')}
             if 'giveaway_qty' not in item_columns:
                 connection.execute('ALTER TABLE order_items ADD COLUMN giveaway_qty INTEGER NOT NULL DEFAULT 0')
+            # Last, so a rebuilt table carries the columns added just above.
+            apply_store_migration(connection, schema)
         connection.commit()
     finally:
         connection.close()

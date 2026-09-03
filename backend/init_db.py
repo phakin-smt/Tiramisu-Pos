@@ -37,7 +37,7 @@ with transaction() as (_, cursor):
         """
         INSERT INTO products (sku, barcode, name, category, unit_price, cost_price, stock_qty, stock_min, is_active, image_url)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(sku) DO UPDATE SET
+        ON CONFLICT(store_id, sku) DO UPDATE SET
             barcode = excluded.barcode,
             name = excluded.name,
             category = excluded.category,

@@ -44,7 +44,8 @@
 
 ## 7. ฐานข้อมูล (Database)
 - รองรับ 2 แบบ: SQLite (ใช้ตอน dev/local) และ PostgreSQL เช่น Supabase (production) — สลับอัตโนมัติตามว่ามี `DATABASE_URL` หรือไม่
-- มี schema แยก 2 ไฟล์ (`backend/schema/schema.sql` / `backend/schema/schema_postgres.sql`) โครงสร้างตารางเหมือนกัน: products, customers, orders, order_items, payments, stock_movements
+- มี schema แยก 2 ไฟล์ (`backend/schema/schema.sql` / `backend/schema/schema_postgres.sql`) โครงสร้างตารางเหมือนกัน: stores, products, customers, orders, order_items, payments, stock_movements
+- ทุกตารางที่ผูกกับร้าน (products, orders, stock_movements, stock_plans, daily_closures, cash_days) มี `store_id` โดย `daily_closures` และ `cash_days` ใช้ primary key ร่วม (`store_id`, `report_date`) ส่วน sku และเลขออเดอร์ unique ภายในร้านของตัวเอง — ปัจจุบันมีร้านเดียว (`baannoi`) และทุกอย่างยังทำงานเหมือนเดิม
 - `backend/init_db.py` seed สินค้าจริง 18 SKU พร้อมราคา/ต้นทุน และลูกค้าตัวอย่าง 3 ราย
 - `backend/verify_supabase.py` เป็นสคริปต์ smoke test สำหรับตรวจสอบ deployment บน Postgres/Supabase (health, checkout, idempotency, concurrency, reports)
 - `GET /api/health` บอกว่าตอนนี้ backend ใช้ DB แบบไหนอยู่

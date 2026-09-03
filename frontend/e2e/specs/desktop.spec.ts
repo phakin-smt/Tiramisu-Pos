@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { addDays, bangkokDate, expectNoHorizontalOverflow, login, orderCard, productCard } from '../support/helpers';
+import { addDays, bangkokDate, expectNoHorizontalOverflow, login, orderCard, payWithCash, productCard } from '../support/helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -38,7 +38,7 @@ test('cash, PromptPay, cancellation, reports, analytics, and close-day use the r
   expect(orderRequests).toHaveLength(requestsBeforeHold);
   await page.getByLabel('ลดจำนวนแถม E2E Original').click();
   await expect(page.getByLabel('ส่วนลด')).toHaveValue('7');
-  await page.getByRole('button', { name: 'เงินสด' }).click();
+  await payWithCash(page);
   const cashSuccess = page.getByText(/บันทึกออเดอร์ #/);
   await expect(cashSuccess).toBeVisible();
   const cashOrder = /#([^\s]+)/.exec(await cashSuccess.textContent() ?? '')?.[1];
@@ -119,7 +119,7 @@ test('cash, PromptPay, cancellation, reports, analytics, and close-day use the r
   await closeModal.getByRole('button', { name: 'กลับไปขาย' }).click();
 
   await productCard(page, 'E2E Coffee').click();
-  await page.getByRole('button', { name: 'เงินสด' }).click();
+  await payWithCash(page);
   await expect(page.getByText(/บันทึกออเดอร์ #/)).toBeVisible();
   await expect(page.locator('.sell-summary')).toContainText('฿138.00');
   expect(orderRequests).toHaveLength(3);

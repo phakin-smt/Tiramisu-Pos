@@ -25,3 +25,9 @@ frontend/test-results/
 
 init_supabase_local.ps1
 verify_supabase_local.ps1
+backup_supabase_local.ps1
+
+# Database baselines hold real revenue and stock figures. Keep them with the
+# backup they belong to, outside the repository.
+*-migration.json
+baseline*.json

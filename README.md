@@ -253,6 +253,16 @@ python -m unittest discover -s tests
 python -m compileall -q backend
 ```
 
+เก็บตัวเลขของฐานข้อมูลไว้เทียบก่อน/หลังการเปลี่ยนโครงสร้าง (อ่านอย่างเดียว ไม่เขียนอะไรทั้งสิ้น):
+
+```powershell
+python backend/baseline_snapshot.py before.json
+# ...ทำการเปลี่ยนแปลง...
+python backend/baseline_snapshot.py after.json
+```
+
+แล้วเทียบสองไฟล์ด้วย `diff` หรือ `Compare-Object` — ถ้าไม่มีความต่าง แปลว่าข้อมูลเดิมไม่ถูกกระทบ
+
 ### Frontend
 
 ```powershell
