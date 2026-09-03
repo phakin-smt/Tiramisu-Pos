@@ -1,4 +1,5 @@
 import type { CartItem as CartItemModel, CartTotals as Totals, DiscountState } from '../../types/domain';
+import type { PricingRules } from '../../domain/promotion';
 import type { CatalogProduct } from '../../types/products';
 import { CartItem } from './CartItem';
 import { CartTotals } from './CartTotals';
@@ -8,6 +9,7 @@ import { PaymentSelector, type PaymentMethod } from './PaymentSelector';
 interface CartProps {
   products: readonly CatalogProduct[]; cart: readonly CartItemModel[]; totals: Totals; discountState: DiscountState;
   totalQuantity: number; paidQuantity: number; customerType: CustomerType; paymentMethod: PaymentMethod; mobile: boolean; open: boolean;
+  rules: PricingRules;
   cashPaymentDisabled: boolean;
   promptPayDisabled: boolean;
   checkoutUnavailableMessages: string[];
@@ -18,7 +20,7 @@ interface CartProps {
   onHold(): void;
 }
 
-export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, cashPaymentDisabled, promptPayDisabled, checkoutUnavailableMessages, holdNotice, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate, onHold }: CartProps) {
+export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, rules, cashPaymentDisabled, promptPayDisabled, checkoutUnavailableMessages, holdNotice, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate, onHold }: CartProps) {
   return <aside id="sell-cart" className={`sell-cart${open ? ' is-open' : ''}`} aria-label="ออเดอร์ปัจจุบัน" role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-hidden={mobile ? !open : undefined} inert={mobile && !open}>
     <header className="sell-cart-header">
       <div><h2>ออเดอร์ปัจจุบัน</h2><span>{totalQuantity} ชิ้น</span></div>
@@ -33,7 +35,7 @@ export function Cart({ products, cart, totals, discountState, totalQuantity, pai
         return product ? <CartItem key={item.productId} item={item} product={product} onQuantityChange={(delta) => onQuantityChange(product, delta)} onGiveawayChange={(delta) => onGiveawayChange(product.id, delta)} onRemove={() => onRemove(product.id)} /> : null;
       })}
     </div>
-    <CartTotals totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} onDiscountChange={onDiscountChange} />
+    <CartTotals totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} rules={rules} onDiscountChange={onDiscountChange} />
     <PaymentSelector value={paymentMethod} cashDisabled={cashPaymentDisabled} promptPayDisabled={promptPayDisabled} onActivate={onPaymentActivate} />
     {checkoutUnavailableMessages.map((message) => <p key={message} className="offline-checkout-message" role="status">{message}</p>)}
     <div className="hold-order-controls">

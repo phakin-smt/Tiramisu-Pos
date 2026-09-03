@@ -1,4 +1,4 @@
-import { calculateTotals } from './promotion';
+import { calculateTotals, type PricingRules } from './promotion';
 import type { CartItem, CartTotals, DiscountState, Product } from '../types/domain';
 import type { CustomerType } from '../types/checkout';
 
@@ -95,11 +95,19 @@ export function reconcileCartWithStock(
   return { cart: reconciled, adjustedProductIds };
 }
 
+/**
+ * Prices a cart against one store's rules.
+ *
+ * `rules` has no default on purpose. This is the function a till calls, and a
+ * shop must never inherit another shop's promotions by omission -- the caller
+ * has to say which rules apply, even if the answer is NO_PRICING_RULES.
+ */
 export function calculateCartTotals(
   products: readonly Product[],
   cart: readonly CartItem[],
-  discountState?: DiscountState,
-  customerType?: CustomerType,
+  discountState: DiscountState | undefined,
+  customerType: CustomerType | undefined,
+  rules: PricingRules,
 ): CartTotals {
   const lines = cart.flatMap((item) => {
     const product = products.find((candidate) => candidate.id === item.productId);
@@ -108,5 +116,5 @@ export function calculateCartTotals(
       : [];
   });
 
-  return calculateTotals(lines, discountState, customerType);
+  return calculateTotals(lines, discountState, customerType, rules);
 }

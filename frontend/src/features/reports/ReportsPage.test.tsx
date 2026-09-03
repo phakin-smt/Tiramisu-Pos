@@ -6,6 +6,13 @@ import { AuthProvider } from '../auth/AuthContext';
 import { AppRoutes } from '../../app/router';
 import { ReportsPage } from './ReportsPage';
 
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
+
 const days = { days: [{ date: '2026-08-16', orderCount: 2, totalRevenue: 393, closedAt: '2026-08-16T19:30:00+07:00', soldQty: 6, giveawayQty: 1, remainingQty: 8 }] };
 const detail = {
   date: '2026-08-16', orderCount: 2, subtotalAll: 407, discountAll: 14, cashTotal: 200,
@@ -70,6 +77,8 @@ describe('ReportsPage', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url === '/api/offline-payment-config') return Promise.resolve(json({ configured: false, version: 1 }));
       if (url === '/api/reports/days') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

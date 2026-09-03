@@ -4,6 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StockSummaryResponse } from '../../types/stock';
 import { ProductsAdminPage } from './ProductsAdminPage';
 
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
+
 const summary: StockSummaryResponse = {
   date: '2026-08-17',
   items: [
@@ -28,6 +35,8 @@ function mockProducts(handler?: (url: string, init: RequestInit) => Response | P
     const custom = handler?.(url, init);
     if (custom) return Promise.resolve(custom);
     if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json(summary));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);

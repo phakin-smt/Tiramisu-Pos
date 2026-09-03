@@ -7,6 +7,14 @@ import { AuthProvider } from '../features/auth/AuthContext';
 import { readOfflineAuthorization, refreshOfflineAuthorization } from '../offline/offlineAuthorization';
 import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
+import { saveSelectedStore } from '../offline/selectedStore';
+
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
 
 interface MockResponse {
   status?: number;
@@ -23,8 +31,17 @@ function response({ status = 200, body }: MockResponse): Response {
 }
 
 function mockResponses(...items: MockResponse[]) {
-  const fetchMock = vi.fn();
-  items.forEach((item) => fetchMock.mockResolvedValueOnce(response(item)));
+  const queue = [...items];
+  // The shell asks which store it sells for on every render. Answering those two
+  // by URL keeps the queue describing only the calls a test is actually about.
+  const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
+    const url = String(input);
+    if (url === '/api/stores') return Promise.resolve(response({ body: STORE_LIST }));
+    if (url === '/api/pricing-rules') return Promise.resolve(response({ body: STORE_PRICING }));
+    const next = queue.shift();
+    if (!next) return Promise.reject(new Error(`Unexpected request: ${url}`));
+    return Promise.resolve(response(next));
+  });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -186,6 +203,9 @@ describe('authentication and application shell', () => {
 
   it('renders the application shell and honest status when an authorized device is offline', async () => {
     await refreshOfflineAuthorization();
+    // A device that has been online knows its store, the same way it knows it is
+    // authorized. Without that it would be asked to pick one it cannot reach.
+    await saveSelectedStore({ storeId: 1, storeName: 'Baannoi', rules: STORE_PRICING });
     setNavigatorOnline(false);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -222,6 +242,8 @@ describe('authentication and application shell', () => {
       if (url === '/api/reports/daily-summary') return Promise.resolve(response({ body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } }));
       if (url === '/api/cash-day') return Promise.resolve(response({ body: { date: '2026-08-17', openingFloat: null } }));
       if (url === '/api/auth/logout') return Promise.resolve(response({ body: { authenticated: false, configured: true } }));
+      if (url === '/api/stores') return Promise.resolve(response({ body: STORE_LIST }));
+      if (url === '/api/pricing-rules') return Promise.resolve(response({ body: STORE_PRICING }));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -240,6 +262,8 @@ describe('authentication and application shell', () => {
       if (url === '/api/products') return Promise.resolve(response({ status: 401, body: { error: 'กรุณาเข้าสู่ระบบใหม่' } }));
       if (url === '/api/reports/daily-summary') return Promise.resolve(response({ body: { date: '2026-08-17', orderCount: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0 } }));
       if (url === '/api/cash-day') return Promise.resolve(response({ body: { date: '2026-08-17', openingFloat: null } }));
+      if (url === '/api/stores') return Promise.resolve(response({ body: STORE_LIST }));
+      if (url === '/api/pricing-rules') return Promise.resolve(response({ body: STORE_PRICING }));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

@@ -15,6 +15,7 @@ import { useConnectivity } from '../../connectivity/ConnectivityContext';
 import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
 import { refreshOfflineAuthorization, revokeOfflineAuthorization } from '../../offline/offlineAuthorization';
 import { clearOfflinePaymentConfig, provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
+import { clearSelectedStore } from '../../offline/selectedStore';
 import {
   requestPersistentStorage,
   type StoragePersistenceStatus,
@@ -137,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Revoked even when the server could not be reached, so signing out always
       // ends this device's ability to sell offline. Unsynced orders are kept —
       // they are recorded revenue, not credentials.
-      await Promise.allSettled([revokeOfflineAuthorization(), clearOfflinePaymentConfig()]);
+      await Promise.allSettled([revokeOfflineAuthorization(), clearOfflinePaymentConfig(), clearSelectedStore()]);
       setStoragePersistence('unknown');
       setState({ phase: 'unauthenticated', message: 'You have been logged out.' });
       setSubmitting(false);

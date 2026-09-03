@@ -29,6 +29,21 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .login-panel { width: min(100%, 380px); padding: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 12px 32px rgba(61, 43, 34, 0.1); }
 .brand-mark { display: grid; width: 46px; height: 46px; border-radius: 8px; place-items: center; background: var(--accent); color: #fffaf5; font-size: 15px; font-weight: 800; }
 .login-panel .brand-mark { margin: 0 auto; }
+
+/* Store selection: the same panel as the login screen, since it is the same
+   moment -- deciding what this session is allowed to work on. */
+.store-picker { width: min(100%, 440px); }
+.store-picker p { text-align: center; color: var(--muted); margin: 0 0 8px; }
+.store-option-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.store-option { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; min-height: 56px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; text-align: left; font: inherit; }
+.store-option:hover:not(:disabled) { border-color: var(--accent); }
+.store-option:disabled { opacity: 0.6; cursor: progress; }
+.store-option strong { font-size: 1.05rem; }
+.store-option span { font-size: 0.85rem; color: var(--muted); }
+.store-option.is-current { border-color: var(--accent); }
+.store-switch { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; font: inherit; }
+.store-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.store-scope { display: contents; }
 .login-panel h1 { margin: 16px 0 4px; text-align: center; }
 .login-panel p { margin: 24px 0 20px; color: var(--text-soft); text-align: center; }
 .login-panel label { display: block; margin-bottom: 7px; font-size: 14px; font-weight: 700; }

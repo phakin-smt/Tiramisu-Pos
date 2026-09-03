@@ -7,6 +7,13 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { OrdersResponse } from '../../types/orders';
 import { OrdersPage } from './OrdersPage';
 
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
+
 const TODAY = '2026-08-17';
 const orders: OrdersResponse = {
   date: TODAY,
@@ -32,6 +39,8 @@ function mockOrders(handler?: (url: string, init: RequestInit) => Response | Pro
     const custom = handler?.(url, init);
     if (custom) return Promise.resolve(custom);
     if (url.startsWith('/api/orders?date=')) return Promise.resolve(json({ ...orders, date: new URL(url, 'http://test').searchParams.get('date') ?? TODAY }));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -88,6 +97,8 @@ describe('OrdersPage', () => {
       const url = String(input);
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url.startsWith('/api/orders?date=')) return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -191,6 +202,8 @@ describe('OrdersPage', () => {
       if (url === '/api/auth/status') return Promise.resolve(json({ authenticated: true, configured: true }));
       if (url.startsWith('/api/orders?date=')) return Promise.resolve(json(orders));
       if (url === '/api/orders/1/cancel' && init.method === 'POST') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

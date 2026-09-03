@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { MutationFeedback } from '../../components/MutationFeedback';
 import { PageHeader } from '../../components/PageHeader';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
+import { useStore } from '../stores/StoreContext';
 import { addToCart, calculateCartTotals, changeGiveawayQuantity, changeQuantity, paidCartQuantity, reconcileCartWithStock, removeFromCart, totalCartQuantity } from '../../domain/cart';
 import { formatThaiDateTime } from '../../domain/date';
 import { formatCurrency } from '../../domain/format';
@@ -42,6 +43,7 @@ const ALL_CATEGORIES = 'ทั้งหมด';
 
 export function SellPage() {
   const { isOnline, isBackendOnline } = useConnectivity();
+  const { rules: storeRules } = useStore();
   const offlineAuthorization = useOfflineAuthorization();
   const productsQuery = useProducts();
   const localMode = productsQuery.unsyncedOfflineOrderCount > 0;
@@ -67,7 +69,7 @@ export function SellPage() {
 
   const categories = useMemo(() => [ALL_CATEGORIES, ...new Set(products.map((product) => product.category))], [products]);
   const filteredProducts = selectedCategory === ALL_CATEGORIES ? products : products.filter((product) => product.category === selectedCategory);
-  const totals = calculateCartTotals(products, cart, discountState, customerType);
+  const totals = calculateCartTotals(products, cart, discountState, customerType, storeRules);
   const totalQuantity = totalCartQuantity(cart);
   const paidQuantity = paidCartQuantity(cart);
   const promptPayQr = usePromptPayQr(promptPayOpen, totals.grandTotal, promptPayLocalMode);
@@ -268,7 +270,7 @@ export function SellPage() {
           {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} onAdd={(product) => updateCart(addToCart(cart, product))} />}
         </div>
       </section>
-      <Cart products={products} cart={cart} totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} cashPaymentDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} promptPayDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} checkoutUnavailableMessages={!isOnline && !offlineAuthorization.checking && !offlineAuthorization.authorized ? [OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE] : []} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(parseMoneyInput(value) ?? 0)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
+      <Cart products={products} cart={cart} totals={totals} rules={storeRules} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} cashPaymentDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} promptPayDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} checkoutUnavailableMessages={!isOnline && !offlineAuthorization.checking && !offlineAuthorization.authorized ? [OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE] : []} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(parseMoneyInput(value) ?? 0)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
     </div>
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />

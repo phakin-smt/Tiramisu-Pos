@@ -3,6 +3,8 @@ import { AppShell } from '../components/AppShell';
 import { PageHeader } from '../components/PageHeader';
 import { navigationItems } from '../components/navigation';
 import { AuthGate } from '../features/auth/AuthContext';
+import { StoreProvider } from '../features/stores/StoreContext';
+import { StoreGate } from '../features/stores/StoreGate';
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { StockPage } from '../features/stock/StockPage';
@@ -24,7 +26,11 @@ export function AppRoutes() {
       <Route
         element={(
           <AuthGate>
-            <AppShell />
+            <StoreProvider>
+              <StoreGate>
+                <AppShell />
+              </StoreGate>
+            </StoreProvider>
           </AuthGate>
         )}
       >

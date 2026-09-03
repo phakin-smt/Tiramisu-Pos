@@ -7,6 +7,13 @@ import { AuthProvider } from '../auth/AuthContext';
 import type { StockPlan, StockSummaryResponse } from '../../types/stock';
 import { StockPage } from './StockPage';
 
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
+
 const TODAY = '2026-08-17';
 const stock: StockSummaryResponse = { date: TODAY, items: [
   { productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 },
@@ -32,6 +39,8 @@ function mockStockRoutes(handler?: (url: string, init: RequestInit) => Response 
     if (custom) return Promise.resolve(custom);
     if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json({ ...stock, date: new URL(url, 'http://test').searchParams.get('date') ?? TODAY }));
     if (url === '/api/stock/plans') return Promise.resolve(json([]));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -235,6 +244,8 @@ describe('StockPage', () => {
       if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json(stock));
       if (url === '/api/stock/plans') return Promise.resolve(json([]));
       if (url === '/api/stock/adjust' && init.method === 'POST') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

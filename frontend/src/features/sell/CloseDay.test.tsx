@@ -8,6 +8,14 @@ import { AppRoutes } from '../../app/router';
 import type { CatalogProduct } from '../../types/products';
 import { AuthProvider } from '../auth/AuthContext';
 import { SellPage } from './SellPage';
+import { StoreProvider } from '../stores/StoreContext';
+
+const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
+const STORE_PRICING = {
+  storeId: 1,
+  bundle: { unitPrice: 69, quantity: 3, price: 200 },
+  wholesale: { category: 'Tiramisu', discountPerItem: 9 },
+};
 
 const products: CatalogProduct[] = [
   { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
@@ -49,6 +57,8 @@ function mockCloseDay(handler?: FetchHandler) {
     if (url === '/api/reports/close-day') return Promise.resolve(json(report));
     if (url === '/api/reports/days') return Promise.resolve(json(openDays));
     if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(json(order));
+    if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+    if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -56,7 +66,7 @@ function mockCloseDay(handler?: FetchHandler) {
 }
 
 async function renderSell() {
-  const view = render(<SellPage />);
+  const view = render(<StoreProvider><SellPage /></StoreProvider>);
   await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
   return view;
 }
@@ -142,6 +152,8 @@ describe('Sell close-day workflow', () => {
       if (url === '/api/reports/daily-summary') return Promise.resolve(json(summary));
       if (url === '/api/cash-day') return Promise.resolve(json({ date: summary.date, openingFloat: null }));
       if (url === '/api/reports/close-day') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -177,9 +189,9 @@ describe('Sell close-day workflow', () => {
 
   it('never posts from render, rerender, or Strict Mode and still submits once after confirmation', async () => {
     const fetchMock = mockCloseDay();
-    const view = render(<StrictMode><SellPage /></StrictMode>);
+    const view = render(<StrictMode><StoreProvider><SellPage /></StoreProvider></StrictMode>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    view.rerender(<StrictMode><SellPage /></StrictMode>);
+    view.rerender(<StrictMode><StoreProvider><SellPage /></StoreProvider></StrictMode>);
     expect(closeDayPosts(fetchMock)).toHaveLength(0);
     const modal = await openPreview();
     expect(closeDayPosts(fetchMock)).toHaveLength(0);
@@ -209,6 +221,8 @@ describe('Sell close-day workflow', () => {
       if (url === '/api/reports/close-day' && init.method === 'POST') return Promise.resolve(json({ error: 'หมดอายุ' }, 401));
       if (url === '/api/reports/close-day') return Promise.resolve(json(report));
       if (url === '/api/reports/days') return Promise.resolve(json(openDays));
+      if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
+      if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);

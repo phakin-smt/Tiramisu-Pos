@@ -7,6 +7,7 @@ import {
   openBaannoiPosDatabase,
   type CatalogSnapshotMetadata,
   type OfflineAuthorizationRecord,
+  type PricingRulesRecord,
   type OfflineOrder,
   type OfflineOrderItem,
   type OfflineStockMovement,
@@ -84,7 +85,7 @@ export function createOfflineOrderIdentity(now = new Date()): OfflineOrderIdenti
   };
 }
 
-function authorizationValid(value: CatalogSnapshotMetadata | OfflineAuthorizationRecord | undefined, at: string) {
+function authorizationValid(value: CatalogSnapshotMetadata | OfflineAuthorizationRecord | PricingRulesRecord | undefined, at: string) {
   return value?.key === OFFLINE_AUTHORIZATION_KEY && Date.parse(value.expiresAt) > Date.parse(at);
 }
 
