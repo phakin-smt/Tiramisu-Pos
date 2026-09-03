@@ -15,6 +15,11 @@ const BUNDLE_UNIT_PRICE = 69;
 const BUNDLE_QTY = 3;
 const BUNDLE_PRICE = 200;
 const BUNDLE_DISCOUNT_PER_SET = BUNDLE_UNIT_PRICE * BUNDLE_QTY - BUNDLE_PRICE;
+/** Wholesale rate for shop customers, applied per paid piece. Mirrors the React app. */
+const STORE_TIRAMISU_CATEGORY = 'Tiramisu';
+const STORE_TIRAMISU_DISCOUNT = 9;
+const BUNDLE_HINT = '🎉 โปรฯ ครบ 3 ชิ้น (69.-) ลดเหลือ 200 บาท ใช้ให้อัตโนมัติแล้ว';
+const STORE_HINT = `🏪 ราคาส่งร้านค้า ลด ฿${STORE_TIRAMISU_DISCOUNT}/ชิ้น สำหรับ ${STORE_TIRAMISU_CATEGORY} ใช้ให้อัตโนมัติแล้ว`;
 const APP_TIME_ZONE = 'Asia/Bangkok';
 const PAGE_ORDER = ['sellPage', 'stockPage', 'ordersPage', 'reportPage', 'analyticsPage', 'settingsPage'];
 
@@ -405,8 +410,17 @@ function computeTotals() {
     const product = getProductById(item.productId);
     return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty - (item.giveawayQty || 0) : sum;
   }, 0);
-  const bundleSets = Math.floor(eligibleQty / BUNDLE_QTY);
-  const autoDiscount = bundleSets * BUNDLE_DISCOUNT_PER_SET;
+  const storeQty = cart.reduce((sum, item) => {
+    const product = getProductById(item.productId);
+    return product && product.category === STORE_TIRAMISU_CATEGORY ? sum + item.qty - (item.giveawayQty || 0) : sum;
+  }, 0);
+
+  // A shop customer is on wholesale pricing, so the per-piece rate replaces the
+  // three-for-200 promotion rather than stacking with it.
+  const store = document.getElementById('customerSelect').value === 'store';
+  const bundleSets = store ? 0 : Math.floor(eligibleQty / BUNDLE_QTY);
+  const storeDiscount = store ? storeQty * STORE_TIRAMISU_DISCOUNT : 0;
+  const autoDiscount = store ? storeDiscount : bundleSets * BUNDLE_DISCOUNT_PER_SET;
 
 
   const discountInput = document.getElementById('discountInput');
@@ -421,7 +435,7 @@ function computeTotals() {
   const grandTotal = subtotal - discount + vat;
 
 
-  return { subtotal, bundleSets, autoDiscount, discount, vat, grandTotal };
+  return { subtotal, bundleSets, storeDiscount, autoDiscount, discount, vat, grandTotal };
 }
 
 
@@ -437,7 +451,13 @@ function renderTotals() {
   document.getElementById('mobileCartTotal').textContent = formatCurrency(totals.grandTotal);
 
 
-  document.getElementById('promoHint').hidden = !(totals.bundleSets > 0 && !discountManual);
+  const promoHint = document.getElementById('promoHint');
+  const showStoreHint = totals.storeDiscount > 0 && !discountManual;
+  const showBundleHint = totals.bundleSets > 0 && !discountManual;
+  if (showStoreHint || showBundleHint) {
+    promoHint.textContent = showStoreHint ? STORE_HINT : BUNDLE_HINT;
+  }
+  promoHint.hidden = !(showStoreHint || showBundleHint);
 }
 
 
@@ -1552,6 +1572,9 @@ async function init() {
         item.classList.toggle('is-active', selected);
         item.setAttribute('aria-pressed', String(selected));
       });
+      // The customer type decides which automatic discount applies, so the cart
+      // has to be repriced here rather than at the next cart edit.
+      renderTotals();
     });
   });
 

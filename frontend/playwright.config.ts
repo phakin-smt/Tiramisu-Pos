@@ -39,8 +39,8 @@ export default defineConfig({
   ],
   projects: [
     {
-      name: 'legacy-stock-plans-chromium',
-      testMatch: /legacy-stock-plans\.spec\.ts/,
+      name: 'legacy-chromium',
+      testMatch: /legacy-.*\.spec\.ts/,
       use: { browserName: 'chromium', viewport: { width: 1440, height: 900 } },
     },
     {
