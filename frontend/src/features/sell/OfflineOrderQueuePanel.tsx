@@ -9,6 +9,7 @@ export const OFFLINE_QUEUE_HEADING = 'ออเดอร์ที่ยังไ
 export const OFFLINE_QUEUE_RETRY_LABEL = 'ลองอีกครั้ง';
 
 interface OfflineOrderQueuePanelProps {
+  storeId: number | null;
   /** Bumped whenever a sync settles, so the list reflects the latest outcome. */
   revision: number;
   syncing: boolean;
@@ -21,14 +22,14 @@ const paymentLabels: Record<OfflineOrder['paymentMethod'], string> = {
   transfer: 'PromptPay',
 };
 
-export function OfflineOrderQueuePanel({ revision, syncing, canRetry, onRetry }: OfflineOrderQueuePanelProps) {
+export function OfflineOrderQueuePanel({ storeId, revision, syncing, canRetry, onRetry }: OfflineOrderQueuePanelProps) {
   const [orders, setOrders] = useState<OfflineOrder[]>([]);
   const [retrying, setRetrying] = useState<string | null>(null);
   const inFlight = useRef(new Set<string>());
 
   const load = useCallback(async () => {
     try {
-      setOrders(await getUnsyncedOfflineOrders());
+      setOrders(storeId === null ? [] : await getUnsyncedOfflineOrders(storeId));
     } catch {
       setOrders([]);
     }

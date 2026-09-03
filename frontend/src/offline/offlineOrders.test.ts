@@ -35,7 +35,7 @@ const identity = {
 };
 
 function sale(overrides: Partial<Parameters<typeof recordOfflineCashSale>[0]> = {}) {
-  return recordOfflineCashSale({
+  return recordOfflineCashSale({ storeId: 1,
     identity,
     order: {
       items: [{ productId: 1, qty: 3, giveawayQty: 1 }],
@@ -53,7 +53,7 @@ function sale(overrides: Partial<Parameters<typeof recordOfflineCashSale>[0]> = 
 describe('offline cash order transaction', () => {
   beforeEach(async () => {
     await deleteDB(BAANNOI_POS_DATABASE_NAME);
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T07:00:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
   });
 
@@ -77,8 +77,8 @@ describe('offline cash order transaction', () => {
       expect.objectContaining({ semanticType: 'sale', quantity: -2, referenceId: identity.localOrderId }),
       expect.objectContaining({ semanticType: 'giveaway', quantity: -1, referenceId: identity.localOrderId }),
     ]));
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(7);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     expect((await getRecentOfflineOrders(1))[0].total).toBe(138);
   });
 
@@ -99,14 +99,14 @@ describe('offline cash order transaction', () => {
     const details = await getOfflineOrderDetails(identity.localOrderId);
     expect(details?.movements).toHaveLength(1);
     expect(details?.movements[0]).toMatchObject({ semanticType: 'sale', quantity: -1 });
-    expect((await readConfirmedCatalogSnapshot())?.products[1].stock).toBe(1);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[1].stock).toBe(1);
   });
 
   it('aborts every write when current local stock is insufficient', async () => {
     await expect(sale({ order: { items: [{ productId: 1, qty: 11, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 } }))
       .rejects.toThrow(INSUFFICIENT_OFFLINE_STOCK_MESSAGE);
-    expect(await getPendingOfflineOrderCount()).toBe(0);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(10);
+    expect(await getPendingOfflineOrderCount(1)).toBe(0);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(10);
     expect(await getOfflineOrderDetails(identity.localOrderId)).toBeNull();
   });
 
@@ -122,8 +122,8 @@ describe('offline cash order transaction', () => {
       database.close();
     }
     await expect(sale()).rejects.toThrow('อุปกรณ์นี้ยังไม่พร้อมสำหรับการขายออฟไลน์');
-    expect(await getPendingOfflineOrderCount()).toBe(0);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(10);
+    expect(await getPendingOfflineOrderCount(1)).toBe(0);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(10);
   });
 
   it.each([
@@ -144,8 +144,8 @@ describe('offline cash order transaction', () => {
       });
     }
     await expect(sale()).rejects.toThrow('injected write failure');
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(10);
-    expect(await getPendingOfflineOrderCount()).toBe(0);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(10);
+    expect(await getPendingOfflineOrderCount(1)).toBe(0);
     const database = await openBaannoiPosDatabase();
     expect(await database.count('offlineOrderItems')).toBe(0);
     expect(await database.count('offlineStockMovements')).toBe(0);
@@ -155,12 +155,12 @@ describe('offline cash order transaction', () => {
   it('reuses one local identity so concurrent duplicate confirmation creates exactly one order', async () => {
     const [first, second] = await Promise.all([sale(), sale()]);
     expect(first.localOrderId).toBe(second.localOrderId);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(7);
   });
 
   it('stores the checkout idempotency key so a later sync can replay the sale safely', async () => {
-    const order = await recordOfflineCashSale({
+    const order = await recordOfflineCashSale({ storeId: 1,
       identity,
       idempotencyKey: 'b2f1e6d4-0000-4000-8000-00000000aaaa',
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
@@ -175,13 +175,13 @@ describe('offline cash order transaction', () => {
 
   it('refuses a second local order for one idempotency key even under a new local order id', async () => {
     const key = 'b2f1e6d4-0000-4000-8000-00000000bbbb';
-    const first = await recordOfflineCashSale({
+    const first = await recordOfflineCashSale({ storeId: 1,
       identity, idempotencyKey: key,
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
       totals: { subtotal: 69, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 69 },
       amountTendered: 100, changeAmount: 31,
     });
-    const replay = await recordOfflineCashSale({
+    const replay = await recordOfflineCashSale({ storeId: 1,
       identity: { ...identity, localOrderId: '6ba7b810-9dad-41d1-80b4-00c04fd430ff', localOrderNumber: 'OFF-20260821-143599-30FF' },
       idempotencyKey: key,
       order: { items: [{ productId: 1, qty: 1, giveawayQty: 0 }], paymentMethod: 'cash', customerType: 'walkin', discount: 0 },
@@ -190,14 +190,14 @@ describe('offline cash order transaction', () => {
     });
 
     expect(replay.localOrderId).toBe(first.localOrderId);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     // The replay must not have deducted stock a second time.
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(9);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(9);
   });
 
   it('uses the same atomic transaction for a manually confirmed transfer', async () => {
     const transferIdentity = { ...identity, localOrderId: '6ba7b810-9dad-41d1-80b4-00c04fd430c8', localOrderNumber: 'OFF-20260821-143523-30C8' };
-    const order = await recordOfflineSale({
+    const order = await recordOfflineSale({ storeId: 1,
       identity: transferIdentity,
       order: { items: [{ productId: 1, qty: 3, giveawayQty: 1 }], paymentMethod: 'transfer', customerType: 'member', discount: 0 },
       totals: { subtotal: 138, storeDiscount: 0, bundleSets: 0, autoDiscount: 0, discount: 0, vat: 0, grandTotal: 138 },
@@ -213,8 +213,8 @@ describe('offline cash order transaction', () => {
       expect.objectContaining({ semanticType: 'sale', quantity: -2 }),
       expect.objectContaining({ semanticType: 'giveaway', quantity: -1 }),
     ]));
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(7);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
   });
 });
 
@@ -239,7 +239,7 @@ describe('BaannoiPOS migrations', () => {
       'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productSnapshot',
     ]);
     upgraded.close();
-    expect(await readConfirmedCatalogSnapshot()).toEqual({
+    expect(await readConfirmedCatalogSnapshot(1)).toEqual({
       products,
       metadata: { key: 'catalog', lastSuccessfulCatalogSyncAt: '2026-08-20T03:00:00.000Z', schemaVersion: 1 },
     });
@@ -285,7 +285,7 @@ describe('BaannoiPOS migrations', () => {
     expect(await upgraded.count('offlineOrderItems')).toBe(1);
     expect(await upgraded.count('offlineStockMovements')).toBe(1);
     upgraded.close();
-    expect((await readConfirmedCatalogSnapshot())?.products).toEqual(products);
+    expect((await readConfirmedCatalogSnapshot(1))?.products).toEqual(products);
   });
 
   it('upgrades v3 to v4 by indexing idempotency keys without disturbing pre-v4 orders', async () => {
@@ -328,8 +328,8 @@ describe('BaannoiPOS migrations', () => {
     expect(await upgraded.get('offlinePaymentConfig', 'promptpay')).toMatchObject({ version: 1 });
     upgraded.close();
 
-    expect((await readConfirmedCatalogSnapshot())?.products).toEqual(products);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect((await readConfirmedCatalogSnapshot(1))?.products).toEqual(products);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
   });
 
   it('keeps two legacy keyless orders valid under the unique idempotency index', async () => {
@@ -360,6 +360,6 @@ describe('BaannoiPOS migrations', () => {
     const upgraded = await openBaannoiPosDatabase();
     expect(await upgraded.count('offlineOrders')).toBe(2);
     upgraded.close();
-    expect(await getPendingOfflineOrderCount()).toBe(2);
+    expect(await getPendingOfflineOrderCount(1)).toBe(2);
   });
 });

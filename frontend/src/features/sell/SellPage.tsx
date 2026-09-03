@@ -43,9 +43,9 @@ const ALL_CATEGORIES = 'ทั้งหมด';
 
 export function SellPage() {
   const { isOnline, isBackendOnline } = useConnectivity();
-  const { rules: storeRules } = useStore();
+  const { rules: storeRules, storeId } = useStore();
   const offlineAuthorization = useOfflineAuthorization();
-  const productsQuery = useProducts();
+  const productsQuery = useProducts(storeId);
   const localMode = productsQuery.unsyncedOfflineOrderCount > 0;
   const dailySummary = useDailySummary();
   const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active || product.stock > 0), [productsQuery.data]);
@@ -64,7 +64,7 @@ export function SellPage() {
   const [stockNotice, setStockNotice] = useState('');
   const [holdNotice, setHoldNotice] = useState('');
   const mobile = useIsMobile();
-  const checkout = useCheckout();
+  const checkout = useCheckout(storeId);
   const closeDay = useCloseDay(dailySummary.refresh);
 
   const categories = useMemo(() => [ALL_CATEGORIES, ...new Set(products.map((product) => product.category))], [products]);
@@ -104,15 +104,16 @@ export function SellPage() {
   const [queueCounts, setQueueCounts] = useState({ pending: 0, failed: 0 });
   const [queueRevision, setQueueRevision] = useState(0);
   const loadStockReviews = useCallback(async () => {
-    try { setStockReviewCount(await getPendingStockReviewCount()); } catch { setStockReviewCount(0); }
+    if (storeId === null) return;
+    try { setStockReviewCount(await getPendingStockReviewCount(storeId)); } catch { setStockReviewCount(0); }
     try {
-      const unsynced = await getUnsyncedOfflineOrders();
+      const unsynced = await getUnsyncedOfflineOrders(storeId);
       setQueueCounts({
         pending: unsynced.filter((entry) => entry.syncStatus === 'pending').length,
         failed: unsynced.filter((entry) => entry.syncStatus === 'failed').length,
       });
     } catch { setQueueCounts({ pending: 0, failed: 0 }); }
-  }, []);
+  }, [storeId]);
   useEffect(() => { void loadStockReviews(); }, [loadStockReviews]);
   const onSyncSettled = useCallback(() => {
     refreshProducts();
@@ -120,6 +121,7 @@ export function SellPage() {
     void loadStockReviews();
   }, [loadStockReviews, refreshProducts]);
   const offlineSync = useOfflineSync(
+    storeId,
     productsQuery.unsyncedOfflineOrderCount,
     checkoutActive,
     onSyncSettled,
@@ -243,7 +245,7 @@ export function SellPage() {
     {productsQuery.storageError && <div className="catalog-storage-warning" role="alert">{productsQuery.storageError}</div>}
     {localMode && <div className="catalog-storage-warning" role="status"><strong>Local Mode · รอ Sync {productsQuery.unsyncedOfflineOrderCount} รายการ</strong>{offlineSync.syncing && <span>กำลัง Sync</span>}{queueCounts.failed > 0 && <span className="sync-status-failed">Sync ไม่สำเร็จ {queueCounts.failed} รายการ</span>}<span>{LOCAL_MODE_MESSAGE}</span><span>{PENDING_OFFLINE_ORDERS_MESSAGE}</span>{offlineSync.error && <span>{offlineSync.error}</span>}<button type="button" className="secondary-button" disabled={offlineSync.syncing || !isBackendOnline || checkoutActive} onClick={() => { void offlineSync.runSync(); }}>{offlineSync.syncing ? 'กำลัง Sync...' : 'Sync ตอนนี้'}</button></div>}
     {!localMode && offlineSync.lastOutcome && offlineSync.lastOutcome.synced > 0 && offlineSync.lastOutcome.remaining === 0 && <div className="sync-status-success" role="status">Sync สำเร็จ · {offlineSync.lastOutcome.synced} รายการ</div>}
-    <OfflineOrderQueuePanel revision={queueRevision} syncing={offlineSync.syncing} canRetry={isBackendOnline && !checkoutActive} onRetry={async () => { await offlineSync.runSync(); }} />
+    <OfflineOrderQueuePanel storeId={storeId} revision={queueRevision} syncing={offlineSync.syncing} canRetry={isBackendOnline && !checkoutActive} onRetry={async () => { await offlineSync.runSync(); }} />
     {stockReviewCount > 0 && <div className="catalog-storage-warning" role="alert"><strong>{STOCK_REVIEW_HEADING} · {stockReviewCount} รายการ</strong><span>Sync แล้ว แต่สต็อกบนระบบไม่พอ · ไปที่หน้าจัดการสต็อกเพื่อตรวจนับและยืนยัน</span></div>}
     <div className="sell-workspace">
       <section className="sell-catalog" aria-labelledby="catalog-title">

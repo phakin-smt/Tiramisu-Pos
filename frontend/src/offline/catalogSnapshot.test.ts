@@ -33,9 +33,9 @@ describe('catalog snapshot IndexedDB storage', () => {
 
   it('round-trips every catalog product field and writes versioned ISO metadata', async () => {
     const syncedAt = '2026-08-21T04:30:00.000Z';
-    await replaceConfirmedCatalogSnapshot([original], syncedAt);
+    await replaceConfirmedCatalogSnapshot([original], 1, syncedAt);
 
-    const snapshot = await readConfirmedCatalogSnapshot();
+    const snapshot = await readConfirmedCatalogSnapshot(1);
     expect(snapshot?.products).toEqual([original]);
     expect(snapshot?.metadata).toEqual({
       key: 'catalog',
@@ -46,26 +46,26 @@ describe('catalog snapshot IndexedDB storage', () => {
   });
 
   it('atomically replaces the complete prior snapshot after a second success', async () => {
-    await replaceConfirmedCatalogSnapshot([original], '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot([original], 1, '2026-08-21T04:30:00.000Z');
     const replacement = { ...original, id: 22, code: 'NEW-22', name: 'New', stock: 3 };
 
-    await replaceConfirmedCatalogSnapshot([replacement], '2026-08-21T05:45:00.000Z');
+    await replaceConfirmedCatalogSnapshot([replacement], 1, '2026-08-21T05:45:00.000Z');
 
-    const snapshot = await readConfirmedCatalogSnapshot();
+    const snapshot = await readConfirmedCatalogSnapshot(1);
     expect(snapshot?.products).toEqual([replacement]);
     expect(snapshot?.products).not.toContainEqual(original);
     expect(snapshot?.metadata.lastSuccessfulCatalogSyncAt).toBe('2026-08-21T05:45:00.000Z');
   });
 
   it('accepts a confirmed empty server catalog as a complete replacement', async () => {
-    await replaceConfirmedCatalogSnapshot([original], '2026-08-21T04:30:00.000Z');
-    await replaceConfirmedCatalogSnapshot([], '2026-08-21T06:00:00.000Z');
+    await replaceConfirmedCatalogSnapshot([original], 1, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot([], 1, '2026-08-21T06:00:00.000Z');
 
-    expect((await readConfirmedCatalogSnapshot())?.products).toEqual([]);
+    expect((await readConfirmedCatalogSnapshot(1))?.products).toEqual([]);
   });
 
   it('atomically refuses server replacement while a pending offline order exists', async () => {
-    await replaceConfirmedCatalogSnapshot([original], '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot([original], 1, '2026-08-21T04:30:00.000Z');
     const database = await openBaannoiPosDatabase();
     await database.add('offlineOrders', {
       localOrderId: '550e8400-e29b-41d4-a716-446655440000',
@@ -85,7 +85,7 @@ describe('catalog snapshot IndexedDB storage', () => {
     database.close();
 
     const replacement = { ...original, stock: 99 };
-    expect(await replaceConfirmedCatalogSnapshotIfNoPendingOrders([replacement])).toBeNull();
-    expect((await readConfirmedCatalogSnapshot())?.products).toEqual([original]);
+    expect(await replaceConfirmedCatalogSnapshotIfNoPendingOrders([replacement], 1)).toBeNull();
+    expect((await readConfirmedCatalogSnapshot(1))?.products).toEqual([original]);
   });
 });

@@ -18,6 +18,7 @@ export interface ConfirmedCatalogSnapshot {
 
 export async function replaceConfirmedCatalogSnapshot(
   products: readonly CatalogProduct[],
+  storeId: number,
   syncedAt = new Date().toISOString(),
 ): Promise<CatalogSnapshotMetadata> {
   const database = await openBaannoiPosDatabase();
@@ -32,6 +33,7 @@ export async function replaceConfirmedCatalogSnapshot(
     await Promise.all([
       transaction.objectStore('productSnapshot').put({
         key: PRODUCT_SNAPSHOT_KEY,
+        storeId,
         products: [...products],
       }),
       transaction.objectStore('metadata').put(metadata),
@@ -45,6 +47,7 @@ export async function replaceConfirmedCatalogSnapshot(
 
 export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
   products: readonly CatalogProduct[],
+  storeId: number,
   syncedAt = new Date().toISOString(),
 ): Promise<CatalogSnapshotMetadata | null> {
   const database = await openBaannoiPosDatabase();
@@ -61,18 +64,16 @@ export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
   try {
     // Anything the server has not accepted still owns the local stock numbers,
     // whether it is waiting to sync or was rejected outright.
-    const syncStatus = transaction.objectStore('offlineOrders').index('by-sync-status');
-    const [pending, failed] = await Promise.all([
-      syncStatus.count('pending'),
-      syncStatus.count('failed'),
-    ]);
-    const pendingCount = pending + failed;
+    const orders = await transaction.objectStore('offlineOrders').getAll();
+    const pendingCount = orders.filter((order) =>
+      order.syncStatus !== 'synced' && (order.storeId ?? 1) === storeId).length;
     if (pendingCount > 0) {
       await transaction.done;
       return null;
     }
     await transaction.objectStore('productSnapshot').put({
       key: PRODUCT_SNAPSHOT_KEY,
+      storeId,
       products: [...products],
     });
     await transaction.objectStore('metadata').put(metadata);
@@ -86,7 +87,13 @@ export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
   }
 }
 
-export async function readConfirmedCatalogSnapshot(): Promise<ConfirmedCatalogSnapshot | null> {
+/**
+ * The cached menu for `storeId`, or null when the device holds someone else's.
+ *
+ * A snapshot written before stores existed carries no id and can only be the
+ * first store's, since that was the only one.
+ */
+export async function readConfirmedCatalogSnapshot(storeId: number): Promise<ConfirmedCatalogSnapshot | null> {
   const database = await openBaannoiPosDatabase();
   try {
     const transaction = database.transaction(['productSnapshot', 'metadata'], 'readonly');
@@ -96,6 +103,7 @@ export async function readConfirmedCatalogSnapshot(): Promise<ConfirmedCatalogSn
       transaction.done,
     ]);
     if (!snapshot || !metadata || metadata.key !== CATALOG_METADATA_KEY) return null;
+    if ((snapshot.storeId ?? 1) !== storeId) return null;
     return { products: snapshot.products, metadata };
   } finally {
     database.close();

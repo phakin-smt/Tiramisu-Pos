@@ -51,7 +51,7 @@ const reconciled = (delta: number, currentStock: number) => jsonResponse({
 });
 
 function renderPanel(onReconciled = vi.fn(), stock = new Map([[1, 8]])) {
-  render(<StockReconciliationPanel serverStock={stock} onReconciled={onReconciled} />);
+  render(<StockReconciliationPanel storeId={1} serverStock={stock} onReconciled={onReconciled} />);
   return onReconciled;
 }
 
@@ -71,7 +71,7 @@ describe('stock reconciliation panel', () => {
   it('renders nothing when there is no outstanding review', async () => {
     vi.stubGlobal('fetch', vi.fn());
     renderPanel();
-    await vi.waitFor(async () => expect(await getPendingStockReviews()).toEqual([]));
+    await vi.waitFor(async () => expect(await getPendingStockReviews(1)).toEqual([]));
     expect(screen.queryByText('ต้องตรวจสอบสต็อก')).not.toBeInTheDocument();
   });
 
@@ -116,7 +116,7 @@ describe('stock reconciliation panel', () => {
       expect(confirmButton()).toBeDisabled();
     }
     expect(reconcileCalls(fetchMock)).toHaveLength(0);
-    expect(await getPendingStockReviews()).toHaveLength(1);
+    expect(await getPendingStockReviews(1)).toHaveLength(1);
   });
 
   it('sends the verified count, resolves the review, and reports the adjustment', async () => {
@@ -132,7 +132,7 @@ describe('stock reconciliation panel', () => {
     expect(await screen.findByText(/ปรับสต็อก -3 ชิ้น เหลือ 5 ชิ้น/)).toBeInTheDocument();
     const [[, init]] = reconcileCalls(fetchMock);
     expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ productId: 1, verifiedStock: 5 });
-    expect(await getPendingStockReviews()).toEqual([]);
+    expect(await getPendingStockReviews(1)).toEqual([]);
     expect(onReconciled).toHaveBeenCalled();
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
   });
@@ -147,7 +147,7 @@ describe('stock reconciliation panel', () => {
     fireEvent.click(confirmButton());
 
     expect(await screen.findByText(/ปรับสต็อก -8 ชิ้น เหลือ 0 ชิ้น/)).toBeInTheDocument();
-    expect(await getPendingStockReviews()).toEqual([]);
+    expect(await getPendingStockReviews(1)).toEqual([]);
   });
 
   it('does not create two adjustments under a double click', async () => {
@@ -186,7 +186,7 @@ describe('stock reconciliation panel', () => {
     expect(verifiedInput()).toHaveValue('5');
     expect(verifiedInput()).toBeEnabled();
     expect(confirmButton()).toBeEnabled();
-    expect(await getPendingStockReviews()).toHaveLength(1);
+    expect(await getPendingStockReviews(1)).toHaveLength(1);
     expect(onReconciled).not.toHaveBeenCalled();
   });
 
@@ -200,7 +200,7 @@ describe('stock reconciliation panel', () => {
     fireEvent.change(within(bakery).getByLabelText('ตรวจนับจริง'), { target: { value: '1' } });
     fireEvent.click(within(bakery).getByRole('button', { name: 'ยืนยันปรับสต็อก' }));
 
-    await vi.waitFor(async () => expect(await getPendingStockReviews()).toHaveLength(1));
+    await vi.waitFor(async () => expect(await getPendingStockReviews(1)).toHaveLength(1));
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
     expect(screen.getByText('สินค้า: ทีรามิสุ Original')).toBeInTheDocument();
   });

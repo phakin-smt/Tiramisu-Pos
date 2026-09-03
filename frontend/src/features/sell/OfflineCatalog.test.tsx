@@ -64,7 +64,7 @@ describe('SellPage offline catalog', () => {
 
   it('uses cached categories and stock while blocking every checkout path without authorization', async () => {
     await saveSelectedStore(cachedStore);
-    await replaceConfirmedCatalogSnapshot(cachedProducts, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(cachedProducts, 1, '2026-08-21T04:30:00.000Z');
     setNavigatorOnline(false);
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('offline'));
     vi.stubGlobal('fetch', fetchMock);
@@ -100,7 +100,7 @@ describe('SellPage offline catalog', () => {
 
   it('completes an authorized offline cash sale without order or QR requests and reloads reduced stock', async () => {
     await saveSelectedStore(cachedStore);
-    await replaceConfirmedCatalogSnapshot(cachedProducts, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(cachedProducts, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     setNavigatorOnline(false);
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('offline'));
@@ -122,7 +122,7 @@ describe('SellPage offline catalog', () => {
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์ #OFF-.*แล้ว · ยังไม่ได้ Sync/)).toBeInTheDocument();
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' })).toHaveTextContent('คงเหลือ 7 ชิ้น'));
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     const [order] = await getRecentOfflineOrders(1);
     const details = await getOfflineOrderDetails(order.localOrderId);
     expect(details?.items[0]).toMatchObject({ qty: 2, giveawayQty: 1, unitPrice: 69, paidLineSubtotal: 138 });

@@ -24,13 +24,14 @@ function unresolvedShortfalls(order: OfflineOrder) {
  * product has been counted — so two offline sales of the same product add up
  * rather than double-counting or overwriting one another.
  */
-export async function getPendingStockReviews(): Promise<StockReviewEntry[]> {
+export async function getPendingStockReviews(storeId: number): Promise<StockReviewEntry[]> {
   const database = await openBaannoiPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
     const byProduct = new Map<number, StockReviewEntry>();
     for (const order of orders) {
       if (!order.stockReview) continue;
+      if ((order.storeId ?? 1) !== storeId) continue;
       for (const shortfall of unresolvedShortfalls(order)) {
         const entry = byProduct.get(shortfall.productId) ?? {
           productId: shortfall.productId,
@@ -49,8 +50,8 @@ export async function getPendingStockReviews(): Promise<StockReviewEntry[]> {
   }
 }
 
-export async function getPendingStockReviewCount(): Promise<number> {
-  return (await getPendingStockReviews()).length;
+export async function getPendingStockReviewCount(storeId: number): Promise<number> {
+  return (await getPendingStockReviews(storeId)).length;
 }
 
 /**
@@ -60,6 +61,7 @@ export async function getPendingStockReviewCount(): Promise<number> {
  * the history of what happened survives, and only the resolution is recorded.
  */
 export async function resolveStockReview(
+  storeId: number,
   productId: number,
   resolvedAt = new Date().toISOString(),
 ): Promise<number> {
@@ -71,6 +73,7 @@ export async function resolveStockReview(
     let resolvedOrders = 0;
     for (const order of orders) {
       if (!order.stockReview) continue;
+      if ((order.storeId ?? 1) !== storeId) continue;
       if (!unresolvedShortfalls(order).some((entry) => entry.productId === productId)) continue;
       const resolvedProductIds = [...new Set([...(order.stockReviewResolvedProductIds ?? []), productId])];
       const outstanding = (order.stockShortfalls ?? [])

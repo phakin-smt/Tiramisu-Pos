@@ -14,6 +14,7 @@ import type { StockAdjustmentReason } from '../../types/stock';
 import type { StockSummaryItem } from '../../types/stock';
 import { HistoricalCorrectionModal } from './HistoricalCorrectionModal';
 import { StockReconciliationPanel } from './StockReconciliationPanel';
+import { useStore } from '../stores/StoreContext';
 
 const actionLabels: Record<StockAdjustmentReason, string> = {
   prepare: 'เตรียมเพิ่ม', undo_prepare: 'ยกเลิกเตรียม', giveaway: 'บันทึกแถม',
@@ -21,6 +22,7 @@ const actionLabels: Record<StockAdjustmentReason, string> = {
 };
 
 export function StockPage() {
+  const { storeId } = useStore();
   const today = bangkokDateISO();
   const [date, setDate] = useState(today);
   const [stockRevision, setStockRevision] = useState(0);
@@ -55,6 +57,7 @@ export function StockPage() {
       <MutationFeedback error={mutation.error} success={mutation.success} />
       <MutationFeedback error="" success={correctionSuccess} />
       <StockReconciliationPanel
+        storeId={storeId}
         serverStock={new Map((query.data?.items ?? []).map((item) => [item.productId, item.stockNow]))}
         onReconciled={() => setStockRevision((current) => current + 1)}
       />

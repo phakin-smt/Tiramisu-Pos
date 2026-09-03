@@ -52,7 +52,10 @@ function buildReplayPayload(
 }
 
 /**
- * Replays every pending offline sale, oldest first.
+ * Replays this store's pending offline sales, oldest first.
+ *
+ * Sales belonging to another shop are left alone rather than posted under the
+ * current selection -- they wait until that shop is selected again.
  *
  * A transport failure stops the drain and leaves the rest pending — the network
  * is gone, so continuing would only pile up retries. A rejection the server will
@@ -60,8 +63,8 @@ function buildReplayPayload(
  * single poison order cannot strand the whole day behind it. Nothing is ever
  * deleted, and each outcome is written in its own transaction.
  */
-export async function syncPendingOfflineOrders(): Promise<OfflineSyncOutcome> {
-  const queue = await getOfflineOrdersToSync();
+export async function syncPendingOfflineOrders(storeId: number): Promise<OfflineSyncOutcome> {
+  const queue = await getOfflineOrdersToSync(storeId);
   let synced = 0;
   let failed = 0;
   let stockReviews = 0;
@@ -112,7 +115,7 @@ export async function syncPendingOfflineOrders(): Promise<OfflineSyncOutcome> {
     }
   }
 
-  const remaining = await getUnsyncedOfflineOrderCount();
+  const remaining = await getUnsyncedOfflineOrderCount(storeId);
   if (!error && remaining > 0) error = OFFLINE_SYNC_INCOMPLETE_MESSAGE;
   return { synced, failed, remaining, stockReviews, stopped, error };
 }

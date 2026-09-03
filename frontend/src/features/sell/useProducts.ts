@@ -32,7 +32,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function useProducts() {
+export function useProducts(storeId: number | null) {
   const { isOnline } = useConnectivity();
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<ProductsState>(initialState);
@@ -44,11 +44,18 @@ export function useProducts() {
     setState((previous) => ({ ...previous, loading: true, error: '', storageError: '' }));
 
     async function loadProducts() {
+      // Until the store is settled there is no catalogue to speak of: reading one
+      // would risk showing another shop's menu. Settle rather than hang, so the
+      // page says it has nothing instead of spinning forever.
+      if (storeId === null) {
+        if (current) setState({ ...initialState, loading: false });
+        return;
+      }
       if (!isOnline) {
         try {
           const [snapshot, unsyncedOfflineOrderCount] = await Promise.all([
-            readConfirmedCatalogSnapshot(),
-            getUnsyncedOfflineOrderCount(),
+            readConfirmedCatalogSnapshot(storeId),
+            getUnsyncedOfflineOrderCount(storeId),
           ]);
           if (!current) return;
           setState({
@@ -81,7 +88,7 @@ export function useProducts() {
 
         let metadata;
         try {
-          metadata = await replaceConfirmedCatalogSnapshotIfNoPendingOrders(products);
+          metadata = await replaceConfirmedCatalogSnapshotIfNoPendingOrders(products, storeId);
         } catch (error) {
           if (!current) return;
           setState((previous) => ({
@@ -97,8 +104,8 @@ export function useProducts() {
         }
         if (!current) return;
         if (!metadata) {
-          const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount();
-          const snapshot = await readConfirmedCatalogSnapshot();
+          const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount(storeId);
+          const snapshot = await readConfirmedCatalogSnapshot(storeId);
           if (!current) return;
           setState({
             data: snapshot?.products ?? null,
@@ -126,8 +133,8 @@ export function useProducts() {
         const networkError = errorMessage(error, 'ไม่สามารถโหลดข้อมูลสินค้าได้');
         try {
           const [snapshot, unsyncedOfflineOrderCount] = await Promise.all([
-            readConfirmedCatalogSnapshot(),
-            getUnsyncedOfflineOrderCount(),
+            readConfirmedCatalogSnapshot(storeId),
+            getUnsyncedOfflineOrderCount(storeId),
           ]);
           if (!current) return;
           setState((previous) => ({
@@ -157,7 +164,7 @@ export function useProducts() {
       current = false;
       controller.abort();
     };
-  }, [isOnline, revision]);
+  }, [isOnline, revision, storeId]);
 
   const refresh = useCallback(() => setRevision((current) => current + 1), []);
   return {

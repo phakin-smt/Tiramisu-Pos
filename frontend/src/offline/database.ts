@@ -12,6 +12,12 @@ export const PRICING_RULES_KEY = 'pricingRules';
 
 export interface ProductSnapshotRecord {
   key: typeof PRODUCT_SNAPSHOT_KEY;
+  /**
+   * Which shop's menu and stock this is. A snapshot taken for one store must
+   * never be shown for another; a record written before stores existed has no
+   * id and belongs to the first store, the only one there was.
+   */
+  storeId?: number;
   products: CatalogProduct[];
 }
 
@@ -52,6 +58,13 @@ export interface OfflinePaymentConfigRecord {
 export interface OfflineOrder {
   localOrderId: string;
   localOrderNumber: string;
+  /**
+   * The shop this sale was rung up for, recorded when it was taken rather than
+   * inferred at sync time. Without it a queue drained under the wrong selection
+   * would file one shop's takings under another. Orders written before stores
+   * existed have no id and belong to the first store.
+   */
+  storeId?: number;
   /**
    * The same checkout identity the online `POST /api/orders` would have sent as
    * `Idempotency-Key`. Carrying it here lets a later sync replay the sale without

@@ -51,33 +51,33 @@ describe('useProducts offline snapshot behavior', () => {
 
   it('writes the complete snapshot only after a successful API response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(products)));
-    const { result } = renderHook(() => useProducts(), { wrapper });
+    const { result } = renderHook(() => useProducts(1), { wrapper });
 
     await waitFor(() => expect(result.current.lastSuccessfulCatalogSyncAt).toMatch(/^\d{4}-\d{2}-\d{2}T/));
     expect(result.current.data).toEqual(products);
-    const snapshot = await readConfirmedCatalogSnapshot();
+    const snapshot = await readConfirmedCatalogSnapshot(1);
     expect(snapshot?.products).toEqual(products);
     expect(snapshot?.metadata.lastSuccessfulCatalogSyncAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('preserves and returns the previous snapshot when the online API fails', async () => {
     const syncedAt = '2026-08-21T04:30:00.000Z';
-    await replaceConfirmedCatalogSnapshot(products, syncedAt);
+    await replaceConfirmedCatalogSnapshot(products, 1, syncedAt);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network unavailable')));
-    const { result } = renderHook(() => useProducts(), { wrapper });
+    const { result } = renderHook(() => useProducts(1), { wrapper });
 
     await waitFor(() => expect(result.current.source).toBe('cache-fallback'));
     expect(result.current.data).toEqual(products);
     expect(result.current.error).toBe('network unavailable');
-    expect((await readConfirmedCatalogSnapshot())?.metadata.lastSuccessfulCatalogSyncAt).toBe(syncedAt);
+    expect((await readConfirmedCatalogSnapshot(1))?.metadata.lastSuccessfulCatalogSyncAt).toBe(syncedAt);
   });
 
   it('reads IndexedDB without making a network request when offline', async () => {
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     setNavigatorOnline(false);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const { result } = renderHook(() => useProducts(), { wrapper });
+    const { result } = renderHook(() => useProducts(1), { wrapper });
 
     await waitFor(() => expect(result.current.source).toBe('cache-offline'));
     expect(result.current.data).toEqual(products);
@@ -85,10 +85,10 @@ describe('useProducts offline snapshot behavior', () => {
   });
 
   it('preserves locally reduced stock when pending offline orders exist after reconnect', async () => {
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     const createdAt = new Date().toISOString();
-    await recordOfflineCashSale({
+    await recordOfflineCashSale({ storeId: 1,
       identity: {
         localOrderId: '550e8400-e29b-41d4-a716-446655440000',
         localOrderNumber: 'OFF-20260821-143522-0000',
@@ -102,10 +102,10 @@ describe('useProducts offline snapshot behavior', () => {
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(products)));
 
-    const { result } = renderHook(() => useProducts(), { wrapper });
+    const { result } = renderHook(() => useProducts(1), { wrapper });
     await waitFor(() => expect(result.current.source).toBe('cache-pending-sync'));
     expect(result.current.data?.[0].stock).toBe(7);
     expect(result.current.unsyncedOfflineOrderCount).toBe(1);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(7);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(7);
   });
 });

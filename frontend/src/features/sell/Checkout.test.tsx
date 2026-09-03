@@ -10,6 +10,7 @@ import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import { AuthProvider } from '../auth/AuthContext';
 import { readConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshot } from '../../offline/catalogSnapshot';
 import { refreshOfflineAuthorization } from '../../offline/offlineAuthorization';
+import { saveSelectedStore } from '../../offline/selectedStore';
 import { getOfflineOrderByIdempotencyKey, getOfflineOrderDetails, getPendingOfflineOrderCount, getRecentOfflineOrders, getUnsyncedOfflineOrderCount, recordOfflineCashSale } from '../../offline/offlineOrders';
 import {
   isCheckoutActive,
@@ -147,7 +148,7 @@ describe('Sell checkout', () => {
     await refreshOfflineAuthorization();
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot(1)).not.toBeNull());
     add();
     confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
@@ -163,7 +164,7 @@ describe('Sell checkout', () => {
     const [latest] = await getRecentOfflineOrders(1);
     expect(latest.idempotencyKey).toBe(sentKey);
     expect(await getOfflineOrderByIdempotencyKey(sentKey)).toMatchObject({ localOrderId: latest.localOrderId });
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
@@ -178,7 +179,7 @@ describe('Sell checkout', () => {
     await refreshOfflineAuthorization();
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot(1)).not.toBeNull());
     add();
     confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
@@ -198,7 +199,7 @@ describe('Sell checkout', () => {
     // Priced as its own sale: three at 69 less the 7 baht bundle discount.
     expect(recorded.subtotal).toBe(207);
     expect(recorded.total).toBe(200);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
@@ -211,7 +212,7 @@ describe('Sell checkout', () => {
     await refreshOfflineAuthorization();
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot(1)).not.toBeNull());
     add();
     confirmCashExact();
     expect(await screen.findByRole('alert')).toHaveTextContent('network response lost');
@@ -223,9 +224,9 @@ describe('Sell checkout', () => {
     fireEvent.click(cashConfirmButton());
 
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     expect((await getRecentOfflineOrders(5)).filter((order) => order.idempotencyKey === sentKey)).toHaveLength(1);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(9);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(9);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
@@ -248,7 +249,7 @@ describe('Sell checkout', () => {
       // Cart intact, so the cashier can retry or fall back deliberately.
       expect(cartTotals()).toHaveTextContent('฿138.00');
       // A timeout is not permission to invent a local sale, and never retries.
-      expect(await getPendingOfflineOrderCount()).toBe(0);
+      expect(await getPendingOfflineOrderCount(1)).toBe(0);
       expect(orderCalls(fetchMock)).toHaveLength(1);
     } finally {
       vi.useRealTimers();
@@ -279,7 +280,7 @@ describe('Sell checkout', () => {
       const keys = orderCalls(fetchMock).map(idempotencyKeyOf);
       expect(keys).toHaveLength(2);
       expect(keys[1]).toBe(keys[0]);
-      expect(await getPendingOfflineOrderCount()).toBe(0);
+      expect(await getPendingOfflineOrderCount(1)).toBe(0);
     } finally {
       vi.useRealTimers();
     }
@@ -310,7 +311,7 @@ describe('Sell checkout', () => {
     await refreshOfflineAuthorization();
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot(1)).not.toBeNull());
     add();
     fireEvent.click(cashButton());
     expect(screen.getByRole('dialog', { name: 'รับชำระเงินสด' })).toBeInTheDocument();
@@ -323,16 +324,16 @@ describe('Sell checkout', () => {
 
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
     expect(orderCalls(fetchMock)).toHaveLength(0);
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/payment-qr'))).toBe(false);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
   it('keeps online cash in Local Mode after reconnect until pending orders are synchronized', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
-    await recordOfflineCashSale({
+    await recordOfflineCashSale({ storeId: 1,
       identity: {
         localOrderId: '550e8400-e29b-41d4-a716-446655440000',
         localOrderNumber: 'OFF-20260821-143522-0000',
@@ -363,7 +364,7 @@ describe('Sell checkout', () => {
     confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
     await vi.waitFor(() => expect(screen.getByText('Local Mode · รอ Sync 2 รายการ')).toBeInTheDocument());
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(8);
     expect(saleCalls(fetchMock)).toHaveLength(0);
 
     cleanup();
@@ -375,9 +376,9 @@ describe('Sell checkout', () => {
 
   it('drains the offline queue on reconnect, releases Local Mode, and sells to the server again', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
-    await recordOfflineCashSale({
+    await recordOfflineCashSale({ storeId: 1,
       identity: {
         localOrderId: '550e8400-e29b-41d4-a716-446655440000',
         localOrderNumber: 'OFF-20260821-143522-0000',
@@ -403,7 +404,7 @@ describe('Sell checkout', () => {
     expect(replay.items).toEqual([{ productId: 1, qty: 3, giveawayQty: 1 }]);
     expect(((replayInit as RequestInit).headers as Record<string, string>)['Idempotency-Key'])
       .toBe('aa11bb22-0000-4000-8000-00000000cccc');
-    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(0);
     expect((await getRecentOfflineOrders(1))[0]).toMatchObject({ syncStatus: 'synced', serverOrderNumber: order.orderNumber });
 
     // Local Mode released, so the next sale goes straight to the server.
@@ -411,15 +412,15 @@ describe('Sell checkout', () => {
     confirmCashExact();
     expect(await screen.findByText(/บันทึกออเดอร์ #/)).toBeInTheDocument();
     expect(saleCalls(fetchMock)).toHaveLength(1);
-    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(0);
   });
 
   it('stops the drain and keeps the rest pending when the network dies mid-queue', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     for (const [index, suffix] of ['1111', '2222'].entries()) {
-      await recordOfflineCashSale({
+      await recordOfflineCashSale({ storeId: 1,
         identity: {
           localOrderId: `550e8400-e29b-41d4-a716-44665544${suffix}`,
           localOrderNumber: `OFF-20260821-14352${index}-${suffix}`,
@@ -445,17 +446,17 @@ describe('Sell checkout', () => {
     await vi.waitFor(() => expect(replayCalls(fetchMock)).toHaveLength(2));
 
     // The first is banked; the second stays pending for the next reconnect.
-    await vi.waitFor(async () => expect(await getPendingOfflineOrderCount()).toBe(1));
-    expect(await getUnsyncedOfflineOrderCount()).toBe(1);
+    await vi.waitFor(async () => expect(await getPendingOfflineOrderCount(1)).toBe(1));
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(1);
     expect(await screen.findByText(/Local Mode · รอ Sync 1 รายการ/)).toBeInTheDocument();
   });
 
   it('creates an atomic local PromptPay sale while online Local Mode is latched by a pending order', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
     await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
-    await recordOfflineCashSale({
+    await recordOfflineCashSale({ storeId: 1,
       identity: {
         localOrderId: '550e8400-e29b-41d4-a716-446655440000',
         localOrderNumber: 'OFF-20260821-143522-0000',
@@ -488,8 +489,8 @@ describe('Sell checkout', () => {
     fireEvent.click(confirm);
 
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
-    expect(await getUnsyncedOfflineOrderCount()).toBe(2);
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(8);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(2);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(8);
     const [latest] = await getRecentOfflineOrders(1);
     expect(latest).toMatchObject({ paymentMethod: 'transfer', paymentConfirmation: 'manual', syncStatus: 'pending' });
     expect((await getOfflineOrderDetails(latest.localOrderId))?.movements).toHaveLength(1);
@@ -504,7 +505,7 @@ describe('Sell checkout', () => {
     await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
-    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot()).not.toBeNull());
+    await vi.waitFor(async () => expect(await readConfirmedCatalogSnapshot(1)).not.toBeNull());
     add();
     fireEvent.click(transferButton());
     const modal = screen.getByRole('dialog', { name: 'QR พร้อมเพย์' });
@@ -520,15 +521,22 @@ describe('Sell checkout', () => {
     fireEvent.click(confirm);
 
     expect(await screen.findByText(/บันทึกออเดอร์ออฟไลน์/)).toBeInTheDocument();
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
     expect(orderCalls(fetchMock)).toHaveLength(0);
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
   });
 
   it('shows actionable guidance when Local Mode has not been provisioned for PromptPay', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T04:30:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T04:30:00.000Z');
     await refreshOfflineAuthorization();
+    // A device that has been online knows its store, the same way it knows its
+    // catalogue and that it is authorized.
+    await saveSelectedStore({
+      storeId: 1,
+      storeName: 'Baannoi',
+      rules: { bundle: { unitPrice: 69, quantity: 3, price: 200 }, wholesale: null },
+    });
     const fetchMock = mockCheckout();
     render(<ConnectivityProvider><StoreProvider><SellPage /></StoreProvider></ConnectivityProvider>);
     await screen.findByRole('button', { name: 'เพิ่ม Original ลงตะกร้า' });
@@ -574,7 +582,7 @@ describe('Sell checkout', () => {
     expect(screen.getByText('ยังไม่มีสินค้าในตะกร้า')).toBeInTheDocument();
     await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/products')).toHaveLength(2));
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/reports/daily-summary')).toHaveLength(2);
-    expect(await getPendingOfflineOrderCount()).toBe(0);
+    expect(await getPendingOfflineOrderCount(1)).toBe(0);
   });
 
   it('preserves the key and cart state across failure and rerender, then resets the key after success', async () => {

@@ -6,6 +6,7 @@ import { AppRoutes } from '../../app/router';
 import { AuthProvider } from '../auth/AuthContext';
 import type { StockPlan, StockSummaryResponse } from '../../types/stock';
 import { StockPage } from './StockPage';
+import { StoreProvider } from '../stores/StoreContext';
 
 const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
 const STORE_PRICING = {
@@ -58,7 +59,7 @@ describe('StockPage', () => {
 
   it('defaults to the Bangkok business date and exposes current-day controls', async () => {
     const fetchMock = mockStockRoutes();
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     expect(screen.getByLabelText('วันที่สต็อก')).toHaveValue(TODAY);
     expect(screen.getByLabelText('วันที่สต็อก')).toHaveAttribute('max', TODAY);
     expect(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' })).toBeEnabled();
@@ -68,7 +69,7 @@ describe('StockPage', () => {
 
   it('shows inactive stocked products in today stock and every menu item in planning', async () => {
     mockStockRoutes();
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
 
     expect(await screen.findByText('Resting Stocked')).toBeInTheDocument();
     expect(screen.queryByText('Resting Empty')).not.toBeInTheDocument();
@@ -79,7 +80,7 @@ describe('StockPage', () => {
 
   it('renders historical movement values without any mutation controls', async () => {
     mockStockRoutes();
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
     const row = (await screen.findByText('Original')).closest('tr');
     expect(row).toHaveTextContent('15');
@@ -97,7 +98,7 @@ describe('StockPage', () => {
       if (url.startsWith('/api/stock/daily-summary')) { summaryLoads += 1; return json({ ...stock, date: '2026-08-15' }); }
       if (url === '/api/stock/historical-correction' && init.method === 'POST') return json({ productId: 1, date: '2026-08-15', previousStock: 8, targetStock: 5, delta: -3, currentStock: 5, noChange: false });
     });
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
     fireEvent.click(await screen.findByRole('button', { name: 'ปรับยอดย้อนหลัง Original' }));
     expect(screen.getByRole('dialog', { name: 'ปรับยอดย้อนหลัง' })).toHaveTextContent('8 ชิ้น');
@@ -114,7 +115,7 @@ describe('StockPage', () => {
   it('keeps the correction form open when the backend rejects it', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
     mockStockRoutes((url) => url === '/api/stock/historical-correction' ? json({ error: 'สต็อกปัจจุบันจะติดลบ' }, 400) : undefined);
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-15' } });
     fireEvent.click(await screen.findByRole('button', { name: 'ปรับยอดย้อนหลัง Original' }));
     fireEvent.change(screen.getByLabelText('ยอดที่ถูกต้อง'), { target: { value: '0' } });
@@ -133,7 +134,7 @@ describe('StockPage', () => {
       if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return json(stock); }
       if (url === '/api/stock/adjust' && init.method === 'POST') return json({ productId: 1, stock: 9 });
     });
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: buttonName }));
     await vi.waitFor(() => expect(summaryCalls).toBe(2));
     const request = fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust');
@@ -142,7 +143,7 @@ describe('StockPage', () => {
 
   it('retains confirmed stock and shows a failed adjustment', async () => {
     mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ error: 'สต็อกไม่พอ' }, 400) : undefined);
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'เพิ่มแถมวันนี้ Original' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('สต็อกไม่พอ');
     expect(screen.getByText('Original').closest('tr')).toHaveTextContent('8');
@@ -151,7 +152,7 @@ describe('StockPage', () => {
   it('prevents double submission while an adjustment is pending', async () => {
     const pending = deferred<Response>();
     const fetchMock = mockStockRoutes((url) => url === '/api/stock/adjust' ? pending.promise : undefined);
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     const button = await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' });
     fireEvent.click(button); fireEvent.click(button);
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/adjust')).toHaveLength(1);
@@ -162,7 +163,7 @@ describe('StockPage', () => {
 
   it('supports valid undo', async () => {
     const fetchMock = mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ productId: 1, stock: 9 }) : undefined);
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'ลดแถมวันนี้ Original' }));
     await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/stock/adjust')).toHaveLength(1));
     expect(JSON.parse(String(fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust')?.[1]?.body)).reason).toBe('undo_giveaway');
@@ -170,7 +171,7 @@ describe('StockPage', () => {
 
   it('shows an undo rejection and preserves confirmed data', async () => {
     mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ error: 'ไม่มีรายการของวันนี้ให้ยกเลิก' }, 400) : undefined);
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'ลดแถมวันนี้ Original' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('ไม่มีรายการของวันนี้ให้ยกเลิก');
     expect(screen.getByText('Original').closest('tr')).toHaveTextContent('8');
@@ -183,7 +184,7 @@ describe('StockPage', () => {
       if (url === '/api/stock/plans' && !init.method) { planLoads += 1; return json(planLoads === 1 ? [plan] : []); }
       if (url === '/api/stock/plans/9' && init.method === 'DELETE') return json({ id: 9, cancelled: true });
     });
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     expect(await screen.findByText('รอดำเนินการ')).toBeInTheDocument();
     expect(screen.getByText(/20.*2569/, { exact: false })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ยกเลิกแผน Original' }));
@@ -199,7 +200,7 @@ describe('StockPage', () => {
       ? json([{ ...plan, date: planDate }])
       : undefined);
 
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
 
     expect(await screen.findByText(planDate, { exact: false })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'แผนเตรียมสต็อก' })).toBeInTheDocument();
@@ -213,7 +214,7 @@ describe('StockPage', () => {
       if (url === '/api/stock/plans' && init.method === 'POST') return pending.promise;
       if (url === '/api/stock/plans') { planLoads += 1; return json([]); }
     });
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     const submit = await screen.findByRole('button', { name: 'เพิ่มแผน' });
     await vi.waitFor(() => expect(submit).toBeEnabled());
     fireEvent.change(screen.getByLabelText('จำนวน'), { target: { value: '5' } });
@@ -231,7 +232,7 @@ describe('StockPage', () => {
       if (url === '/api/stock/plans' && !init.method) return json([plan]);
       if (url === '/api/stock/plans/9') return json({ error: 'แผนนี้ถูกเติมสต็อกไปแล้ว ยกเลิกไม่ได้' }, 400);
     });
-    render(<StockPage />);
+    render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'ยกเลิกแผน Original' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('ถูกเติมสต็อกไปแล้ว');
     expect(screen.getByText('รอดำเนินการ')).toBeInTheDocument();
