@@ -206,13 +206,13 @@ def rows(query,params=()):
  try: return execute(connection.cursor(),query,params).fetchall()
  finally: connection.close()
 
-def cash_day_response(report_date):
- result=rows('SELECT opening_float FROM cash_days WHERE report_date=?',(report_date,))
+def cash_day_response(store,report_date):
+ result=rows('SELECT opening_float FROM cash_days WHERE store_id=? AND report_date=?',(store,report_date))
  return {'date':report_date,'openingFloat':number(result[0]['opening_float']) if result else None}
 
 @app.get('/api/cash-day')
 def get_cash_day():
- return jsonify(cash_day_response(bangkok_today().isoformat()))
+ return jsonify(cash_day_response(current_store(),bangkok_today().isoformat()))
 
 @app.put('/api/cash-day')
 def update_cash_day():
@@ -226,24 +226,24 @@ def update_cash_day():
  amount=amount.quantize(Decimal('0.01'))
  report_date=bangkok_today().isoformat()
  with transaction() as (_,cursor):
-  execute(cursor,"""INSERT INTO cash_days (report_date,opening_float) VALUES (?,?)
-   ON CONFLICT(store_id,report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(report_date,number(amount)))
+  execute(cursor,"""INSERT INTO cash_days (store_id,report_date,opening_float) VALUES (?,?,?)
+   ON CONFLICT(store_id,report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(current_store(),report_date,number(amount)))
  return jsonify(date=report_date,openingFloat=number(amount))
 
-def apply_due_stock_plans(cursor,today):
- due=execute(cursor,"SELECT id,product_id,quantity FROM stock_plans WHERE status='pending' AND plan_date<=?",(today,)).fetchall()
+def apply_due_stock_plans(cursor,store,today):
+ due=execute(cursor,"SELECT id,product_id,quantity FROM stock_plans WHERE store_id=? AND status='pending' AND plan_date<=?",(store,today)).fetchall()
  for plan in due:
   execute(cursor,'UPDATE products SET stock_qty=stock_qty+?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(plan['quantity'],plan['product_id']))
-  execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_in',?,'daily_prep',?,'แผนเตรียมล่วงหน้า')",(plan['product_id'],plan['quantity'],str(plan['id'])))
+  execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,'stock_in',?,'daily_prep',?,'แผนเตรียมล่วงหน้า')",(store,plan['product_id'],plan['quantity'],str(plan['id'])))
   execute(cursor,"UPDATE stock_plans SET status='applied',applied_at=CURRENT_TIMESTAMP WHERE id=?",(plan['id'],))
 
 def ensure_daily_plans_applied():
  with transaction() as (_,cursor):
-  apply_due_stock_plans(cursor,bangkok_today().isoformat())
+  apply_due_stock_plans(cursor,current_store(),bangkok_today().isoformat())
 
-def movement_summary(connection,report_date):
+def movement_summary(connection,store,report_date):
  start,end=local_day_bounds(report_date)
- result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE created_at>=? AND created_at<? GROUP BY product_id,movement_type,reference_type',(start,end)).fetchall()
+ result=execute(connection.cursor(),'SELECT product_id,movement_type,reference_type,SUM(quantity) total_qty FROM stock_movements WHERE store_id=? AND created_at>=? AND created_at<? GROUP BY product_id,movement_type,reference_type',(store,start,end)).fetchall()
  summary={}
  for row in result:
   bucket=summary.setdefault(row['product_id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0})
@@ -268,11 +268,11 @@ def health():
 @app.get('/api/products')
 def products():
  ensure_daily_plans_applied()
- result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE is_active=1 OR stock_qty>0 ORDER BY category,name')
+ result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE store_id=? AND (is_active=1 OR stock_qty>0) ORDER BY category,name',(current_store(),))
  return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON)} for r in result])
 
 @app.get('/api/products/categories')
-def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE is_active=1 OR stock_qty>0 ORDER BY category')])
+def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE store_id=? AND (is_active=1 OR stock_qty>0) ORDER BY category',(current_store(),))])
 
 def product_payload(payload):
  try:
@@ -288,8 +288,8 @@ def create_product():
  if problem: return error(problem)
  try:
   with transaction() as (_,cursor):
-   query='INSERT INTO products (sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active,image_url) VALUES (?,\'\',?,?,?,?,?,?,?,\'\')'+(' RETURNING id' if is_postgres() else '')
-   result=execute(cursor,query,(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active']))
+   query='INSERT INTO products (store_id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active,image_url) VALUES (?,?,\'\',?,?,?,?,?,?,?,\'\')'+(' RETURNING id' if is_postgres() else '')
+   result=execute(cursor,query,(current_store(),data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active']))
    product_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
   return jsonify(id=product_id,code=data['sku'])
  except Exception as exc:
@@ -301,7 +301,7 @@ def update_product(product_id):
  data,problem=product_payload(request.get_json(silent=True) or {})
  if problem: return error(problem)
  with transaction() as (_,cursor):
-  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  if not execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone(): return error('ไม่พบเมนูนี้',404)
   execute(cursor,'UPDATE products SET sku=?,name=?,category=?,unit_price=?,cost_price=?,stock_qty=?,stock_min=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active'],product_id))
  return jsonify(id=product_id,code=data['sku'])
 
@@ -310,14 +310,14 @@ def update_product_active(product_id):
  payload=request.get_json(silent=True) or {}
  if not isinstance(payload.get('active'),bool): return error('สถานะเปิดขายไม่ถูกต้อง')
  with transaction() as (_,cursor):
-  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  if not execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone(): return error('ไม่พบเมนูนี้',404)
   execute(cursor,'UPDATE products SET is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(1 if payload['active'] else 0,product_id))
  return jsonify(id=product_id,active=payload['active'])
 
 @app.delete('/api/products/<int:product_id>')
 def delete_product(product_id):
  with transaction() as (_,cursor):
-  if not execute(cursor,'SELECT id FROM products WHERE id=?',(product_id,)).fetchone(): return error('ไม่พบเมนูนี้',404)
+  if not execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone(): return error('ไม่พบเมนูนี้',404)
   used=execute(cursor,'SELECT 1 FROM order_items WHERE product_id=? LIMIT 1',(product_id,)).fetchone()
   if used: execute(cursor,'UPDATE products SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?',(product_id,))
   else: execute(cursor,'DELETE FROM products WHERE id=?',(product_id,))
@@ -346,6 +346,7 @@ def create_order():
   now=datetime.now(BANGKOK_TZ)
   if business_date>now.date() or replay_time>now: return error('ออเดอร์ออฟไลน์ระบุเวลาในอนาคต')
   replay=True
+ store=current_store()
  with transaction() as (_,cursor):
   if is_postgres():
    execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',(key,))
@@ -353,7 +354,7 @@ def create_order():
   if duplicate: return jsonify(orderNumber=duplicate['order_number'],subtotal=number(duplicate['subtotal']),discount=number(duplicate['discount']),vat=number(duplicate['vat']),total=number(duplicate['total']),paymentMethod=duplicate['payment_method'],duplicate=True)
   lines=[]; shortfalls=[]; subtotal=0.0; lock=' FOR UPDATE' if is_postgres() else ''
   for item in items:
-   product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND (is_active=1 OR stock_qty>0)'+lock,(item.get('productId'),)).fetchone()
+   product=execute(cursor,'SELECT id,sku,name,unit_price,stock_qty FROM products WHERE id=? AND store_id=? AND (is_active=1 OR stock_qty>0)'+lock,(item.get('productId'),store)).fetchone()
    try:
     qty=int(item.get('qty',0)); giveaway_qty=int(item.get('giveawayQty',0) or 0)
    except (TypeError,ValueError): qty=0
@@ -369,15 +370,15 @@ def create_order():
   today=business_date.isoformat() if replay else order_time.date().isoformat()
   order_base=order_time.strftime('%Y%m%d%H%M')
   if is_postgres(): execute(cursor,'SELECT pg_advisory_xact_lock(hashtext(?))',('order-number:'+order_base,))
-  same_minute=execute(cursor,'SELECT COUNT(*) total FROM orders WHERE order_number=? OR order_number LIKE ?',(order_base,order_base+'-%')).fetchone()['total']
+  same_minute=execute(cursor,'SELECT COUNT(*) total FROM orders WHERE store_id=? AND (order_number=? OR order_number LIKE ?)',(store,order_base,order_base+'-%')).fetchone()['total']
   order_number=order_base if same_minute==0 else '{}-{:02d}'.format(order_base,same_minute+1)
   customer=execute(cursor,'SELECT id FROM customers WHERE customer_type=? AND is_active=1 LIMIT 1',(payload.get('customerType','walkin'),)).fetchone()
   note=payload.get('note')
   if shortfalls:
    detail=', '.join('{} ขาด {} ชิ้น'.format(item['productName'],item['shortfall']) for item in shortfalls)
    note=' | '.join([part for part in (note,STOCK_REVIEW_NOTE+' '+detail) if part])
-  query='INSERT INTO orders (order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
-  result=execute(cursor,query,(order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,note))
+  query='INSERT INTO orders (store_id,order_number,idempotency_key,order_date,customer_id,payment_method,subtotal,discount,vat,total,status,note) VALUES (?,?,?,?,?,?,?,?,0,?,\'completed\',?)'+(' RETURNING id' if is_postgres() else '')
+  result=execute(cursor,query,(store,order_number,key,today,customer['id'] if customer else None,payment,subtotal,discount,total,note))
   order_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
   for product,qty,giveaway_qty,paid_qty,line_total in lines:
    execute(cursor,'INSERT INTO order_items (order_id,product_id,product_name,sku,quantity,giveaway_qty,unit_price,discount,line_total) VALUES (?,?,?,?,?,?,?,0,?)',(order_id,product['id'],product['name'],product['sku'],qty,giveaway_qty,product['unit_price'],line_total))
@@ -390,16 +391,16 @@ def create_order():
     updated=execute(cursor,'UPDATE products SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND stock_qty>=?',(qty,product['id'],qty))
     if updated.rowcount!=1: raise ValueError('สต็อกเปลี่ยนแปลง กรุณาลองใหม่')
    if paid_qty:
-    execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,\'sale\',?,\'order\',?,NULL)',(product['id'],-paid_qty,order_number))
+    execute(cursor,'INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,\'sale\',?,\'order\',?,NULL)',(store,product['id'],-paid_qty,order_number))
    if giveaway_qty:
-    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_out',?,'giveaway',?,'แถมในออเดอร์')",(product['id'],-giveaway_qty,order_number))
+    execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,'stock_out',?,'giveaway',?,'แถมในออเดอร์')",(store,product['id'],-giveaway_qty,order_number))
   execute(cursor,'INSERT INTO payments (order_id,payment_method,paid_amount,change_amount,payment_reference) VALUES (?,?,?,0,?)',(order_id,payment,total,order_number))
  return jsonify(orderNumber=order_number,subtotal=subtotal,discount=discount,vat=0,total=total,paymentMethod=payment,stockReview=bool(shortfalls),stockShortfalls=shortfalls)
 
 @app.post('/api/orders/<int:order_id>/cancel')
 def cancel_order(order_id):
  with transaction() as (_,cursor):
-  order=execute(cursor,'SELECT id,status,order_number FROM orders WHERE id=?',(order_id,)).fetchone()
+  order=execute(cursor,'SELECT id,status,order_number FROM orders WHERE id=? AND store_id=?',(order_id,current_store())).fetchone()
   if not order: return error('ไม่พบออเดอร์นี้',404)
   if order['status']!='completed': return error('ออเดอร์นี้ถูกยกเลิกไปแล้ว')
   items=execute(cursor,'SELECT product_id,quantity,giveaway_qty FROM order_items WHERE order_id=?',(order_id,)).fetchall()
@@ -407,9 +408,9 @@ def cancel_order(order_id):
    execute(cursor,'UPDATE products SET stock_qty=stock_qty+?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(item['quantity'],item['product_id']))
    paid_qty=item['quantity']-item['giveaway_qty']
    if paid_qty:
-    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'sale',?,'order',?,'ยกเลิกออเดอร์')",(item['product_id'],paid_qty,order['order_number']))
+    execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,'sale',?,'order',?,'ยกเลิกออเดอร์')",(current_store(),item['product_id'],paid_qty,order['order_number']))
    if item['giveaway_qty']:
-    execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'stock_out',?,'giveaway',?,'ยกเลิกออเดอร์')",(item['product_id'],item['giveaway_qty'],order['order_number']))
+    execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,'stock_out',?,'giveaway',?,'ยกเลิกออเดอร์')",(current_store(),item['product_id'],item['giveaway_qty'],order['order_number']))
   execute(cursor,"UPDATE orders SET status='cancelled' WHERE id=?",(order_id,))
  return jsonify(id=order_id,cancelled=True)
 
@@ -417,11 +418,11 @@ def cancel_order(order_id):
 def list_orders():
  report_date=request.args.get('date') or bangkok_today().isoformat()
  if report_date>bangkok_today().isoformat(): return error('เลือกวันที่ไม่เกินวันนี้')
- connection=connect_db()
+ store=current_store(); connection=connect_db()
  try:
   cursor=connection.cursor()
-  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total,status FROM orders WHERE order_date=? ORDER BY created_at',(report_date,)).fetchall()
-  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? ORDER BY oi.id',(report_date,)).fetchall()
+  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total,status FROM orders WHERE store_id=? AND order_date=? ORDER BY created_at',(store,report_date)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND o.order_date=? ORDER BY oi.id',(store,report_date)).fetchall()
  finally: connection.close()
  grouped={}
  for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'giveawayQty':r['giveaway_qty'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
@@ -437,21 +438,21 @@ def adjust_stock():
  if not quantity: return error('จำนวนต้องไม่เป็นศูนย์')
  movement,reference,sign,default_note=STOCK_REASONS[reason]; delta=quantity if sign is None else sign*abs(quantity)
  with transaction() as (_,cursor):
-  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=? AND store_id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),current_store())).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
   if reason.startswith('undo_'):
    day_start,day_end=local_day_bounds(bangkok_today().isoformat())
   if reason=='undo_prepare':
-   prepared=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type='daily_prep' AND created_at>=? AND created_at<?",(product['id'],day_start,day_end)).fetchone()['total']
+   prepared=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE store_id=? AND product_id=? AND reference_type='daily_prep' AND created_at>=? AND created_at<?",(current_store(),product['id'],day_start,day_end)).fetchone()['total']
    if prepared<abs(quantity): return error('ไม่มียอดเตรียมของวันนี้ให้ยกเลิก')
   if reason in {'undo_giveaway','undo_waste'}:
    reference_type='giveaway' if reason=='undo_giveaway' else 'waste'
-   movement_total=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND reference_type=? AND created_at>=? AND created_at<?",(product['id'],reference_type,day_start,day_end)).fetchone()['total']
+   movement_total=execute(cursor,"SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE store_id=? AND product_id=? AND reference_type=? AND created_at>=? AND created_at<?",(current_store(),product['id'],reference_type,day_start,day_end)).fetchone()['total']
    if -movement_total<abs(quantity): return error('ไม่มีรายการของวันนี้ให้ยกเลิก')
   new_stock=product['stock_qty']+delta
   if new_stock<0: return error('{} มีสต็อกไม่พอ (เหลือ {} ชิ้น)'.format(product['name'],product['stock_qty']))
   execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_stock,product['id']))
-  execute(cursor,'INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,?,?,NULL,?)',(product['id'],movement,delta,reference,payload.get('note') or default_note))
+  execute(cursor,'INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,?,?,?,NULL,?)',(current_store(),product['id'],movement,delta,reference,payload.get('note') or default_note))
  return jsonify(productId=product['id'],stock=new_stock)
 
 @app.post('/api/stock/historical-correction')
@@ -464,14 +465,14 @@ def historical_stock_correction():
  _,day_end=local_day_bounds(raw_date)
  effective_at=day_end-timedelta(seconds=1) if is_postgres() else (datetime.strptime(day_end,'%Y-%m-%d %H:%M:%S')-timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S')
  with transaction() as (_,cursor):
-  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=? AND store_id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),current_store())).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
-  future=execute(cursor,'SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE product_id=? AND created_at>=?',(product['id'],day_end)).fetchone()['total']
+  future=execute(cursor,'SELECT COALESCE(SUM(quantity),0) total FROM stock_movements WHERE store_id=? AND product_id=? AND created_at>=?',(current_store(),product['id'],day_end)).fetchone()['total']
   historical_stock=product['stock_qty']-future; delta=target_stock-historical_stock; new_current=product['stock_qty']+delta
   if new_current<0: return error('การปรับย้อนหลังทำให้สต็อกปัจจุบันติดลบ')
   if delta:
    execute(cursor,'UPDATE products SET stock_qty=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(new_current,product['id']))
-   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note,created_at) VALUES (?,'adjust',?,'correction',NULL,?,?)",(product['id'],delta,str(payload.get('note','')).strip() or 'ปรับยอดย้อนหลัง',effective_at))
+   execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note,created_at) VALUES (?,?,'adjust',?,'correction',NULL,?,?)",(current_store(),product['id'],delta,str(payload.get('note','')).strip() or 'ปรับยอดย้อนหลัง',effective_at))
  return jsonify(productId=product['id'],date=raw_date,previousStock=historical_stock,targetStock=target_stock,delta=delta,currentStock=new_current,noChange=delta==0)
 
 @app.post('/api/stock/reconcile')
@@ -489,7 +490,7 @@ def reconcile_stock():
  if verified_stock<0 or str(verified_stock)!=str(raw_verified).strip(): return error(VERIFIED_STOCK_ERROR)
  reconciliation_id=str(payload.get('reconciliationId') or '').strip()[:100] or None
  with transaction() as (_,cursor):
-  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),)).fetchone()
+  product=execute(cursor,'SELECT id,name,stock_qty FROM products WHERE id=? AND store_id=?'+(' FOR UPDATE' if is_postgres() else ''),(payload.get('productId'),current_store())).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
   previous_stock=product['stock_qty']; delta=verified_stock-previous_stock
   if delta:
@@ -499,27 +500,27 @@ def reconcile_stock():
    note='{} {} → {}'.format(STOCK_RECONCILIATION_NOTE,previous_stock,verified_stock)
    supplied=str(payload.get('note','')).strip()
    if supplied: note=note+' | '+supplied
-   execute(cursor,"INSERT INTO stock_movements (product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,'adjust',?,?,?,?)",(product['id'],delta,STOCK_RECONCILIATION_REASON,reconciliation_id,note))
+   execute(cursor,"INSERT INTO stock_movements (store_id,product_id,movement_type,quantity,reference_type,reference_id,note) VALUES (?,?,'adjust',?,?,?,?)",(current_store(),product['id'],delta,STOCK_RECONCILIATION_REASON,reconciliation_id,note))
  return jsonify(productId=product['id'],productName=product['name'],previousStock=previous_stock,verifiedStock=verified_stock,delta=delta,currentStock=verified_stock,noChange=delta==0,reason=STOCK_RECONCILIATION_REASON)
 
 @app.get('/api/reports/daily-summary')
 def daily_summary():
  report_date=request.args.get('date') or bangkok_today().isoformat()
- result=rows('SELECT payment_method,COUNT(*) order_count,COALESCE(SUM(total),0) amount FROM orders WHERE order_date=? AND status=\'completed\' GROUP BY payment_method',(report_date,))
+ result=rows('SELECT payment_method,COUNT(*) order_count,COALESCE(SUM(total),0) amount FROM orders WHERE store_id=? AND order_date=? AND status=\'completed\' GROUP BY payment_method',(current_store(),report_date))
  cash=sum(number(r['amount']) for r in result if r['payment_method']=='cash'); transfer=sum(number(r['amount']) for r in result if r['payment_method']!='cash')
  return jsonify(date=report_date,orderCount=sum(r['order_count'] for r in result),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer)
 
 @app.get('/api/reports/days')
 def report_days():
- order_days=rows("SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) total_revenue FROM orders WHERE status='completed' GROUP BY order_date ORDER BY order_date DESC")
- closure_days=rows('SELECT report_date,closed_at FROM daily_closures ORDER BY report_date DESC')
+ order_days=rows("SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) total_revenue FROM orders WHERE store_id=? AND status='completed' GROUP BY order_date ORDER BY order_date DESC",(current_store(),))
+ closure_days=rows('SELECT report_date,closed_at FROM daily_closures WHERE store_id=? ORDER BY report_date DESC',(current_store(),))
  days={iso_date(r['order_date']):{'date':iso_date(r['order_date']),'orderCount':r['order_count'],'totalRevenue':number(r['total_revenue']),'closedAt':None} for r in order_days}
  for closure in closure_days:
   closure_date=iso_date(closure['report_date'])
   item=days.setdefault(closure_date,{'date':closure_date,'orderCount':0,'totalRevenue':0,'closedAt':None})
   item['closedAt']=local_timestamp(closure['closed_at'])
  for item in days.values():
-  menu_items=stock_data(item['date'])
+  menu_items=stock_data(current_store(),item['date'])
   item['soldQty']=sum(menu['sold'] for menu in menu_items)
   item['giveawayQty']=sum(menu['giveaway'] for menu in menu_items)
   item['remainingQty']=sum(menu['stockNow'] for menu in menu_items if menu['active'])
@@ -529,10 +530,11 @@ def report_days():
 def mark_day_closed():
  report_date=bangkok_today().isoformat()
  with transaction() as (_,cursor):
-  existing=execute(cursor,'SELECT report_date FROM daily_closures WHERE report_date=?',(report_date,)).fetchone()
-  if existing: execute(cursor,'UPDATE daily_closures SET closed_at=CURRENT_TIMESTAMP WHERE report_date=?',(report_date,))
-  else: execute(cursor,'INSERT INTO daily_closures (report_date) VALUES (?)',(report_date,))
-  closed=execute(cursor,'SELECT closed_at FROM daily_closures WHERE report_date=?',(report_date,)).fetchone()
+  store=current_store()
+  existing=execute(cursor,'SELECT report_date FROM daily_closures WHERE store_id=? AND report_date=?',(store,report_date)).fetchone()
+  if existing: execute(cursor,'UPDATE daily_closures SET closed_at=CURRENT_TIMESTAMP WHERE store_id=? AND report_date=?',(store,report_date))
+  else: execute(cursor,'INSERT INTO daily_closures (store_id,report_date) VALUES (?,?)',(store,report_date))
+  closed=execute(cursor,'SELECT closed_at FROM daily_closures WHERE store_id=? AND report_date=?',(store,report_date)).fetchone()
  return jsonify(date=report_date,closedAt=local_timestamp(closed['closed_at']))
 
 @app.get('/api/analytics')
@@ -543,15 +545,15 @@ def analytics():
  end_date=bangkok_today(); start_date=end_date-timedelta(days=days-1)
  start_iso=start_date.isoformat(); end_iso=end_date.isoformat()
  movement_start,_=local_day_bounds(start_iso); _,movement_end=local_day_bounds(end_iso)
- connection=connect_db()
+ store=current_store(); connection=connect_db()
  try:
   cursor=connection.cursor()
-  order_summary=execute(cursor,"SELECT COUNT(*) order_count,COALESCE(SUM(total),0) revenue,COALESCE(SUM(discount),0) discount FROM orders WHERE order_date>=? AND order_date<=? AND status='completed'",(start_iso,end_iso)).fetchone()
-  cost_row=execute(cursor,"SELECT COALESCE(SUM(oi.quantity*p.cost_price),0) cost_total FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.order_date>=? AND o.order_date<=? AND o.status='completed'",(start_iso,end_iso)).fetchone()
-  daily_rows=execute(cursor,"SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) revenue FROM orders WHERE order_date>=? AND order_date<=? AND status='completed' GROUP BY order_date ORDER BY order_date",(start_iso,end_iso)).fetchall()
-  top_rows=execute(cursor,"SELECT oi.product_id,oi.product_name,oi.sku,SUM(oi.quantity-oi.giveaway_qty) sold_qty,COALESCE(SUM(oi.line_total),0) revenue FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date>=? AND o.order_date<=? AND o.status='completed' GROUP BY oi.product_id,oi.product_name,oi.sku HAVING SUM(oi.quantity-oi.giveaway_qty)>0 ORDER BY sold_qty DESC,revenue DESC LIMIT 5",(start_iso,end_iso)).fetchall()
-  loss_rows=execute(cursor,"SELECT p.id,p.name,p.sku,COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0) giveaway_qty,COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0) waste_qty FROM stock_movements sm JOIN products p ON p.id=sm.product_id WHERE sm.created_at>=? AND sm.created_at<? AND sm.reference_type IN ('giveaway','waste') GROUP BY p.id,p.name,p.sku HAVING COALESCE(SUM(CASE WHEN sm.reference_type IN ('giveaway','waste') THEN -sm.quantity ELSE 0 END),0)>0 ORDER BY (COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0)+COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0)) DESC LIMIT 5",(movement_start,movement_end)).fetchall()
-  low_rows=execute(cursor,'SELECT id,name,sku,stock_qty,stock_min FROM products WHERE is_active=1 AND stock_qty<=stock_min ORDER BY stock_qty,stock_min DESC,name LIMIT 8').fetchall()
+  order_summary=execute(cursor,"SELECT COUNT(*) order_count,COALESCE(SUM(total),0) revenue,COALESCE(SUM(discount),0) discount FROM orders WHERE store_id=? AND order_date>=? AND order_date<=? AND status='completed'",(store,start_iso,end_iso)).fetchone()
+  cost_row=execute(cursor,"SELECT COALESCE(SUM(oi.quantity*p.cost_price),0) cost_total FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.store_id=? AND o.order_date>=? AND o.order_date<=? AND o.status='completed'",(store,start_iso,end_iso)).fetchone()
+  daily_rows=execute(cursor,"SELECT order_date,COUNT(*) order_count,COALESCE(SUM(total),0) revenue FROM orders WHERE store_id=? AND order_date>=? AND order_date<=? AND status='completed' GROUP BY order_date ORDER BY order_date",(store,start_iso,end_iso)).fetchall()
+  top_rows=execute(cursor,"SELECT oi.product_id,oi.product_name,oi.sku,SUM(oi.quantity-oi.giveaway_qty) sold_qty,COALESCE(SUM(oi.line_total),0) revenue FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND o.order_date>=? AND o.order_date<=? AND o.status='completed' GROUP BY oi.product_id,oi.product_name,oi.sku HAVING SUM(oi.quantity-oi.giveaway_qty)>0 ORDER BY sold_qty DESC,revenue DESC LIMIT 5",(store,start_iso,end_iso)).fetchall()
+  loss_rows=execute(cursor,"SELECT p.id,p.name,p.sku,COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0) giveaway_qty,COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0) waste_qty FROM stock_movements sm JOIN products p ON p.id=sm.product_id WHERE sm.store_id=? AND sm.created_at>=? AND sm.created_at<? AND sm.reference_type IN ('giveaway','waste') GROUP BY p.id,p.name,p.sku HAVING COALESCE(SUM(CASE WHEN sm.reference_type IN ('giveaway','waste') THEN -sm.quantity ELSE 0 END),0)>0 ORDER BY (COALESCE(SUM(CASE WHEN sm.reference_type='giveaway' THEN -sm.quantity ELSE 0 END),0)+COALESCE(SUM(CASE WHEN sm.reference_type='waste' THEN -sm.quantity ELSE 0 END),0)) DESC LIMIT 5",(store,movement_start,movement_end)).fetchall()
+  low_rows=execute(cursor,'SELECT id,name,sku,stock_qty,stock_min FROM products WHERE store_id=? AND is_active=1 AND stock_qty<=stock_min ORDER BY stock_qty,stock_min DESC,name LIMIT 8',(current_store(),)).fetchall()
  finally: connection.close()
  daily_map={iso_date(r['order_date']):r for r in daily_rows}
  daily=[]
@@ -568,13 +570,13 @@ def analytics():
   lowStock=[{'productId':r['id'],'name':r['name'],'code':r['sku'],'stock':r['stock_qty'],'minStock':r['stock_min']} for r in low_rows]
  )
 
-def stock_data(report_date):
+def stock_data(store,report_date):
  connection=connect_db()
  try:
   cursor=connection.cursor()
-  result=execute(cursor,'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products ORDER BY category,name').fetchall(); movements=movement_summary(connection,report_date)
+  result=execute(cursor,'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE store_id=? ORDER BY category,name',(store,)).fetchall(); movements=movement_summary(connection,store,report_date)
   _,day_end=local_day_bounds(report_date)
-  future_rows=execute(cursor,'SELECT product_id,COALESCE(SUM(quantity),0) total_qty FROM stock_movements WHERE created_at>=? GROUP BY product_id',(day_end,)).fetchall()
+  future_rows=execute(cursor,'SELECT product_id,COALESCE(SUM(quantity),0) total_qty FROM stock_movements WHERE store_id=? AND created_at>=? GROUP BY product_id',(store,day_end)).fetchall()
   future_movements={row['product_id']:row['total_qty'] for row in future_rows}
  finally: connection.close()
  items=[]
@@ -593,11 +595,11 @@ def stock_summary():
  except ValueError:
   return error('รูปแบบวันที่ไม่ถูกต้อง')
  if selected_date>bangkok_today(): return error('ไม่สามารถดูข้อมูลของวันข้างหน้าได้')
- return jsonify(date=report_date,items=stock_data(report_date))
+ return jsonify(date=report_date,items=stock_data(current_store(),report_date))
 
 @app.get('/api/stock/plans')
 def stock_plans():
- result=rows("SELECT sp.id,sp.product_id,sp.plan_date,sp.quantity,p.name,p.sku FROM stock_plans sp JOIN products p ON p.id=sp.product_id WHERE sp.status='pending' ORDER BY sp.plan_date,p.name")
+ result=rows("SELECT sp.id,sp.product_id,sp.plan_date,sp.quantity,p.name,p.sku FROM stock_plans sp JOIN products p ON p.id=sp.product_id WHERE sp.store_id=? AND sp.status='pending' ORDER BY sp.plan_date,p.name",(current_store(),))
  return jsonify([{'id':r['id'],'productId':r['product_id'],'date':iso_date(r['plan_date']),'quantity':r['quantity'],'name':r['name'],'code':r['sku']} for r in result])
 
 @app.post('/api/stock/plans')
@@ -610,18 +612,18 @@ def create_stock_plan():
  today=bangkok_today().isoformat()
  if not plan_date or plan_date<today: return error('เลือกวันที่ตั้งแต่วันนี้เป็นต้นไป')
  with transaction() as (_,cursor):
-  product=execute(cursor,'SELECT id FROM products WHERE id=?',(payload.get('productId'),)).fetchone()
+  product=execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(payload.get('productId'),current_store())).fetchone()
   if not product: return error('ไม่พบสินค้า',404)
-  query='INSERT INTO stock_plans (product_id,plan_date,quantity,note) VALUES (?,?,?,?)'+(' RETURNING id' if is_postgres() else '')
-  result=execute(cursor,query,(product['id'],plan_date,quantity,payload.get('note')))
+  query='INSERT INTO stock_plans (store_id,product_id,plan_date,quantity,note) VALUES (?,?,?,?,?)'+(' RETURNING id' if is_postgres() else '')
+  result=execute(cursor,query,(current_store(),product['id'],plan_date,quantity,payload.get('note')))
   plan_id=result.fetchone()['id'] if is_postgres() else cursor.lastrowid
-  apply_due_stock_plans(cursor,today)
+  apply_due_stock_plans(cursor,current_store(),today)
  return jsonify(id=plan_id)
 
 @app.delete('/api/stock/plans/<int:plan_id>')
 def cancel_stock_plan(plan_id):
  with transaction() as (_,cursor):
-  plan=execute(cursor,'SELECT status FROM stock_plans WHERE id=?',(plan_id,)).fetchone()
+  plan=execute(cursor,'SELECT status FROM stock_plans WHERE id=? AND store_id=?',(plan_id,current_store())).fetchone()
   if not plan: return error('ไม่พบแผนนี้',404)
   if plan['status']!='pending': return error('แผนนี้ถูกเติมสต็อกไปแล้ว ยกเลิกไม่ได้')
   execute(cursor,"UPDATE stock_plans SET status='cancelled' WHERE id=?",(plan_id,))
@@ -629,20 +631,20 @@ def cancel_stock_plan(plan_id):
 
 @app.get('/api/reports/close-day')
 def close_day():
- report_date=request.args.get('date') or bangkok_today().isoformat(); connection=connect_db()
+ report_date=request.args.get('date') or bangkok_today().isoformat(); store=current_store(); connection=connect_db()
  try:
   cursor=connection.cursor()
-  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE order_date=? AND status=\'completed\' ORDER BY created_at',(report_date,)).fetchall()
-  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(report_date,)).fetchall()
-  cost_rows=execute(cursor,'SELECT oi.quantity,p.cost_price FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.order_date=? AND o.status=\'completed\'',(report_date,)).fetchall()
+  order_rows=execute(cursor,'SELECT id,order_number,created_at,payment_method,subtotal,discount,total FROM orders WHERE store_id=? AND order_date=? AND status=\'completed\' ORDER BY created_at',(store,report_date)).fetchall()
+  item_rows=execute(cursor,'SELECT oi.order_id,oi.product_name,oi.sku,oi.quantity,oi.giveaway_qty,oi.unit_price,oi.line_total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.store_id=? AND o.order_date=? AND o.status=\'completed\' ORDER BY oi.id',(store,report_date)).fetchall()
+  cost_rows=execute(cursor,'SELECT oi.quantity,p.cost_price FROM order_items oi JOIN orders o ON o.id=oi.order_id JOIN products p ON p.id=oi.product_id WHERE o.store_id=? AND o.order_date=? AND o.status=\'completed\'',(store,report_date)).fetchall()
  finally: connection.close()
  grouped={}
  for r in item_rows: grouped.setdefault(r['order_id'],[]).append({'name':r['product_name'],'code':r['sku'],'qty':r['quantity'],'giveawayQty':r['giveaway_qty'],'unitPrice':number(r['unit_price']),'lineTotal':number(r['line_total'])})
  orders=[{'orderNumber':r['order_number'],'time':local_timestamp(r['created_at']),'paymentMethod':r['payment_method'],'subtotal':number(r['subtotal']),'discount':number(r['discount']),'total':number(r['total']),'items':grouped.get(r['id'],[])} for r in order_rows]
  cash=sum(o['total'] for o in orders if o['paymentMethod']=='cash'); transfer=sum(o['total'] for o in orders if o['paymentMethod']!='cash')
  cost_total=sum(r['quantity']*number(r['cost_price'] or 0) for r in cost_rows)
- menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
- cash_day=cash_day_response(report_date); opening_float=cash_day['openingFloat']
+ menus=[{'code':i['code'],'name':i['name'],'category':i['category'],'icon':i['icon'],'active':i['active'],'sold':i['sold'],'giveaway':i['giveaway'],'waste':i['waste'],'remaining':i['stockNow']} for i in stock_data(current_store(),report_date) if i['active'] or i['sold'] or i['giveaway'] or i['waste']]
+ cash_day=cash_day_response(current_store(),report_date); opening_float=cash_day['openingFloat']
  return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,costTotal=cost_total,netProfit=(cash+transfer)-cost_total,openingFloat=opening_float,expectedCash=(opening_float+cash) if opening_float is not None else None,orders=orders,menuSummary=menus)
 
 @app.get('/')

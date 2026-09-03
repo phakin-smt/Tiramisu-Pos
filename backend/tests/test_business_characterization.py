@@ -389,7 +389,7 @@ class ReportsCharacterizationTests(PosApiTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["days"][0]["date"], "2026-08-18")
-        stock_data.assert_called_once_with("2026-08-18")
+        stock_data.assert_called_once_with(1, "2026-08-18")
 
     def test_analytics_matches_postgresql_date_rows_to_iso_business_dates(self):
         connection = MagicMock()
