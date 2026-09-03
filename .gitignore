@@ -25,3 +25,4 @@ frontend/test-results/
 
 init_supabase_local.ps1
 verify_supabase_local.ps1
+backup_supabase_local.ps1
