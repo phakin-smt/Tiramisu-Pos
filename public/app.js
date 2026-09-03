@@ -11,15 +11,14 @@ let pendingOrderKey = null;
 let selectedCategory = 'ทั้งหมด';
 
 
-const BUNDLE_UNIT_PRICE = 69;
-const BUNDLE_QTY = 3;
-const BUNDLE_PRICE = 200;
-const BUNDLE_DISCOUNT_PER_SET = BUNDLE_UNIT_PRICE * BUNDLE_QTY - BUNDLE_PRICE;
-/** Wholesale rate for shop customers, applied per paid piece. Mirrors the React app. */
-const STORE_TIRAMISU_CATEGORY = 'Tiramisu';
-const STORE_TIRAMISU_DISCOUNT = 9;
-const BUNDLE_HINT = '🎉 โปรฯ ครบ 3 ชิ้น (69.-) ลดเหลือ 200 บาท ใช้ให้อัตโนมัติแล้ว';
-const STORE_HINT = `🏪 ราคาส่งร้านค้า ลด ฿${STORE_TIRAMISU_DISCOUNT}/ชิ้น สำหรับ ${STORE_TIRAMISU_CATEGORY} ใช้ให้อัตโนมัติแล้ว`;
+/**
+ * The selling store's automatic discounts, fetched after the store is known.
+ * Starts empty on purpose: a till that has not learned its rules charges full
+ * price rather than applying another shop's promotion.
+ */
+let pricingRules = { bundle: null, wholesale: null };
+let stores = [];
+let currentStoreId = null;
 const APP_TIME_ZONE = 'Asia/Bangkok';
 const PAGE_ORDER = ['sellPage', 'stockPage', 'ordersPage', 'reportPage', 'analyticsPage', 'settingsPage'];
 
@@ -91,7 +90,88 @@ function showLogin(message = '') {
 
 function showApplication() {
   document.getElementById('loginOverlay').hidden = true;
+  document.getElementById('storeOverlay').hidden = true;
   document.getElementById('appShell').hidden = false;
+}
+
+function renderStoreOptions() {
+  const container = document.getElementById('storeOptions');
+  container.innerHTML = '';
+  stores.forEach((store) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'store-option' + (store.id === currentStoreId ? ' is-current' : '');
+    button.innerHTML = `<strong>${store.name}</strong>` + (store.id === currentStoreId ? '<span>กำลังใช้อยู่</span>' : '');
+    button.addEventListener('click', () => chooseStore(store.id));
+    container.appendChild(button);
+  });
+}
+
+function showStorePicker(canCancel) {
+  document.getElementById('loginOverlay').hidden = true;
+  document.getElementById('appShell').hidden = true;
+  document.getElementById('storeError').textContent = '';
+  document.getElementById('storeCancelButton').hidden = !canCancel;
+  renderStoreOptions();
+  document.getElementById('storeOverlay').hidden = false;
+}
+
+/**
+ * Reloads after switching rather than clearing state by hand.
+ *
+ * The cart, the catalogue, the reports and the day's totals all belong to the
+ * store that was open. Starting the page over cannot leave any of them behind,
+ * which picking them off one by one eventually would.
+ */
+async function chooseStore(storeId) {
+  document.getElementById('storeError').textContent = '';
+  try {
+    const response = await window.fetch('/api/auth/select-store', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId })
+    });
+    if (!response.ok) throw new Error('เลือกร้านไม่สำเร็จ');
+    window.location.reload();
+  } catch (error) {
+    document.getElementById('storeError').textContent = error.message || 'เลือกร้านไม่สำเร็จ';
+  }
+}
+
+function applyStoreChrome() {
+  const store = stores.find((item) => item.id === currentStoreId);
+  if (store) document.getElementById('storeNameText').textContent = store.name;
+  document.getElementById('storeSwitchButton').hidden = stores.length < 2;
+}
+
+/**
+ * Settles which store this session sells for, and on what terms.
+ *
+ * Returns false when the question is still open, so the caller stops before
+ * loading a menu that would belong to nobody in particular.
+ */
+async function loadStoreContext() {
+  try {
+    const response = await window.fetch('/api/stores');
+    if (!response.ok) throw new Error('Unable to load stores');
+    const data = await response.json();
+    stores = data.stores || [];
+    currentStoreId = data.storeId === undefined ? null : data.storeId;
+    if (currentStoreId === null) {
+      showStorePicker(false);
+      return false;
+    }
+    const rules = await window.fetch('/api/pricing-rules');
+    if (rules.ok) {
+      const body = await rules.json();
+      pricingRules = { bundle: body.bundle, wholesale: body.wholesale };
+    }
+    applyStoreChrome();
+    return true;
+  } catch (error) {
+    showLogin('Unable to connect to the server.');
+    return false;
+  }
 }
 
 async function apiFetch(url, options) {
@@ -116,6 +196,7 @@ async function checkAuthentication() {
       showLogin();
       return false;
     }
+    if (!(await loadStoreContext())) return false;
     showApplication();
     return true;
   } catch (error) {
@@ -406,21 +487,26 @@ function computeTotals() {
   }, 0);
 
 
-  const eligibleQty = cart.reduce((sum, item) => {
+  const bundle = pricingRules.bundle;
+  const wholesale = pricingRules.wholesale;
+  // The bundle keys on unit price, not category: any item at the trigger price
+  // counts towards a set.
+  const eligibleQty = !bundle ? 0 : cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product && product.price === BUNDLE_UNIT_PRICE ? sum + item.qty - (item.giveawayQty || 0) : sum;
+    return product && product.price === bundle.unitPrice ? sum + item.qty - (item.giveawayQty || 0) : sum;
   }, 0);
-  const storeQty = cart.reduce((sum, item) => {
+  const storeQty = !wholesale ? 0 : cart.reduce((sum, item) => {
     const product = getProductById(item.productId);
-    return product && product.category === STORE_TIRAMISU_CATEGORY ? sum + item.qty - (item.giveawayQty || 0) : sum;
+    return product && product.category === wholesale.category ? sum + item.qty - (item.giveawayQty || 0) : sum;
   }, 0);
 
   // A shop customer is on wholesale pricing, so the per-piece rate replaces the
-  // three-for-200 promotion rather than stacking with it.
+  // bundle promotion rather than stacking with it.
   const store = document.getElementById('customerSelect').value === 'store';
-  const bundleSets = store ? 0 : Math.floor(eligibleQty / BUNDLE_QTY);
-  const storeDiscount = store ? storeQty * STORE_TIRAMISU_DISCOUNT : 0;
-  const autoDiscount = store ? storeDiscount : bundleSets * BUNDLE_DISCOUNT_PER_SET;
+  const bundleDiscountPerSet = bundle ? bundle.unitPrice * bundle.quantity - bundle.price : 0;
+  const bundleSets = store || !bundle ? 0 : Math.floor(eligibleQty / bundle.quantity);
+  const storeDiscount = store && wholesale ? storeQty * wholesale.discountPerItem : 0;
+  const autoDiscount = store ? storeDiscount : bundleSets * bundleDiscountPerSet;
 
 
   const discountInput = document.getElementById('discountInput');
@@ -454,8 +540,10 @@ function renderTotals() {
   const promoHint = document.getElementById('promoHint');
   const showStoreHint = totals.storeDiscount > 0 && !discountManual;
   const showBundleHint = totals.bundleSets > 0 && !discountManual;
-  if (showStoreHint || showBundleHint) {
-    promoHint.textContent = showStoreHint ? STORE_HINT : BUNDLE_HINT;
+  if (showStoreHint && pricingRules.wholesale) {
+    promoHint.textContent = `🏪 ราคาส่งร้านค้า ลด ฿${pricingRules.wholesale.discountPerItem}/ชิ้น สำหรับ ${pricingRules.wholesale.category} ใช้ให้อัตโนมัติแล้ว`;
+  } else if (showBundleHint && pricingRules.bundle) {
+    promoHint.textContent = `🎉 โปรฯ ครบ ${pricingRules.bundle.quantity} ชิ้น (${pricingRules.bundle.unitPrice}.-) ลดเหลือ ${pricingRules.bundle.price} บาท ใช้ให้อัตโนมัติแล้ว`;
   }
   promoHint.hidden = !(showStoreHint || showBundleHint);
 }
@@ -1560,6 +1648,15 @@ async function cancelOrder(orderId) {
 async function init() {
   document.getElementById('loginForm').addEventListener('submit', login);
   document.getElementById('logoutButton').addEventListener('click', logout);
+  document.getElementById('storeSwitchButton').addEventListener('click', () => {
+    // The cart belongs to the store that is open, and switching starts over.
+    if (cart.length || orderSubmitting) {
+      showToast('ปิดการขายในตะกร้าก่อนเปลี่ยนร้าน');
+      return;
+    }
+    showStorePicker(true);
+  });
+  document.getElementById('storeCancelButton').addEventListener('click', () => showApplication());
   if (!(await checkAuthentication())) return;
 
   renderCart();

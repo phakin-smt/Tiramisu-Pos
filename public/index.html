@@ -21,6 +21,17 @@
     </form>
   </div>
 
+  <div class="login-overlay" id="storeOverlay" hidden>
+    <div class="login-card store-card">
+      <div class="brand-icon">🧁</div>
+      <h1>เลือกร้านที่จะขาย</h1>
+      <p>ทุกอย่างหลังจากนี้ — เมนู สต็อก ยอดขาย — เป็นของร้านที่เลือก</p>
+      <div class="store-options" id="storeOptions"></div>
+      <div class="login-error" id="storeError" role="alert"></div>
+      <button class="btn" id="storeCancelButton" type="button" hidden>ยกเลิก</button>
+    </div>
+  </div>
+
   <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <div class="brand">
@@ -30,7 +41,7 @@
             <div class="brand-name">Baannoi-POS</div>
             <div class="app-version">v1.1.0</div>
           </div>
-          <div class="brand-subtitle">ระบบขายของหวาน</div>
+          <div class="brand-subtitle" id="storeNameText">ระบบขายของหวาน</div>
         </div>
       </div>
 
@@ -73,6 +84,7 @@
         <div class="date-row">
           <span id="dateText">08/08/2026</span>
         </div>
+        <button class="btn" id="storeSwitchButton" type="button" hidden>เปลี่ยนร้าน</button>
         <button class="btn logout-button" id="logoutButton" type="button">
           <span class="logout-icon" aria-hidden="true">↪</span>
           <span>ออกจากระบบ</span>
