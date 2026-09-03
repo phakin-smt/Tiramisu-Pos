@@ -40,6 +40,8 @@ export interface OfflineOrderIdentity {
 export interface OfflineSaleInput extends OfflineSaleDetails {
   identity: OfflineOrderIdentity;
   order: CreateOrderRequest;
+  /** The shop this sale is for. Recorded on the order so a later sync cannot misfile it. */
+  storeId: number;
   /**
    * The checkout idempotency key. Pass the same key an online attempt used so a
    * lost `POST /api/orders` response cannot become a second sale at sync time.
@@ -50,6 +52,7 @@ export interface OfflineSaleInput extends OfflineSaleDetails {
 export interface OfflineCashSaleInput extends OfflineCashDetails {
   identity: OfflineOrderIdentity;
   order: CreateOrderRequest;
+  storeId: number;
   idempotencyKey?: string;
 }
 
@@ -174,6 +177,7 @@ export async function recordOfflineSale(input: OfflineSaleInput): Promise<Offlin
 
     const order: OfflineOrder = {
       ...input.identity,
+      storeId: input.storeId,
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       paymentMethod: input.order.paymentMethod,
       customerType: input.order.customerType,
@@ -206,10 +210,18 @@ export function recordOfflineCashSale(input: OfflineCashSaleInput): Promise<Offl
   return recordOfflineSale(input);
 }
 
-export async function getPendingOfflineOrderCount(): Promise<number> {
+/** Orders written before stores existed can only have been for the first store. */
+export const LEGACY_STORE_ID = 1;
+
+export function orderStoreId(order: OfflineOrder): number {
+  return order.storeId ?? LEGACY_STORE_ID;
+}
+
+export async function getPendingOfflineOrderCount(storeId: number): Promise<number> {
   const database = await openBaannoiPosDatabase();
   try {
-    return await database.countFromIndex('offlineOrders', 'by-sync-status', 'pending');
+    const pending = await database.getAllFromIndex('offlineOrders', 'by-sync-status', 'pending');
+    return pending.filter((order) => orderStoreId(order) === storeId).length;
   } finally {
     database.close();
   }
@@ -220,28 +232,32 @@ export async function getPendingOfflineOrderCount(): Promise<number> {
  * keeps Local Mode latched and the catalog snapshot protected — a sale the
  * server rejected is still money that has not been recorded upstream.
  */
-export async function getUnsyncedOfflineOrderCount(): Promise<number> {
+export async function getUnsyncedOfflineOrderCount(storeId: number): Promise<number> {
   const database = await openBaannoiPosDatabase();
   try {
-    const transaction = database.transaction('offlineOrders', 'readonly');
-    const index = transaction.objectStore('offlineOrders').index('by-sync-status');
-    const [pending, failed] = await Promise.all([
-      index.count('pending'),
-      index.count('failed'),
-      transaction.done,
-    ]);
-    return pending + failed;
+    const orders = await database.getAll('offlineOrders');
+    return orders.filter((order) =>
+      order.syncStatus !== 'synced' && orderStoreId(order) === storeId).length;
   } finally {
     database.close();
   }
 }
 
-export async function getOfflineOrdersToSync(): Promise<OfflineOrder[]> {
+/**
+ * The pending sales this store may replay, oldest first.
+ *
+ * Only this store's: a queue drained while another shop is selected would post
+ * one shop's takings into the other's books. Anything belonging elsewhere simply
+ * waits until that shop is selected again.
+ */
+export async function getOfflineOrdersToSync(storeId: number): Promise<OfflineOrder[]> {
   const database = await openBaannoiPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-sync-status', 'pending');
-    // Oldest first, so the server sees the day in the order it was sold.
-    return orders.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    return orders
+      .filter((order) => orderStoreId(order) === storeId)
+      // Oldest first, so the server sees the day in the order it was sold.
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   } finally {
     database.close();
   }
@@ -327,11 +343,12 @@ export async function markOfflineOrderSynced(
 }
 
 /** Everything the server has not accepted yet, oldest first, for the queue UI. */
-export async function getUnsyncedOfflineOrders(): Promise<OfflineOrder[]> {
+export async function getUnsyncedOfflineOrders(storeId: number): Promise<OfflineOrder[]> {
   const database = await openBaannoiPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
-    return orders.filter((order) => order.syncStatus !== 'synced');
+    return orders.filter((order) =>
+      order.syncStatus !== 'synced' && orderStoreId(order) === storeId);
   } finally {
     database.close();
   }

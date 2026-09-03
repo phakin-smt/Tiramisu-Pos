@@ -19,7 +19,7 @@ const idleState: OfflineSyncState = { syncing: false, lastOutcome: null, error: 
  * and when explicitly asked — a failed drain waits for the next reconnect
  * rather than hammering a server that just told us no.
  */
-export function useOfflineSync(unsyncedCount: number, busy: boolean, onSettled?: () => void) {
+export function useOfflineSync(storeId: number | null, unsyncedCount: number, busy: boolean, onSettled?: () => void) {
   const { isBackendOnline } = useConnectivity();
   const [state, setState] = useState<OfflineSyncState>(idleState);
   const running = useRef(false);
@@ -30,11 +30,11 @@ export function useOfflineSync(unsyncedCount: number, busy: boolean, onSettled?:
   const attemptedWhileOnline = useRef(false);
 
   const runSync = useCallback(async () => {
-    if (running.current) return null;
+    if (running.current || storeId === null) return null;
     running.current = true;
     setState((current) => ({ ...current, syncing: true, error: '' }));
     try {
-      const outcome = await syncPendingOfflineOrders();
+      const outcome = await syncPendingOfflineOrders(storeId);
       setState({ syncing: false, lastOutcome: outcome, error: outcome.error });
       return outcome;
     } catch (error) {
@@ -48,7 +48,7 @@ export function useOfflineSync(unsyncedCount: number, busy: boolean, onSettled?:
       running.current = false;
       settled.current?.();
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     if (!isBackendOnline) {

@@ -45,7 +45,7 @@ async function readOrder(localOrderId: string) {
 }
 
 function renderQueue(onRetry = vi.fn(async () => {}), overrides: Partial<Parameters<typeof OfflineOrderQueuePanel>[0]> = {}) {
-  render(<OfflineOrderQueuePanel revision={0} syncing={false} canRetry onRetry={onRetry} {...overrides} />);
+  render(<OfflineOrderQueuePanel storeId={1} revision={0} syncing={false} canRetry onRetry={onRetry} {...overrides} />);
   return onRetry;
 }
 
@@ -59,7 +59,7 @@ describe('unsynced offline order queue', () => {
   it('renders nothing when every order is synced', async () => {
     await seedOrder({ localOrderId: 'a3f1', syncStatus: 'synced' });
     renderQueue();
-    await vi.waitFor(async () => expect((await getUnsyncedOfflineOrders())).toHaveLength(0));
+    await vi.waitFor(async () => expect((await getUnsyncedOfflineOrders(1))).toHaveLength(0));
     expect(screen.queryByText('ออเดอร์ที่ยังไม่ได้ Sync')).not.toBeInTheDocument();
   });
 
@@ -141,11 +141,11 @@ describe('unsynced offline order queue', () => {
 
   it('disables retry while a sync is already running or the backend is unreachable', async () => {
     await seedOrder({ localOrderId: 'a3f1', syncStatus: 'failed', syncError: 'ล้มเหลว' });
-    const { unmount } = render(<OfflineOrderQueuePanel revision={0} syncing canRetry onRetry={vi.fn(async () => {})} />);
+    const { unmount } = render(<OfflineOrderQueuePanel storeId={1} revision={0} syncing canRetry onRetry={vi.fn(async () => {})} />);
     expect(await screen.findByRole('button', { name: 'กำลัง Sync...' })).toBeDisabled();
     unmount();
 
-    render(<OfflineOrderQueuePanel revision={0} syncing={false} canRetry={false} onRetry={vi.fn(async () => {})} />);
+    render(<OfflineOrderQueuePanel storeId={1} revision={0} syncing={false} canRetry={false} onRetry={vi.fn(async () => {})} />);
     expect(await screen.findByRole('button', { name: 'ลองอีกครั้ง' })).toBeDisabled();
   });
 });

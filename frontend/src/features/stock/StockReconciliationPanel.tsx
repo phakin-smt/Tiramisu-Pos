@@ -11,6 +11,7 @@ import {
 } from '../../offline/stockReconciliation';
 
 interface StockReconciliationPanelProps {
+  storeId: number | null;
   /** Current server stock per product, so the owner sees what to count against. */
   serverStock: Map<number, number>;
   onReconciled(): void;
@@ -30,7 +31,7 @@ function parseVerifiedStock(raw: string): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-export function StockReconciliationPanel({ serverStock, onReconciled }: StockReconciliationPanelProps) {
+export function StockReconciliationPanel({ storeId, serverStock, onReconciled }: StockReconciliationPanelProps) {
   const [reviews, setReviews] = useState<StockReviewEntry[]>([]);
   const [rows, setRows] = useState<Record<number, RowState>>({});
   const [submitting, setSubmitting] = useState<number | null>(null);
@@ -40,11 +41,11 @@ export function StockReconciliationPanel({ serverStock, onReconciled }: StockRec
 
   const loadReviews = useCallback(async () => {
     try {
-      setReviews(await getPendingStockReviews());
+      setReviews(storeId === null ? [] : await getPendingStockReviews(storeId));
     } catch {
       setReviews([]);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => { void loadReviews(); }, [loadReviews]);
 
@@ -75,7 +76,7 @@ export function StockReconciliationPanel({ serverStock, onReconciled }: StockRec
         reconciliationId: createClientUuid(),
       });
       // Only an accepted adjustment clears the review.
-      await resolveStockReview(entry.productId);
+      if (storeId !== null) await resolveStockReview(storeId, entry.productId);
       setRows((current) => {
         const next = { ...current };
         delete next[entry.productId];

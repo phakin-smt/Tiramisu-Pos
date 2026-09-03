@@ -38,7 +38,7 @@ export type CheckoutResult =
   | { mode: 'online'; response: CreateOrderResponse }
   | { mode: 'offline'; order: OfflineOrder };
 
-export function useCheckout() {
+export function useCheckout(storeId: number | null) {
   const { getSnapshot } = useConnectivity();
   const locked = useRef(false);
   const pendingServerKey = useRef<{ key: string; fingerprint: string } | null>(null);
@@ -73,7 +73,8 @@ export function useCheckout() {
     try {
       // Re-evaluate the authoritative mode at confirmation time: live refs and a
       // fresh IndexedDB count, never a value captured at render.
-      const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount();
+      if (storeId === null) throw new Error('ยังไม่ได้เลือกร้าน');
+      const unsyncedOfflineOrderCount = await getUnsyncedOfflineOrderCount(storeId);
       const { isBackendOnline } = getSnapshot();
       // Anything the server has not accepted still owns local stock, so a sale
       // that failed to sync keeps the next one local too.
@@ -90,6 +91,7 @@ export function useCheckout() {
       const order = await recordOfflineSale({
         identity: pendingOfflineIdentity.current,
         order: payload,
+        storeId,
         idempotencyKey,
         ...localDetails,
       });
@@ -108,7 +110,7 @@ export function useCheckout() {
     } finally {
       locked.current = false;
     }
-  }, [getSnapshot]);
+  }, [getSnapshot, storeId]);
 
   const clearFeedback = useCallback(() => setState((current) => ({ ...current, error: '', response: null, offlineOrder: null })), []);
   const isLocked = useCallback(() => locked.current, []);

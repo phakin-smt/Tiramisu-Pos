@@ -36,7 +36,7 @@ const accepted = (orderNumber: string, extra: Record<string, unknown> = {}) => j
 });
 
 async function seedSale(suffix: string, minute: string, overrides: Record<string, unknown> = {}) {
-  return recordOfflineCashSale({
+  return recordOfflineCashSale({ storeId: 1,
     identity: {
       localOrderId: `550e8400-e29b-41d4-a716-4466554${suffix}`,
       localOrderNumber: `OFF-20260821-14${minute}00-${suffix.slice(-4)}`,
@@ -59,7 +59,7 @@ function bodyOf(call: unknown[]) {
 describe('offline order sync', () => {
   beforeEach(async () => {
     await deleteDB(BAANNOI_POS_DATABASE_NAME);
-    await replaceConfirmedCatalogSnapshot(products, '2026-08-21T07:00:00.000Z');
+    await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
   });
 
@@ -74,17 +74,17 @@ describe('offline order sync', () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210001'));
     vi.stubGlobal('fetch', fetchMock);
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     expect(outcome).toMatchObject({ synced: 2, failed: 0, remaining: 0, stopped: 'complete', error: '' });
     const sent = fetchMock.mock.calls.map((call) => bodyOf(call).offline.createdAt);
     expect(sent).toEqual(['2026-08-21T07:31:00.000Z', '2026-08-21T07:35:00.000Z']);
-    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(0);
     expect((await getRecentOfflineOrders(2)).every((order) => order.syncStatus === 'synced')).toBe(true);
   });
 
   it('sends the original business date and the gross quantity the API expects', async () => {
-    await recordOfflineSale({
+    await recordOfflineSale({ storeId: 1,
       identity: {
         localOrderId: '550e8400-e29b-41d4-a716-446655440002',
         localOrderNumber: 'OFF-20260821-143500-0002',
@@ -98,7 +98,7 @@ describe('offline order sync', () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210002'));
     vi.stubGlobal('fetch', fetchMock);
 
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
 
     const payload = bodyOf(fetchMock.mock.calls[0]);
     expect(payload.offline).toEqual({
@@ -116,7 +116,7 @@ describe('offline order sync', () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210003', { duplicate: true }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
     expect(headers['Idempotency-Key']).toBe('aa11bb22-0000-4000-8000-0000040003');
@@ -134,10 +134,10 @@ describe('offline order sync', () => {
       throw new TypeError('Failed to fetch');
     }));
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     expect(outcome).toMatchObject({ synced: 1, failed: 0, remaining: 1, stopped: 'offline' });
-    expect(await getPendingOfflineOrderCount()).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(1);
   });
 
   it('flags a rejected sale and keeps draining the rest of the queue', async () => {
@@ -149,7 +149,7 @@ describe('offline order sync', () => {
       return calls === 1 ? jsonResponse({ error: 'สินค้าในตะกร้าไม่ถูกต้อง' }, 400) : accepted('202608210007');
     }));
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     // One poison order must not strand the whole day behind it.
     expect(outcome).toMatchObject({ synced: 1, failed: 1, remaining: 1, stopped: 'complete' });
@@ -157,8 +157,8 @@ describe('offline order sync', () => {
     const rejected = orders.find((entry) => entry.syncStatus === 'failed');
     expect(rejected?.syncError).toBe('สินค้าในตะกร้าไม่ถูกต้อง');
     // Failed still counts as unsynced, so Local Mode stays latched.
-    expect(await getUnsyncedOfflineOrderCount()).toBe(1);
-    expect(await getPendingOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(1);
+    expect(await getPendingOfflineOrderCount(1)).toBe(0);
   });
 
   it('records a stock review when the server floored stock at zero', async () => {
@@ -166,11 +166,11 @@ describe('offline order sync', () => {
     const shortfalls = [{ productId: 1, productName: 'Original', shortfall: 3 }];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210008', { stockReview: true, stockShortfalls: shortfalls })));
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     expect(outcome).toMatchObject({ synced: 1, stockReviews: 1, remaining: 0 });
     expect((await getRecentOfflineOrders(1))[0]).toMatchObject({ syncStatus: 'synced', stockReview: true, stockShortfalls: shortfalls });
-    expect(await getPendingStockReviews()).toEqual([
+    expect(await getPendingStockReviews(1)).toEqual([
       { productId: 1, productName: 'Original', discrepancy: 3, localOrderIds: ['550e8400-e29b-41d4-a716-446655440008'] },
     ]);
   });
@@ -180,13 +180,13 @@ describe('offline order sync', () => {
     vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210011', {
       stockReview: true, stockShortfalls: [{ productId: 1, productName: 'Original', shortfall: 2 }],
     })));
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
 
     // The queue is empty, so a server catalog refresh is allowed again.
-    expect(await replaceConfirmedCatalogSnapshotIfNoPendingOrders(products, '2026-08-21T08:00:00.000Z')).not.toBeNull();
+    expect(await replaceConfirmedCatalogSnapshotIfNoPendingOrders(products, 1, '2026-08-21T08:00:00.000Z')).not.toBeNull();
 
     // Overwriting the catalog must not erase the outstanding review.
-    expect(await getPendingStockReviews()).toEqual([
+    expect(await getPendingStockReviews(1)).toEqual([
       { productId: 1, productName: 'Original', discrepancy: 2, localOrderIds: ['550e8400-e29b-41d4-a716-446655440011'] },
     ]);
   });
@@ -196,14 +196,14 @@ describe('offline order sync', () => {
     vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210012', {
       stockReview: true, stockShortfalls: [{ productId: 1, productName: 'Original', shortfall: 2 }],
     })));
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
 
     // A second drain finds nothing pending and must not silently resolve it.
-    await syncPendingOfflineOrders();
-    expect(await getPendingStockReviews()).toHaveLength(1);
+    await syncPendingOfflineOrders(1);
+    expect(await getPendingStockReviews(1)).toHaveLength(1);
 
-    await resolveStockReview(1);
-    expect(await getPendingStockReviews()).toEqual([]);
+    await resolveStockReview(1, 1);
+    expect(await getPendingStockReviews(1)).toEqual([]);
     // The order itself is untouched apart from the resolution marker.
     expect((await getRecentOfflineOrders(1))[0]).toMatchObject({
       syncStatus: 'synced', stockReview: true, total: 69, serverOrderNumber: '202608210012',
@@ -221,7 +221,7 @@ describe('offline order sync', () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210009'));
     vi.stubGlobal('fetch', fetchMock);
 
-    const outcome = await syncPendingOfflineOrders();
+    const outcome = await syncPendingOfflineOrders(1);
 
     expect(outcome).toMatchObject({ synced: 1, failed: 0, remaining: 0 });
     const key = (fetchMock.mock.calls[0][1]?.headers as Record<string, string>)['Idempotency-Key'];
@@ -232,12 +232,12 @@ describe('offline order sync', () => {
 
   it('does not touch the local stock snapshot while syncing', async () => {
     await seedSale('40010', '35');
-    const before = (await readConfirmedCatalogSnapshot())?.products[0].stock;
+    const before = (await readConfirmedCatalogSnapshot(1))?.products[0].stock;
     vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210010')));
 
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
 
-    expect((await readConfirmedCatalogSnapshot())?.products[0].stock).toBe(before);
+    expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(before);
   });
 
   it('replays a retried order under its original key and deducts stock once', async () => {
@@ -252,13 +252,13 @@ describe('offline order sync', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
     expect((await getRecentOfflineOrders(1))[0].syncStatus).toBe('failed');
 
     await retryFailedOfflineOrder('550e8400-e29b-41d4-a716-446655440013');
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
     // A third drain must find nothing left to send.
-    await syncPendingOfflineOrders();
+    await syncPendingOfflineOrders(1);
 
     const keys = fetchMock.mock.calls.map((call) => (call[1]?.headers as Record<string, string>)['Idempotency-Key']);
     expect(new Set(keys).size).toBe(1);
@@ -267,7 +267,7 @@ describe('offline order sync', () => {
     const order = (await getRecentOfflineOrders(1))[0];
     expect(order).toMatchObject({ syncStatus: 'synced', serverOrderNumber: '202608210013' });
     expect(order.syncError).toBeUndefined();
-    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(0);
   });
 
   it('loses nothing when connectivity dies mid-drain and completes after a retry', async () => {
@@ -281,16 +281,16 @@ describe('offline order sync', () => {
       throw new TypeError('Failed to fetch');
     }));
 
-    const interrupted = await syncPendingOfflineOrders();
+    const interrupted = await syncPendingOfflineOrders(1);
     expect(interrupted).toMatchObject({ synced: 1, failed: 0, remaining: 2, stopped: 'offline' });
     // Nothing was dropped: both survivors are still queued, not lost.
-    expect(await getPendingOfflineOrderCount()).toBe(2);
+    expect(await getPendingOfflineOrderCount(1)).toBe(2);
 
     vi.stubGlobal('fetch', vi.fn(async (_url: string, _init?: RequestInit) => accepted('202608210015')));
-    const completed = await syncPendingOfflineOrders();
+    const completed = await syncPendingOfflineOrders(1);
 
     expect(completed).toMatchObject({ synced: 2, failed: 0, remaining: 0, stopped: 'complete' });
-    expect(await getUnsyncedOfflineOrderCount()).toBe(0);
+    expect(await getUnsyncedOfflineOrderCount(1)).toBe(0);
     expect((await getRecentOfflineOrders(3)).every((entry) => entry.syncStatus === 'synced')).toBe(true);
   });
 
@@ -298,7 +298,7 @@ describe('offline order sync', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    expect(await syncPendingOfflineOrders()).toMatchObject({ synced: 0, failed: 0, remaining: 0 });
+    expect(await syncPendingOfflineOrders(1)).toMatchObject({ synced: 0, failed: 0, remaining: 0 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
