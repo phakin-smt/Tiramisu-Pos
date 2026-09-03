@@ -28,7 +28,7 @@ export function OrderList({ orders, cancellationPending, onCancel }: Props) {
         <div className="order-payment"><strong>{formatCurrency(order.total)}</strong><span>{paymentLabels[order.paymentMethod] ?? order.paymentMethod}</span></div>
         <div className="order-actions">
           <button type="button" className="secondary-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => setExpandedId(expanded ? null : order.id)}>{expanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}</button>
-          {order.status === 'completed' && <button type="button" className="danger-text-button" aria-label={`ยกเลิกออเดอร์ ${order.orderNumber}`} disabled={cancellationPending} onClick={() => onCancel(order)}>ยกเลิก</button>}
+          {order.status === 'completed' && <button type="button" className="danger-text-button" aria-label={`ยกเลิกออเดอร์ ${order.orderNumber}`} disabled={cancellationPending} aria-busy={cancellationPending} onClick={() => onCancel(order)}>{cancellationPending ? 'กำลังยกเลิก...' : 'ยกเลิก'}</button>}
         </div>
       </div>
       {expanded && <div id={detailId}><OrderDetails order={order} /></div>}

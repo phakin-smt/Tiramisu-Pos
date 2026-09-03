@@ -94,14 +94,20 @@ function showApplication() {
   document.getElementById('appShell').hidden = false;
 }
 
-function renderStoreOptions() {
+function renderStoreOptions(choosingId = null) {
   const container = document.getElementById('storeOptions');
   container.innerHTML = '';
   stores.forEach((store) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'store-option' + (store.id === currentStoreId ? ' is-current' : '');
-    button.innerHTML = `<strong>${store.name}</strong>` + (store.id === currentStoreId ? '<span>กำลังใช้อยู่</span>' : '');
+    // Switching reloads the page, which takes a moment. Say so on the button
+    // that was pressed rather than leaving the screen looking untouched.
+    const note = store.id === choosingId ? '<span>กำลังเปลี่ยน...</span>'
+      : store.id === currentStoreId ? '<span>กำลังใช้อยู่</span>' : '';
+    button.innerHTML = `<strong>${store.name}</strong>` + note;
+    button.disabled = choosingId !== null;
+    if (store.id === choosingId) button.setAttribute('aria-busy', 'true');
     button.addEventListener('click', () => chooseStore(store.id));
     container.appendChild(button);
   });
@@ -125,6 +131,8 @@ function showStorePicker(canCancel) {
  */
 async function chooseStore(storeId) {
   document.getElementById('storeError').textContent = '';
+  renderStoreOptions(storeId);
+  document.getElementById('storeCancelButton').disabled = true;
   try {
     const response = await window.fetch('/api/auth/select-store', {
       method: 'POST',
@@ -135,6 +143,8 @@ async function chooseStore(storeId) {
     window.location.reload();
   } catch (error) {
     document.getElementById('storeError').textContent = error.message || 'เลือกร้านไม่สำเร็จ';
+    renderStoreOptions();
+    document.getElementById('storeCancelButton').disabled = false;
   }
 }
 
@@ -174,13 +184,29 @@ async function loadStoreContext() {
   }
 }
 
+/**
+ * Every call the application makes, with a working banner on the ones that
+ * change something.
+ *
+ * Reads have their own placeholders on screen already; it is the writes that
+ * used to sit silent between the press and the toast. Doing it here covers each
+ * one -- saving a menu, adjusting stock, taking an order -- rather than relying
+ * on every call site to remember.
+ */
 async function apiFetch(url, options) {
-  const response = await window.fetch(url, options);
-  if (response.status === 401) {
-    showLogin('Session expired. Please log in again.');
-    throw new Error('Authentication required');
+  const method = (options && options.method) || 'GET';
+  const writing = method !== 'GET';
+  if (writing) setBusy(true, 'กำลังบันทึก...');
+  try {
+    const response = await window.fetch(url, options);
+    if (response.status === 401) {
+      showLogin('Session expired. Please log in again.');
+      throw new Error('Authentication required');
+    }
+    return response;
+  } finally {
+    if (writing) setBusy(false);
   }
-  return response;
 }
 
 async function checkAuthentication() {
@@ -209,7 +235,9 @@ async function login(event) {
   event.preventDefault();
   const button = document.getElementById('loginButton');
   const pin = document.getElementById('pinInput').value;
+  const buttonLabel = button.textContent;
   button.disabled = true;
+  button.textContent = 'กำลังเข้าสู่ระบบ...';
   document.getElementById('loginError').textContent = '';
   try {
     const response = await window.fetch('/api/auth/login', {
@@ -225,6 +253,7 @@ async function login(event) {
     document.getElementById('pinInput').select();
   } finally {
     button.disabled = false;
+    button.textContent = buttonLabel;
   }
 }
 
@@ -548,6 +577,33 @@ function renderTotals() {
   promoHint.hidden = !(showStoreHint || showBundleHint);
 }
 
+
+/**
+ * Runs an action with a visible "working" banner for as long as it takes.
+ *
+ * The toasts in this app only speak once a request has finished. A save that
+ * takes a second looked exactly like a button that did nothing, which invites a
+ * second press and a second order. The counter also guards against overlapping
+ * actions hiding the banner too early.
+ */
+let busyDepth = 0;
+
+function setBusy(active, message) {
+  busyDepth = Math.max(0, busyDepth + (active ? 1 : -1));
+  const banner = document.getElementById('busyBanner');
+  if (!banner) return;
+  if (busyDepth > 0 && message) banner.textContent = message;
+  banner.hidden = busyDepth === 0;
+}
+
+async function withBusy(message, action) {
+  setBusy(true, message);
+  try {
+    return await action();
+  } finally {
+    setBusy(false);
+  }
+}
 
 function showToast(message) {
   const toast = document.getElementById('toast');

@@ -17,7 +17,7 @@ export function ProductList({ products, pending, onEdit, onActive, onDelete }: P
       <div className="product-admin-icon" aria-hidden="true">{product.icon || '•'}</div>
       <div className="product-admin-info"><strong>{product.name}</strong><span>{product.code} · {product.category} · {formatCurrency(product.price)}</span><small>คงเหลือ {product.stockNow} · ขั้นต่ำ {product.minStock} · ต้นทุน {formatCurrency(product.cost)}</small></div>
       <label className="active-toggle"><input type="checkbox" aria-label={`เปิดขาย ${product.name}`} checked={product.active} disabled={pending} onChange={(event) => onActive(product, event.target.checked)} /><span>{product.active ? 'เปิดขาย' : 'พักขาย'}</span></label>
-      <div className="product-admin-actions"><button type="button" className="secondary-button" aria-label={`แก้ไข ${product.name}`} disabled={pending} onClick={() => onEdit(product)}>แก้ไข</button><button type="button" className="danger-text-button" aria-label={`ลบ ${product.name}`} disabled={pending} onClick={() => onDelete(product)}>ลบ</button></div>
+      <div className="product-admin-actions"><button type="button" className="secondary-button" aria-label={`แก้ไข ${product.name}`} disabled={pending} onClick={() => onEdit(product)}>แก้ไข</button><button type="button" className="danger-text-button" aria-label={`ลบ ${product.name}`} disabled={pending} aria-busy={pending} onClick={() => onDelete(product)}>{pending ? 'กำลังลบ...' : 'ลบ'}</button></div>
     </article>
   ))}</div>;
 }

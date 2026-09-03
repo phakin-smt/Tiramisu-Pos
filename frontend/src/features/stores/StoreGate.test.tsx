@@ -72,6 +72,29 @@ function renderTill() {
 }
 
 describe('store selection', () => {
+  it('says which store it is switching to while the request is in flight', async () => {
+    // Selecting a store is two round trips before the till reopens. Held here so
+    // the waiting state can be seen -- otherwise the press looks ignored.
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const base = mockTwoStores(null);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
+      if (String(input) === '/api/auth/select-store') await held;
+      return base(input, init);
+    }));
+
+    renderTill();
+    const pasta = await screen.findByRole('button', { name: /Pasta House/ });
+    fireEvent.click(pasta);
+
+    const busy = await screen.findByText('กำลังเปลี่ยน...');
+    expect(busy).toBeInTheDocument();
+    expect(pasta).toBeDisabled();
+
+    release?.();
+    await waitFor(() => expect(screen.queryByText('กำลังเปลี่ยน...')).not.toBeInTheDocument());
+  });
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
