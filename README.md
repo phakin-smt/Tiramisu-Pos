@@ -48,6 +48,7 @@
 ```text
 Tiramisu-Pos/
 ├── backend/                  # Flask API และทุกอย่างฝั่งเซิร์ฟเวอร์
+│   ├── __init__.py           # ผูก sys.path ให้ import ได้ทั้งแบบ package และ script
 │   ├── server.py             # Flask application, API routes และการเสิร์ฟทั้งสองแอป
 │   ├── database.py           # การเชื่อมต่อ SQLite/PostgreSQL และจุดอ้างอิง path ของโปรเจกต์
 │   ├── promptpay_qr.py       # สร้าง EMVCo payload สำหรับ QR พร้อมเพย์
@@ -78,6 +79,7 @@ Tiramisu-Pos/
 │   ├── app.js                # Logic ฝั่งหน้าเว็บ
 │   └── styles.css            # รูปแบบและ Responsive UI
 ├── requirements.txt          # Python dependencies
+├── pyproject.toml            # ประกาศ Flask entrypoint ให้ Vercel
 ├── .env.example              # ตัวอย่าง Environment Variables
 └── vercel.json               # การตั้งค่า Vercel
 ```
@@ -222,6 +224,15 @@ python backend/verify_supabase.py
 5. Redeploy หลังเพิ่มหรือแก้ Environment Variables
 
 สำหรับ Production ควรใช้ PostgreSQL/Supabase เพราะ filesystem ของ Vercel ไม่เหมาะกับการเก็บฐานข้อมูล SQLite แบบถาวร
+
+Vercel ใช้ Flask framework detection ในการหา application เอง ไม่ได้ใช้ `rewrites` เนื่องจาก `server.py` ไม่ได้อยู่ที่ root แล้ว จึงต้องประกาศ entrypoint ไว้ใน `pyproject.toml`:
+
+```toml
+[tool.vercel]
+entrypoint = "backend.server:app"
+```
+
+ห้ามใส่ `rewrites` ที่ชี้ไปยังไฟล์ Python เพราะ Vercel จะส่ง path ปลายทางเข้า Flask แทน path จริงที่ผู้ใช้เรียก ทำให้ทุก route ไม่ตรง
 
 ## การตรวจสอบระบบ
 
