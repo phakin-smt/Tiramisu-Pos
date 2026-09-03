@@ -64,6 +64,31 @@ def _ensure_default_store(connection):
     )
 
 
+# The rules the application used to hold as constants. The first store inherits
+# them so its pricing is unchanged; any store added later starts with none.
+PRICING_COLUMNS = (
+    ('bundle_unit_price', 'REAL'),
+    ('bundle_quantity', 'INTEGER'),
+    ('bundle_price', 'REAL'),
+    ('wholesale_category', 'TEXT'),
+    ('wholesale_discount', 'REAL'),
+)
+DEFAULT_STORE_PRICING = (69, 3, 200, 'Tiramisu', 9)
+
+
+def _ensure_pricing_columns(connection):
+    existing = _columns(connection, 'stores')
+    for name, kind in PRICING_COLUMNS:
+        if name not in existing:
+            connection.execute('ALTER TABLE stores ADD COLUMN {} {}'.format(name, kind))
+    connection.execute(
+        'UPDATE stores SET bundle_unit_price=?, bundle_quantity=?, bundle_price=?,'
+        ' wholesale_category=?, wholesale_discount=? '
+        'WHERE id=? AND bundle_unit_price IS NULL AND wholesale_category IS NULL',
+        DEFAULT_STORE_PRICING + (DEFAULT_STORE_ID,),
+    )
+
+
 def _ensure_store_indexes(connection):
     for statement in STORE_INDEXES:
         connection.execute(statement)
@@ -99,6 +124,7 @@ def apply_store_migration(connection, schema_sql):
     if not _table_exists(connection, 'stores'):
         return
     _ensure_default_store(connection)
+    _ensure_pricing_columns(connection)
 
     outstanding = [table for table in REBUILD_TABLES
                    if _table_exists(connection, table) and 'store_id' not in _columns(connection, table)]

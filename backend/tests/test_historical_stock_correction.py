@@ -26,10 +26,10 @@ class HistoricalStockCorrectionTests(PosApiTestCase):
         start, end = server.local_day_bounds(correction_date)
         self.assertGreaterEqual(str(movement['created_at']), str(start))
         self.assertLess(str(movement['created_at']), str(end))
-        self.assertEqual(server.stock_data(previous_date)[0]['stockNow'], 8)
-        corrected = server.stock_data(correction_date)[0]
+        self.assertEqual(server.stock_data(1, previous_date)[0]['stockNow'], 8)
+        corrected = server.stock_data(1, correction_date)[0]
         self.assertEqual(corrected['stockNow'], 5)
-        self.assertEqual(server.stock_data(following_date)[0]['stockNow'], 5)
+        self.assertEqual(server.stock_data(1, following_date)[0]['stockNow'], 5)
         self.assertEqual((corrected['prepared'], corrected['sold'], corrected['giveaway'], corrected['waste']), (0, 0, 0, 0))
 
     def test_historical_increase_updates_current_stock(self):
