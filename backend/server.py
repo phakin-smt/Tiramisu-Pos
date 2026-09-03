@@ -180,7 +180,7 @@ def update_cash_day():
  report_date=bangkok_today().isoformat()
  with transaction() as (_,cursor):
   execute(cursor,"""INSERT INTO cash_days (report_date,opening_float) VALUES (?,?)
-   ON CONFLICT(report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(report_date,number(amount)))
+   ON CONFLICT(store_id,report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(report_date,number(amount)))
  return jsonify(date=report_date,openingFloat=number(amount))
 
 def apply_due_stock_plans(cursor,today):
