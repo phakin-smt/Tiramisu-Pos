@@ -53,6 +53,30 @@ async function readCatalogSnapshot(page: Page) {
   });
 }
 
+async function readStoredPhotos(page: Page) {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('BaannoiPOS');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      if (!database.objectStoreNames.contains('productImages')) return null;
+      const rows = await new Promise<Array<{ productId: number; storeId: number; version: string; contentType: string; bytes: ArrayBuffer }>>((resolve, reject) => {
+        const request = database.transaction('productImages').objectStore('productImages').getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return rows.map((row) => ({
+        productId: row.productId, storeId: row.storeId,
+        version: row.version, contentType: row.contentType, byteLength: row.bytes.byteLength,
+      }));
+    } finally {
+      database.close();
+    }
+  });
+}
+
 test('installed shell reopens offline without caching API responses', async ({ context, page }) => {
   const offlineOrderRequests: string[] = [];
   const replayRequests: string[] = [];
@@ -90,7 +114,7 @@ test('installed shell reopens offline without caching API responses', async ({ c
   if (!catalogSnapshot) throw new Error('Confirmed catalog snapshot was not found');
   expect(catalogSnapshot.productNames).toContain('E2E Original');
   expect(catalogSnapshot.lastSuccessfulCatalogSyncAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-  expect(catalogSnapshot.schemaVersion).toBe(4);
+  expect(catalogSnapshot.schemaVersion).toBe(5);
   expect(catalogSnapshot.authorization?.enabledAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   expect(catalogSnapshot.authorization?.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   expect(catalogSnapshot.paymentConfig).toMatchObject({
@@ -98,6 +122,15 @@ test('installed shell reopens offline without caching API responses', async ({ c
     version: 1,
     provisionedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
   });
+
+  // The menu with a photo shows it, and the till keeps a copy of its own.
+  const photographedCard = page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' });
+  await expect(photographedCard.locator('img')).toBeVisible();
+  await expect.poll(async () => (await readStoredPhotos(page))?.length ?? 0).toBeGreaterThan(0);
+  const storedPhotos = await readStoredPhotos(page);
+  expect(storedPhotos).toHaveLength(1);
+  expect(storedPhotos?.[0]).toMatchObject({ storeId: 1, contentType: 'image/webp' });
+  expect(storedPhotos?.[0].byteLength).toBeGreaterThan(0);
 
   const onlineApiStatus = await page.evaluate(async () => (await fetch('/api/health')).status);
   expect(onlineApiStatus).toBe(200);
@@ -125,6 +158,17 @@ test('installed shell reopens offline without caching API responses', async ({ c
   await expect(page.getByRole('heading', { name: 'ขายสินค้า' })).toBeVisible();
   await expect(page.getByText('ใช้ข้อมูลออฟไลน์ล่าสุด')).toBeVisible();
   await expect(page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' })).toBeVisible();
+
+  // The photo is still on the card, drawn from what the till kept rather than
+  // from a server it cannot reach.
+  const offlinePhoto = page.getByRole('button', { name: 'เพิ่ม E2E Original ลงตะกร้า' }).locator('img');
+  await expect(offlinePhoto).toBeVisible();
+  expect(await offlinePhoto.getAttribute('src')).toMatch(/^blob:/);
+  expect(await offlinePhoto.evaluate((image: HTMLImageElement) => new Promise((done) => {
+    if (image.complete) return done(image.naturalWidth > 0);
+    image.addEventListener('load', () => done(image.naturalWidth > 0), { once: true });
+    image.addEventListener('error', () => done(false), { once: true });
+  }))).toBe(true);
 
   await page.getByRole('tab', { name: 'E2E Stock' }).click();
   await expect(page.getByRole('button', { name: 'เพิ่ม E2E Inactive Stocked ลงตะกร้า' })).toBeVisible();

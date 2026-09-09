@@ -236,7 +236,7 @@ describe('PromttakPOS migrations', () => {
     const upgraded = await openPromttakPosDatabase();
     expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect([...upgraded.objectStoreNames]).toEqual([
-      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productSnapshot',
+      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productImages', 'productSnapshot',
     ]);
     upgraded.close();
     expect(await readConfirmedCatalogSnapshot(1)).toEqual({
@@ -318,7 +318,7 @@ describe('PromttakPOS migrations', () => {
     versionThree.close();
 
     const upgraded = await openPromttakPosDatabase();
-    expect(upgraded.version).toBe(4);
+    expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect([...upgraded.transaction('offlineOrders').store.indexNames].sort())
       .toEqual(['by-created-at', 'by-idempotency-key', 'by-sync-status']);
     expect(await upgraded.count('offlineOrders')).toBe(1);

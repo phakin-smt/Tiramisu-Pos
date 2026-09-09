@@ -36,6 +36,7 @@ import { useCheckout } from './useCheckout';
 import { useCloseDay } from './useCloseDay';
 import { useDailySummary } from './useDailySummary';
 import { useIsMobile } from './useIsMobile';
+import { useProductPhotos } from './useProductPhotos';
 import { useProducts } from './useProducts';
 import { usePromptPayQr } from './usePromptPayQr';
 
@@ -46,6 +47,7 @@ export function SellPage() {
   const { rules: storeRules, storeId } = useStore();
   const offlineAuthorization = useOfflineAuthorization();
   const productsQuery = useProducts(storeId);
+  const productPhotos = useProductPhotos(storeId, productsQuery.data);
   const localMode = productsQuery.unsyncedOfflineOrderCount > 0;
   const dailySummary = useDailySummary();
   const products = useMemo(() => (productsQuery.data ?? []).filter((product) => product.active || product.stock > 0), [productsQuery.data]);
@@ -269,7 +271,7 @@ export function SellPage() {
               <span>กรุณาเชื่อมต่ออินเทอร์เน็ตและเปิดหน้าขายอย่างน้อย 1 ครั้ง</span>
             </div>
           )}
-          {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} onAdd={(product) => updateCart(addToCart(cart, product))} />}
+          {productsQuery.data && <ProductGrid products={filteredProducts} cart={cart} photos={productPhotos} onAdd={(product) => updateCart(addToCart(cart, product))} />}
         </div>
       </section>
       <Cart products={products} cart={cart} totals={totals} rules={storeRules} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} customerType={customerType} paymentMethod={paymentMethod} mobile={mobile} open={cartOpen} cashPaymentDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} promptPayDisabled={checkout.pending || cashPaymentOpen || promptPayOpen || (!isOnline && (offlineAuthorization.checking || !offlineAuthorization.authorized))} checkoutUnavailableMessages={!isOnline && !offlineAuthorization.checking && !offlineAuthorization.authorized ? [OFFLINE_AUTHORIZATION_REQUIRED_MESSAGE] : []} holdNotice={holdNotice} onClose={() => setCartOpen(false)} onClear={clearCart} onQuantityChange={(product: CatalogProduct, delta: number) => updateCart(changeQuantity(cart, product, delta))} onGiveawayChange={(productId, delta) => updateCart(changeGiveawayQuantity(cart, productId, delta))} onRemove={(productId) => updateCart(removeFromCart(cart, productId))} onDiscountChange={(value) => { if (!checkout.isLocked()) { setDiscountState(setManualDiscount(parseMoneyInput(value) ?? 0)); setValidationError(''); checkout.clearFeedback(); } }} onCustomerChange={(value) => { if (!checkout.isLocked()) setCustomerType(value); }} onPaymentActivate={activatePayment} onHold={() => setHoldNotice('พักออเดอร์แล้ว · รายการยังอยู่ในตะกร้านี้')} />
