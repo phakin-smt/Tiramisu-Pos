@@ -1,4 +1,4 @@
-import { openBaannoiPosDatabase, type OfflineOrder } from './database';
+import { openPromttakPosDatabase, type OfflineOrder } from './database';
 
 export const STOCK_REVIEW_HEADING = 'ต้องตรวจสอบสต็อก';
 export const STOCK_REVIEW_MESSAGE = 'Sync ออฟไลน์แล้ว แต่สต็อกบนระบบไม่พอ · กรุณาตรวจนับของจริงแล้วยืนยัน';
@@ -25,7 +25,7 @@ function unresolvedShortfalls(order: OfflineOrder) {
  * rather than double-counting or overwriting one another.
  */
 export async function getPendingStockReviews(storeId: number): Promise<StockReviewEntry[]> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
     const byProduct = new Map<number, StockReviewEntry>();
@@ -65,7 +65,7 @@ export async function resolveStockReview(
   productId: number,
   resolvedAt = new Date().toISOString(),
 ): Promise<number> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const transaction = database.transaction('offlineOrders', 'readwrite');
   try {
     const store = transaction.objectStore('offlineOrders');

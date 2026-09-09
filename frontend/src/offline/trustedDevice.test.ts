@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BAANNOI_POS_DATABASE_NAME, openBaannoiPosDatabase } from './database';
+import { PROMTTAK_POS_DATABASE_NAME, openPromttakPosDatabase } from './database';
 import {
   readOfflineAuthorization,
   refreshOfflineAuthorization,
@@ -20,12 +20,12 @@ import { replaceConfirmedCatalogSnapshot } from './catalogSnapshot';
 const PIN = '2468';
 const merchantAccountInfo = '0016A00000067701011101130066801234567';
 
-beforeEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
-afterEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
+beforeEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
+afterEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
 
 /** Every value this device keeps on disk, flattened for inspection. */
 async function dumpEverythingStored(): Promise<string> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const dump: Record<string, unknown> = {};
     for (const store of [...database.objectStoreNames]) {
@@ -107,7 +107,7 @@ describe('trusted device authorization', () => {
 
   it('keeps the authorization record to the minimum needed to authorize offline use', async () => {
     await refreshOfflineAuthorization();
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     const record = await database.get('metadata', 'offlineAuthorization');
     database.close();
 
@@ -136,7 +136,7 @@ describe('trusted device authorization', () => {
 
     await revokeOfflineAuthorization();
 
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     expect(await database.count('offlineOrders')).toBe(1);
     database.close();
   });

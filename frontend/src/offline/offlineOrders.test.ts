@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogProduct } from '../types/products';
 import { replaceConfirmedCatalogSnapshot, readConfirmedCatalogSnapshot } from './catalogSnapshot';
 import {
-  BAANNOI_POS_DATABASE_NAME,
-  BAANNOI_POS_SCHEMA_VERSION,
-  openBaannoiPosDatabase,
+  PROMTTAK_POS_DATABASE_NAME,
+  PROMTTAK_POS_SCHEMA_VERSION,
+  openPromttakPosDatabase,
 } from './database';
 import { refreshOfflineAuthorization } from './offlineAuthorization';
 import {
@@ -52,14 +52,14 @@ function sale(overrides: Partial<Parameters<typeof recordOfflineCashSale>[0]> = 
 
 describe('offline cash order transaction', () => {
   beforeEach(async () => {
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
     await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
   });
 
   it('persists immutable totals, line snapshots, tender and split stock movements atomically', async () => {
@@ -117,7 +117,7 @@ describe('offline cash order transaction', () => {
     if (enabledAt) {
       await refreshOfflineAuthorization(enabledAt);
     } else {
-      const database = await openBaannoiPosDatabase();
+      const database = await openPromttakPosDatabase();
       await database.delete('metadata', 'offlineAuthorization');
       database.close();
     }
@@ -146,7 +146,7 @@ describe('offline cash order transaction', () => {
     await expect(sale()).rejects.toThrow('injected write failure');
     expect((await readConfirmedCatalogSnapshot(1))?.products[0].stock).toBe(10);
     expect(await getPendingOfflineOrderCount(1)).toBe(0);
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     expect(await database.count('offlineOrderItems')).toBe(0);
     expect(await database.count('offlineStockMovements')).toBe(0);
     database.close();
@@ -218,12 +218,12 @@ describe('offline cash order transaction', () => {
   });
 });
 
-describe('BaannoiPOS migrations', () => {
-  beforeEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
-  afterEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
+describe('PromttakPOS migrations', () => {
+  beforeEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
+  afterEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
 
   it('preserves the Phase 2 catalog and metadata while adding later stores', async () => {
-    const versionOne = await openDB(BAANNOI_POS_DATABASE_NAME, 1, {
+    const versionOne = await openDB(PROMTTAK_POS_DATABASE_NAME, 1, {
       upgrade(database) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
         database.createObjectStore('metadata', { keyPath: 'key' });
@@ -233,8 +233,8 @@ describe('BaannoiPOS migrations', () => {
     await versionOne.put('metadata', { key: 'catalog', lastSuccessfulCatalogSyncAt: '2026-08-20T03:00:00.000Z', schemaVersion: 1 });
     versionOne.close();
 
-    const upgraded = await openBaannoiPosDatabase();
-    expect(upgraded.version).toBe(BAANNOI_POS_SCHEMA_VERSION);
+    const upgraded = await openPromttakPosDatabase();
+    expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect([...upgraded.objectStoreNames]).toEqual([
       'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productSnapshot',
     ]);
@@ -246,7 +246,7 @@ describe('BaannoiPOS migrations', () => {
   });
 
   it('upgrades v2 to the current schema without changing existing catalog or offline transaction data', async () => {
-    const versionTwo = await openDB(BAANNOI_POS_DATABASE_NAME, 2, {
+    const versionTwo = await openDB(PROMTTAK_POS_DATABASE_NAME, 2, {
       upgrade(database) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
         database.createObjectStore('metadata', { keyPath: 'key' });
@@ -278,8 +278,8 @@ describe('BaannoiPOS migrations', () => {
     });
     versionTwo.close();
 
-    const upgraded = await openBaannoiPosDatabase();
-    expect(upgraded.version).toBe(BAANNOI_POS_SCHEMA_VERSION);
+    const upgraded = await openPromttakPosDatabase();
+    expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect(upgraded.objectStoreNames.contains('offlinePaymentConfig')).toBe(true);
     expect(await upgraded.count('offlineOrders')).toBe(1);
     expect(await upgraded.count('offlineOrderItems')).toBe(1);
@@ -289,7 +289,7 @@ describe('BaannoiPOS migrations', () => {
   });
 
   it('upgrades v3 to v4 by indexing idempotency keys without disturbing pre-v4 orders', async () => {
-    const versionThree = await openDB(BAANNOI_POS_DATABASE_NAME, 3, {
+    const versionThree = await openDB(PROMTTAK_POS_DATABASE_NAME, 3, {
       upgrade(database) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
         database.createObjectStore('metadata', { keyPath: 'key' });
@@ -317,7 +317,7 @@ describe('BaannoiPOS migrations', () => {
     });
     versionThree.close();
 
-    const upgraded = await openBaannoiPosDatabase();
+    const upgraded = await openPromttakPosDatabase();
     expect(upgraded.version).toBe(4);
     expect([...upgraded.transaction('offlineOrders').store.indexNames].sort())
       .toEqual(['by-created-at', 'by-idempotency-key', 'by-sync-status']);
@@ -333,7 +333,7 @@ describe('BaannoiPOS migrations', () => {
   });
 
   it('keeps two legacy keyless orders valid under the unique idempotency index', async () => {
-    const versionThree = await openDB(BAANNOI_POS_DATABASE_NAME, 3, {
+    const versionThree = await openDB(PROMTTAK_POS_DATABASE_NAME, 3, {
       upgrade(database) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });
         database.createObjectStore('metadata', { keyPath: 'key' });
@@ -357,7 +357,7 @@ describe('BaannoiPOS migrations', () => {
     }
     versionThree.close();
 
-    const upgraded = await openBaannoiPosDatabase();
+    const upgraded = await openPromttakPosDatabase();
     expect(await upgraded.count('offlineOrders')).toBe(2);
     upgraded.close();
     expect(await getPendingOfflineOrderCount(1)).toBe(2);

@@ -21,7 +21,7 @@ function Brand() {
         : <div className="brand-mark" aria-hidden="true">BP</div>}
       <div>
         <div className="brand-title-row">
-          <strong>Baannoi-POS</strong>
+          <strong>Promttak-POS</strong>
           <span className="version-label">v1.1.0</span>
         </div>
         {/* Which shop this till is ringing up for, kept in sight rather than

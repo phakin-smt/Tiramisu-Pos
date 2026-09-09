@@ -1,7 +1,7 @@
 import {
-  BAANNOI_POS_SCHEMA_VERSION,
+  PROMTTAK_POS_SCHEMA_VERSION,
   OFFLINE_AUTHORIZATION_KEY,
-  openBaannoiPosDatabase,
+  openPromttakPosDatabase,
   type OfflineAuthorizationRecord,
 } from './database';
 
@@ -17,12 +17,12 @@ export interface OfflineAuthorizationState {
 export async function refreshOfflineAuthorization(
   now = new Date(),
 ): Promise<OfflineAuthorizationRecord> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const record: OfflineAuthorizationRecord = {
     key: OFFLINE_AUTHORIZATION_KEY,
     enabledAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + OFFLINE_AUTHORIZATION_VALIDITY_MS).toISOString(),
-    schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+    schemaVersion: PROMTTAK_POS_SCHEMA_VERSION,
   };
   try {
     await database.put('metadata', record);
@@ -33,7 +33,7 @@ export async function refreshOfflineAuthorization(
 }
 
 export async function readOfflineAuthorization(now = new Date()): Promise<OfflineAuthorizationState> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const value = await database.get('metadata', OFFLINE_AUTHORIZATION_KEY);
     const record = value?.key === OFFLINE_AUTHORIZATION_KEY ? value : null;
@@ -54,7 +54,7 @@ export async function readOfflineAuthorization(now = new Date()): Promise<Offlin
  * seven-day window, so the marker is deleted rather than left to expire.
  */
 export async function revokeOfflineAuthorization(): Promise<void> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     await database.delete('metadata', OFFLINE_AUTHORIZATION_KEY);
   } finally {

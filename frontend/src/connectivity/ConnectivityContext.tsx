@@ -18,7 +18,7 @@ export const BACKEND_RECOVERY_PROBE_INTERVAL_MS = 30_000;
 export interface ConnectivitySnapshot {
   /** The browser reports a network interface. Says nothing about the server. */
   isOnline: boolean;
-  /** The Baannoi POS backend actually answered the last time we heard from it. */
+  /** The Promttak POS backend actually answered the last time we heard from it. */
   isBackendReachable: boolean;
   /** Both of the above: the authoritative signal for choosing Cloud vs Local. */
   isBackendOnline: boolean;

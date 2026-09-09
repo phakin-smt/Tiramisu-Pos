@@ -1,14 +1,14 @@
 import type { CatalogProduct } from '../types/products';
 import {
-  BAANNOI_POS_DATABASE_NAME,
-  BAANNOI_POS_SCHEMA_VERSION,
+  PROMTTAK_POS_DATABASE_NAME,
+  PROMTTAK_POS_SCHEMA_VERSION,
   CATALOG_METADATA_KEY,
-  openBaannoiPosDatabase,
+  openPromttakPosDatabase,
   PRODUCT_SNAPSHOT_KEY,
   type CatalogSnapshotMetadata,
 } from './database';
 
-export { BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION } from './database';
+export { PROMTTAK_POS_DATABASE_NAME, PROMTTAK_POS_SCHEMA_VERSION } from './database';
 export type { CatalogSnapshotMetadata } from './database';
 
 export interface ConfirmedCatalogSnapshot {
@@ -21,11 +21,11 @@ export async function replaceConfirmedCatalogSnapshot(
   storeId: number,
   syncedAt = new Date().toISOString(),
 ): Promise<CatalogSnapshotMetadata> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const metadata: CatalogSnapshotMetadata = {
     key: CATALOG_METADATA_KEY,
     lastSuccessfulCatalogSyncAt: syncedAt,
-    schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+    schemaVersion: PROMTTAK_POS_SCHEMA_VERSION,
   };
 
   try {
@@ -50,11 +50,11 @@ export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
   storeId: number,
   syncedAt = new Date().toISOString(),
 ): Promise<CatalogSnapshotMetadata | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const metadata: CatalogSnapshotMetadata = {
     key: CATALOG_METADATA_KEY,
     lastSuccessfulCatalogSyncAt: syncedAt,
-    schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+    schemaVersion: PROMTTAK_POS_SCHEMA_VERSION,
   };
   const transaction = database.transaction(
     ['offlineOrders', 'productSnapshot', 'metadata'],
@@ -94,7 +94,7 @@ export async function replaceConfirmedCatalogSnapshotIfNoPendingOrders(
  * first store's, since that was the only one.
  */
 export async function readConfirmedCatalogSnapshot(storeId: number): Promise<ConfirmedCatalogSnapshot | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const transaction = database.transaction(['productSnapshot', 'metadata'], 'readonly');
     const [snapshot, metadata] = await Promise.all([

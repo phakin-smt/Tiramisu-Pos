@@ -6,8 +6,8 @@ import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  BAANNOI_POS_DATABASE_NAME,
-  openBaannoiPosDatabase,
+  PROMTTAK_POS_DATABASE_NAME,
+  openPromttakPosDatabase,
   type OfflineOrder,
 } from '../../offline/database';
 import { getPendingStockReviews } from '../../offline/stockReconciliation';
@@ -16,7 +16,7 @@ import { StockReconciliationPanel } from './StockReconciliationPanel';
 const tiramisu = { productId: 1, productName: 'ทีรามิสุ Original', shortfall: 2 };
 
 async function seedReview(localOrderId: string, shortfalls = [tiramisu], createdAt = '2026-08-21T07:35:00.000Z') {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   await database.put('offlineOrders', {
     localOrderId,
     localOrderNumber: `OFF-${localOrderId}`,
@@ -60,11 +60,11 @@ const confirmButton = () => screen.getByRole('button', { name: /ยืนยั�
 const reconcileCalls = (mock: ReturnType<typeof vi.fn>) => mock.mock.calls
   .filter(([url]) => url === '/api/stock/reconcile');
 
-beforeEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
+beforeEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
 afterEach(async () => {
   cleanup();
   vi.unstubAllGlobals();
-  await deleteDB(BAANNOI_POS_DATABASE_NAME);
+  await deleteDB(PROMTTAK_POS_DATABASE_NAME);
 });
 
 describe('stock reconciliation panel', () => {

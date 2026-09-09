@@ -1,7 +1,7 @@
 import type { PricingRules } from '../domain/promotion';
 import {
   PRICING_RULES_KEY,
-  openBaannoiPosDatabase,
+  openPromttakPosDatabase,
   type PricingRulesRecord,
 } from './database';
 
@@ -35,7 +35,7 @@ export async function saveSelectedStore(
     wholesale: store.rules.wholesale,
     savedAt,
   };
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     await database.put('metadata', record);
   } finally {
@@ -44,7 +44,7 @@ export async function saveSelectedStore(
 }
 
 export async function readSelectedStore(): Promise<CachedStore | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const value = await database.get('metadata', PRICING_RULES_KEY);
     if (!value || value.key !== PRICING_RULES_KEY) return null;
@@ -61,7 +61,7 @@ export async function readSelectedStore(): Promise<CachedStore | null> {
 
 /** Signing out must not leave the next person selling under this store's terms. */
 export async function clearSelectedStore(): Promise<void> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     await database.delete('metadata', PRICING_RULES_KEY);
   } finally {

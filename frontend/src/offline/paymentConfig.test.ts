@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { BAANNOI_POS_DATABASE_NAME, openBaannoiPosDatabase } from './database';
+import { PROMTTAK_POS_DATABASE_NAME, openPromttakPosDatabase } from './database';
 import {
   provisionOfflinePaymentConfig,
   readOfflinePaymentConfig,
@@ -15,10 +15,10 @@ function json(body: unknown): Response {
 }
 
 describe('offline PromptPay configuration', () => {
-  beforeEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
+  beforeEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
   afterEach(async () => {
     vi.unstubAllGlobals();
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
   });
 
   it('stores only confirmed normalized merchant data and survives a later read', async () => {
@@ -45,7 +45,7 @@ describe('offline PromptPay configuration', () => {
 
   it('uses the dedicated IndexedDB store rather than metadata or localStorage', async () => {
     await replaceOfflinePaymentConfig('0016A00000067701011101130066801234567', 1);
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     expect(await database.count('offlinePaymentConfig')).toBe(1);
     expect(await database.get('metadata', 'promptpay')).toBeUndefined();
     database.close();

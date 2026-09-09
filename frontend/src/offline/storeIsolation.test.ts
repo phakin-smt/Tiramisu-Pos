@@ -9,7 +9,7 @@ import {
   getUnsyncedOfflineOrders,
   recordOfflineSale,
 } from './offlineOrders';
-import { openBaannoiPosDatabase } from './database';
+import { openPromttakPosDatabase } from './database';
 import { syncPendingOfflineOrders } from './syncOfflineOrders';
 import type { CatalogProduct } from '../types/products';
 import type { CreateOrderRequest } from '../types/checkout';
@@ -93,7 +93,7 @@ describe('offline sales stay with the store that made them', () => {
     const saved = await sell(DESSERT, 1, 'key-legacy');
 
     // Strip the marker the way a pre-upgrade record would have been written.
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     const { storeId: _dropped, ...legacy } = saved;
     await database.put('offlineOrders', legacy);
     database.close();

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConnectivityProvider } from '../../connectivity/ConnectivityContext';
 import {
-  BAANNOI_POS_DATABASE_NAME,
+  PROMTTAK_POS_DATABASE_NAME,
   readConfirmedCatalogSnapshot,
   replaceConfirmedCatalogSnapshot,
 } from '../../offline/catalogSnapshot';
@@ -38,7 +38,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 describe('useProducts offline snapshot behavior', () => {
   beforeEach(async () => {
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
     setNavigatorOnline(true);
   });
 
@@ -46,7 +46,7 @@ describe('useProducts offline snapshot behavior', () => {
     cleanup();
     vi.unstubAllGlobals();
     setNavigatorOnline(true);
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
   });
 
   it('writes the complete snapshot only after a successful API response', async () => {

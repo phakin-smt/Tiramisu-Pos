@@ -6,8 +6,8 @@ import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  BAANNOI_POS_DATABASE_NAME,
-  openBaannoiPosDatabase,
+  PROMTTAK_POS_DATABASE_NAME,
+  openPromttakPosDatabase,
   type OfflineOrder,
 } from '../../offline/database';
 import {
@@ -17,7 +17,7 @@ import {
 import { OfflineOrderQueuePanel } from './OfflineOrderQueuePanel';
 
 async function seedOrder(overrides: Partial<OfflineOrder> & { localOrderId: string }) {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   await database.put('offlineOrders', {
     localOrderNumber: `OFF-20260828-103522-${overrides.localOrderId.slice(-4).toUpperCase()}`,
     createdAt: '2026-08-28T03:35:22.000Z',
@@ -36,7 +36,7 @@ async function seedOrder(overrides: Partial<OfflineOrder> & { localOrderId: stri
 }
 
 async function readOrder(localOrderId: string) {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     return await database.get('offlineOrders', localOrderId);
   } finally {
@@ -49,10 +49,10 @@ function renderQueue(onRetry = vi.fn(async () => {}), overrides: Partial<Paramet
   return onRetry;
 }
 
-beforeEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
+beforeEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
 afterEach(async () => {
   cleanup();
-  await deleteDB(BAANNOI_POS_DATABASE_NAME);
+  await deleteDB(PROMTTAK_POS_DATABASE_NAME);
 });
 
 describe('unsynced offline order queue', () => {
@@ -174,7 +174,7 @@ describe('retryFailedOfflineOrder', () => {
     const order = await readOrder('a3f1');
     expect(order?.syncStatus).toBe('pending');
     expect(order?.idempotencyKey).toBe('key-a3f1');
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     expect(await database.count('offlineOrders')).toBe(1);
     database.close();
   });
