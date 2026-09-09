@@ -37,7 +37,7 @@ import database  # noqa: E402
 database.init_schema()
 with database.transaction() as (_, cursor):
     # The first store wears a mark, so the tests can tell a served logo from a
-    # 404 -- Flask only exposes a fixed set of files under public/.
+    # 404 -- Flask only exposes a fixed set of files under vanilla/.
     database.execute(cursor, "UPDATE stores SET logo_url='/logos/promtak.png' WHERE id=1")
 
 products = [

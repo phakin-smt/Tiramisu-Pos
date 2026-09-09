@@ -67,9 +67,9 @@ class ReactStagingRouteTests(unittest.TestCase):
         stylesheet = self.client.get("/styles.css")
         try:
             self.assertEqual(root.status_code, 200)
-            self.assertEqual(root.data, (server.PUBLIC_ROOT / "index.html").read_bytes())
-            self.assertEqual(app_script.data, (server.PUBLIC_ROOT / "app.js").read_bytes())
-            self.assertEqual(stylesheet.data, (server.PUBLIC_ROOT / "styles.css").read_bytes())
+            self.assertEqual(root.data, (server.VANILLA_ROOT / "index.html").read_bytes())
+            self.assertEqual(app_script.data, (server.VANILLA_ROOT / "app.js").read_bytes())
+            self.assertEqual(stylesheet.data, (server.VANILLA_ROOT / "styles.css").read_bytes())
         finally:
             root.close()
             app_script.close()
