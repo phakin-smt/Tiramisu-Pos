@@ -2798,19 +2798,26 @@ input {
     font-size: 20px;
   }
 
-  .brand-name {
-    font-size: 17px;
-  }
-
-  .app-version {
-    border-color: var(--line);
-    color: var(--text-soft);
-    background: var(--panel-soft);
-  }
-
-  .brand-subtitle,
   .nav-label {
     display: none;
+  }
+
+  /* The header fits one line of text. Which shop this till is ringing up
+     matters more than the app's own name -- the mark already says the app --
+     and it is the question the switch button beside it answers. */
+  .brand-name {
+    display: none;
+  }
+
+  .brand-subtitle {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-top: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    opacity: 1;
   }
 
   .nav {
@@ -2881,8 +2888,75 @@ input {
     line-height: 1;
   }
 
-  .sidebar-card {
+  /* The sidebar card is the only home of "change store" and "sign out", so on a
+     phone it rides along in the header strip as a row of buttons instead of
+     disappearing with the panel that held it on desktop. */
+  .sidebar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The shop's mark identifies the till at a glance, so it keeps its size and
+     the long name gives way instead. */
+  .brand-icon {
+    flex: 0 0 auto;
+  }
+
+  /* Every wrapper between .brand and the text has to agree to shrink, or the
+     name keeps its full width and slides under the buttons instead of
+     ellipsising. */
+  .brand > div,
+  .brand-title-row {
+    min-width: 0;
+  }
+
+
+  /* Two buttons need the room more than a version chip does; the login screen
+     still shows the version. */
+  .app-version {
     display: none;
+  }
+
+  .sidebar-card {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .sidebar-card .card-title,
+  .sidebar-card .status-row,
+  .sidebar-card .date-row {
+    display: none;
+  }
+
+  /* The header strip is cream, not the dark sidebar these buttons were drawn
+     for, so they take the light palette here. :not([hidden]) keeps the store
+     switch away from shops that have nowhere to switch to. */
+  #storeSwitchButton:not([hidden]),
+  .logout-button {
+    width: auto;
+    min-height: 40px;
+    margin-top: 0;
+    padding: 9px 13px;
+    font-size: 12px;
+    white-space: nowrap;
+    border: 1px solid var(--line);
+    color: var(--text);
+    background: var(--panel-soft);
   }
 
   .main-content {
@@ -3385,9 +3459,16 @@ input {
     overflow: hidden;
   }
 
+  /* Brand and the card's buttons share the top line, with the nav strip
+     underneath spanning both -- the card holds the only way to change store or
+     sign out, so it cannot drop out with the panel the way it used to. */
   .sidebar {
     position: relative;
     z-index: 40;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
     flex: 0 0 auto;
     width: 100%;
     height: auto;
@@ -3395,7 +3476,46 @@ input {
     overflow: visible;
   }
 
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .sidebar-card {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .sidebar-card .card-title,
+  .sidebar-card .status-row,
+  .sidebar-card .date-row {
+    display: none;
+  }
+
+  /* This strip keeps the dark gradient, so the buttons keep the light-on-dark
+     styling they were drawn with; only their block layout has to go. */
+  #storeSwitchButton:not([hidden]),
+  .logout-button {
+    width: auto;
+    min-height: 40px;
+    margin-top: 0;
+    padding: 9px 13px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
   .nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
     display: flex;
     gap: 8px;
     margin-top: 14px;
@@ -3404,8 +3524,7 @@ input {
     scrollbar-width: thin;
   }
 
-  .nav-label,
-  .sidebar-card {
+  .nav-label {
     display: none;
   }
 
