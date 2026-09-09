@@ -7,7 +7,7 @@ from migrations import apply_store_migration
 
 
 BACKEND_ROOT = Path(__file__).resolve().parent
-# ROOT stays the project root: server.py serves public/ and frontend/dist from
+# ROOT stays the project root: server.py serves vanilla/ and frontend/dist from
 # it, and the local SQLite file lives beside them rather than inside backend/.
 ROOT = BACKEND_ROOT.parent
 SQLITE_PATH = Path(os.getenv("SQLITE_PATH", str(ROOT / "pos.db")))

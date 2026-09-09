@@ -112,10 +112,10 @@ def logo(args):
             return 1
         if not args.url.startswith(LOGO_PREFIX):
             print('Expected a path beginning "{}", got "{}".'.format(LOGO_PREFIX, args.url), file=sys.stderr)
-            print('The file belongs in public/logos, and the value is what the browser asks for.',
+            print('The file belongs in vanilla/logos, and the value is what the browser asks for.',
                   file=sys.stderr)
             return 1
-        served = Path(__file__).resolve().parent.parent / 'public' / 'logos' / args.url[len(LOGO_PREFIX):]
+        served = Path(__file__).resolve().parent.parent / 'vanilla' / 'logos' / args.url[len(LOGO_PREFIX):]
         if not served.is_file():
             print('No such file: {}'.format(served), file=sys.stderr)
             return 1

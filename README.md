@@ -36,7 +36,7 @@
 **Frontend**
 
 - แอปหลัก: React 19 + TypeScript + Vite build เป็น PWA (`vite-plugin-pwa`) และใช้ IndexedDB ผ่าน `idb` สำหรับการขายออฟไลน์
-- แอปเดิม: HTML, CSS และ Vanilla JavaScript ที่ Flask เสิร์ฟตรงจาก `public/`
+- แอปเดิม: HTML, CSS และ Vanilla JavaScript ที่ Flask เสิร์ฟตรงจาก `vanilla/`
 - เทสต์: Vitest + Testing Library และ Playwright สำหรับ E2E
 
 **Deploy**
@@ -74,7 +74,7 @@ Tiramisu-Pos/
 │   ├── public/               # ไอคอน PWA
 │   ├── vite.config.ts        # Base path /next/ และ dev proxy ไป Flask
 │   └── package.json          # สคริปต์ dev / build / test
-├── public/                   # แอปเดิม Vanilla JS เสิร์ฟที่ /
+├── vanilla/                  # แอปเดิม Vanilla JS เสิร์ฟที่ /
 │   ├── index.html            # โครงสร้างหน้าเว็บ
 │   ├── app.js                # Logic ฝั่งหน้าเว็บ
 │   └── styles.css            # รูปแบบและ Responsive UI
@@ -91,7 +91,7 @@ Flask ตัวเดียวให้บริการหน้าเว็�
 | | แอปเดิม | แอปหลัก |
 |---|---|---|
 | URL | `/` | `/next/` |
-| โค้ด | `public/` | `frontend/src/` |
+| โค้ด | `vanilla/` | `frontend/src/` |
 | เทคโนโลยี | Vanilla JavaScript | React 19 + TypeScript |
 | ขั้นตอน Build | ไม่มี — Flask เสิร์ฟไฟล์ตรง | ต้อง `npm run build` ให้ได้ `frontend/dist` ก่อน |
 | ใช้งานออฟไลน์ | ไม่ได้ | ได้ ผ่าน Service Worker และ IndexedDB |
@@ -299,7 +299,7 @@ Playwright จะสร้างฐานข้อมูล SQLite ของต�
 ตรวจ syntax ของแอปเดิม:
 
 ```powershell
-node --check public/app.js
+node --check vanilla/app.js
 ```
 
 ### ระบบโดยรวม

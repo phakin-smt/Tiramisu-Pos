@@ -19,7 +19,7 @@ from database import ROOT, connect_db, execute, init_schema, is_postgres, transa
 from promptpay_qr import PromptPayError, generate_promptpay_payload, promptpay_merchant_account_info
 
 app = Flask(__name__, static_folder=None)
-PUBLIC_ROOT = ROOT / 'public'
+VANILLA_ROOT = ROOT / 'vanilla'
 REACT_ROOT = ROOT / 'frontend' / 'dist'
 BANGKOK_TZ = ZoneInfo(os.getenv('APP_TIMEZONE', 'Asia/Bangkok'))
 app.secret_key = os.getenv('SECRET_KEY') or secrets.token_hex(32)
@@ -667,7 +667,7 @@ def close_day():
  return jsonify(date=report_date,orderCount=len(orders),subtotalAll=sum(o['subtotal'] for o in orders),discountAll=sum(o['discount'] for o in orders),cashTotal=cash,transferTotal=transfer,totalRevenue=cash+transfer,costTotal=cost_total,netProfit=(cash+transfer)-cost_total,openingFloat=opening_float,expectedCash=(opening_float+cash) if opening_float is not None else None,orders=orders,menuSummary=menus)
 
 @app.get('/')
-def index(): return send_from_directory(PUBLIC_ROOT,'index.html')
+def index(): return send_from_directory(VANILLA_ROOT,'index.html')
 
 @app.get('/next')
 def react_index_redirect(): return redirect('/next/',code=308)
@@ -716,7 +716,7 @@ def offline_payment_config():
 @app.get('/logos/<path:filename>')
 def store_logo(filename):
  """A shop's own mark. Public on purpose: it is shown before anyone signs in."""
- try: response=send_from_directory(PUBLIC_ROOT / 'logos',filename)
+ try: response=send_from_directory(VANILLA_ROOT / 'logos',filename)
  except NotFound: return '',404
  response.headers['Cache-Control']='public, max-age=86400'
  return response
@@ -725,7 +725,7 @@ def store_logo(filename):
 def static_files(filename):
  if filename.startswith('api/'): return error('ไม่พบ API',404)
  if filename not in {'app.js','styles.css'}: return error('ไม่พบไฟล์',404)
- return send_from_directory(PUBLIC_ROOT,filename)
+ return send_from_directory(VANILLA_ROOT,filename)
 
 init_schema()
 

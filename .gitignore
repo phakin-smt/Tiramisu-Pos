@@ -31,3 +31,5 @@ backup_supabase_local.ps1
 # backup they belong to, outside the repository.
 *-migration.json
 baseline*.json
+
+CLAUDE.md
