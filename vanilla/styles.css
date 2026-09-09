@@ -3706,12 +3706,24 @@ input {
   flex-shrink: 0;
 }
 
-/* A menu's own photo takes over the tile the category emoji used to sit in. */
-.product-card .image img {
+/* A menu's own photo takes over the tile the category emoji used to sit in --
+   on the sell card, in the cart, and in the menu and stock lists. Positioned
+   against the tile rather than sized in percentages, so it fills it whatever
+   the tile happens to be laid out with. */
+.product-card .image,
+.cart-img,
+.stock-menu-icon {
+  position: relative;
+  overflow: hidden;
+}
+
+.product-card .image img,
+.thumbnail-photo {
+  position: absolute;
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: inherit;
+  inset: 0;
   object-fit: cover;
 }
 

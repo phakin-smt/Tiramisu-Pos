@@ -324,6 +324,18 @@ function renderCategoryTabs() {
 }
 
 
+/**
+ * The tile that stands for a menu: its photo where it has one, and its category
+ * emoji where it does not. Used by the sell grid, the cart, and the menu and
+ * stock lists, so all four agree on what a menu looks like.
+ */
+function menuThumbnail(item, fallback) {
+  return item.imageUrl
+    ? `<img class="thumbnail-photo" src="${item.imageUrl}" alt="" loading="lazy" />`
+    : (item.icon || fallback);
+}
+
+
 function renderProductGrid() {
   const categoryFilter = selectedCategory;
 
@@ -349,9 +361,7 @@ function renderProductGrid() {
 
 
     card.innerHTML = `
-      <div class="image">${product.imageUrl
-        ? `<img src="${product.imageUrl}" alt="" loading="lazy" />`
-        : (product.icon || '📦')}</div>
+      <div class="image">${menuThumbnail(product, '📦')}</div>
       <h3>${product.name}</h3>
       <div class="product-price">${formatCurrency(product.price)}</div>
       <div class="product-stock">คงเหลือ ${product.stock} ชิ้น</div>
@@ -476,7 +486,7 @@ function renderCart() {
 
       cartRow.innerHTML = `
         <div class="cart-item-left">
-          <div class="cart-img">${product.icon || '📦'}</div>
+          <div class="cart-img">${menuThumbnail(product, '📦')}</div>
           <div>
             <div class="cart-name">${product.name}</div>
             <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}${item.giveawayQty ? ` · แถม ${item.giveawayQty}` : ''}</div>
@@ -1113,7 +1123,7 @@ function renderMenuSettings(items, totalCount = items.length) {
     const card = document.createElement('article');
     card.className = `settings-menu-item${item.active ? '' : ' is-inactive'}`;
     card.innerHTML = `
-      <div class="stock-menu-icon">${item.icon || '🧁'}</div>
+      <div class="stock-menu-icon">${menuThumbnail(item, '🧁')}</div>
       <div class="settings-menu-info">
         <strong>${item.name}</strong>
         <span>${item.code} · ${item.category} · ${formatCurrency(item.price)}</span>
@@ -1172,7 +1182,7 @@ function renderStockTable(items, editable = true) {
     row.innerHTML = `
       <td>
         <div class="stock-menu-cell">
-          <div class="stock-menu-icon">${item.icon || '🧁'}</div>
+          <div class="stock-menu-icon">${menuThumbnail(item, '🧁')}</div>
           <div>
             <div class="stock-menu-name">${item.name}</div>
             <div class="stock-menu-meta">${item.code} · คงเหลือ ${item.stockNow} ชิ้น${item.active ? '' : ' · พักขาย'}</div>

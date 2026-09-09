@@ -2,12 +2,15 @@ import { formatCurrency } from '../../domain/format';
 import type { CartItem as CartItemModel } from '../../types/domain';
 import type { CatalogProduct } from '../../types/products';
 
-interface CartItemProps { item: CartItemModel; product: CatalogProduct; onQuantityChange(delta: number): void; onGiveawayChange(delta: number): void; onRemove(): void; }
+interface CartItemProps { item: CartItemModel; product: CatalogProduct; photoUrl?: string; onQuantityChange(delta: number): void; onGiveawayChange(delta: number): void; onRemove(): void; }
 
-export function CartItem({ item, product, onQuantityChange, onGiveawayChange, onRemove }: CartItemProps) {
+export function CartItem({ item, product, photoUrl, onQuantityChange, onGiveawayChange, onRemove }: CartItemProps) {
   const paidQuantity = item.qty - item.giveawayQty;
+  const photo = photoUrl || product.imageUrl;
   return <article className="sell-cart-item">
-    <span className="cart-item-icon" aria-hidden="true">{product.icon || '□'}</span>
+    <span className="cart-item-icon" aria-hidden="true">
+      {photo ? <img className="thumbnail-photo" src={photo} alt="" loading="lazy" /> : product.icon || '□'}
+    </span>
     <div className="cart-item-content">
       <div className="cart-item-title"><strong>{product.name}</strong><span>{formatCurrency(product.price * paidQuantity)}</span></div>
       <small>{formatCurrency(product.price)} × {item.qty}{item.giveawayQty ? ` · แถม ${item.giveawayQty}` : ''}</small>
