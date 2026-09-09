@@ -49,7 +49,7 @@ class ReactStagingRouteTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.react_root / "manifest.webmanifest").write_text(
-            '{"name":"Baannoi-POS"}',
+            '{"name":"Promttak-POS"}',
             encoding="utf-8",
         )
         (self.react_root / "pwa-192.png").write_bytes(b"pwa-icon")
@@ -129,7 +129,7 @@ class ReactStagingRouteTests(unittest.TestCase):
         expected = {
             "sw.js": (b"importScripts", "no-cache"),
             "workbox-ABC123.js": (b"self.workbox", "public, max-age=31536000, immutable"),
-            "manifest.webmanifest": (b"Baannoi-POS", "no-cache"),
+            "manifest.webmanifest": (b"Promttak-POS", "no-cache"),
             "pwa-192.png": (b"pwa-icon", "public, max-age=3600"),
             "index.html": (b"react-staging", "no-cache"),
         }

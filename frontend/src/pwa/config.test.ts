@@ -8,8 +8,8 @@ import { pwaOptions } from './config';
 describe('PWA configuration', () => {
   it('is scoped to the production React subpath', () => {
     expect(pwaOptions.manifest).toMatchObject({
-      name: 'Baannoi-POS',
-      short_name: 'Baannoi POS',
+      name: 'Promttak-POS',
+      short_name: 'Promttak POS',
       start_url: '/next/',
       scope: '/next/',
       display: 'standalone',

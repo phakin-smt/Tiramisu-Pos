@@ -32,17 +32,17 @@ export const NO_PRICING_RULES: PricingRules = { bundle: null, wholesale: null };
  * Anything serving a real till takes the rules from the server instead -- see
  * calculateCartTotals, which has no default for exactly that reason.
  */
-export const BAANNOI_PRICING_RULES: PricingRules = {
+export const PROMTTAK_PRICING_RULES: PricingRules = {
   bundle: { unitPrice: 69, quantity: 3, price: 200 },
   wholesale: { category: 'Tiramisu', discountPerItem: 9 },
 };
 
-export const BUNDLE_UNIT_PRICE = BAANNOI_PRICING_RULES.bundle!.unitPrice;
-export const BUNDLE_QUANTITY = BAANNOI_PRICING_RULES.bundle!.quantity;
-export const BUNDLE_PRICE = BAANNOI_PRICING_RULES.bundle!.price;
+export const BUNDLE_UNIT_PRICE = PROMTTAK_PRICING_RULES.bundle!.unitPrice;
+export const BUNDLE_QUANTITY = PROMTTAK_PRICING_RULES.bundle!.quantity;
+export const BUNDLE_PRICE = PROMTTAK_PRICING_RULES.bundle!.price;
 export const BUNDLE_DISCOUNT = BUNDLE_UNIT_PRICE * BUNDLE_QUANTITY - BUNDLE_PRICE;
-export const STORE_TIRAMISU_CATEGORY = BAANNOI_PRICING_RULES.wholesale!.category;
-export const STORE_TIRAMISU_DISCOUNT = BAANNOI_PRICING_RULES.wholesale!.discountPerItem;
+export const STORE_TIRAMISU_CATEGORY = PROMTTAK_PRICING_RULES.wholesale!.category;
+export const STORE_TIRAMISU_DISCOUNT = PROMTTAK_PRICING_RULES.wholesale!.discountPerItem;
 
 export const automaticDiscountState: DiscountState = { manual: false, value: 0 };
 
@@ -62,7 +62,7 @@ export function calculateTotals(
   lines: readonly PricingLine[],
   discountState: DiscountState = automaticDiscountState,
   customerType: CustomerType = 'walkin',
-  rules: PricingRules = BAANNOI_PRICING_RULES,
+  rules: PricingRules = PROMTTAK_PRICING_RULES,
 ): CartTotals {
   const subtotal = lines.reduce(
     (sum, line) => sum + line.unitPrice * paidQuantity(line),

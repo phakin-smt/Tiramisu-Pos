@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { CatalogProduct } from '../types/products';
 import {
-  BAANNOI_POS_DATABASE_NAME,
-  BAANNOI_POS_SCHEMA_VERSION,
+  PROMTTAK_POS_DATABASE_NAME,
+  PROMTTAK_POS_SCHEMA_VERSION,
   readConfirmedCatalogSnapshot,
   replaceConfirmedCatalogSnapshot,
   replaceConfirmedCatalogSnapshotIfNoPendingOrders,
 } from './catalogSnapshot';
-import { openBaannoiPosDatabase } from './database';
+import { openPromttakPosDatabase } from './database';
 
 const original: CatalogProduct = {
   id: 17,
@@ -28,8 +28,8 @@ const original: CatalogProduct = {
 };
 
 describe('catalog snapshot IndexedDB storage', () => {
-  beforeEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
-  afterEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
+  beforeEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
+  afterEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
 
   it('round-trips every catalog product field and writes versioned ISO metadata', async () => {
     const syncedAt = '2026-08-21T04:30:00.000Z';
@@ -40,7 +40,7 @@ describe('catalog snapshot IndexedDB storage', () => {
     expect(snapshot?.metadata).toEqual({
       key: 'catalog',
       lastSuccessfulCatalogSyncAt: syncedAt,
-      schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+      schemaVersion: PROMTTAK_POS_SCHEMA_VERSION,
     });
     expect(new Date(snapshot!.metadata.lastSuccessfulCatalogSyncAt).toISOString()).toBe(syncedAt);
   });
@@ -66,7 +66,7 @@ describe('catalog snapshot IndexedDB storage', () => {
 
   it('atomically refuses server replacement while a pending offline order exists', async () => {
     await replaceConfirmedCatalogSnapshot([original], 1, '2026-08-21T04:30:00.000Z');
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     await database.add('offlineOrders', {
       localOrderId: '550e8400-e29b-41d4-a716-446655440000',
       localOrderNumber: 'OFF-20260821-143522-0000',

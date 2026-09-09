@@ -26,7 +26,7 @@ function StorePicker() {
       <div className="login-screen">
         <div className="login-panel" role="alert">
           <div className="brand-mark" aria-hidden="true">BP</div>
-          <h1>Baannoi-POS</h1>
+          <h1>Promttak-POS</h1>
           <p>{STORE_OFFLINE_UNKNOWN}</p>
           <div className="auth-message">{error || STORE_OFFLINE_GUIDANCE}</div>
         </div>

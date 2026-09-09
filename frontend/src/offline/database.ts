@@ -2,8 +2,13 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
 import type { CatalogProduct } from '../types/products';
 
-export const BAANNOI_POS_DATABASE_NAME = 'BaannoiPOS';
-export const BAANNOI_POS_SCHEMA_VERSION = 4;
+// Deliberately still 'BaannoiPOS' after the rename to Promttak. This string is
+// the IndexedDB name on every till that has ever sold offline; changing it opens
+// a fresh empty database and strands any order that has not synced yet, along
+// with the trusted-device marker and the catalog snapshot. Renaming it is a
+// migration, not an edit -- and only worth doing once every device is synced.
+export const PROMTTAK_POS_DATABASE_NAME = 'BaannoiPOS';
+export const PROMTTAK_POS_SCHEMA_VERSION = 4;
 export const PRODUCT_SNAPSHOT_KEY = 'confirmed';
 export const CATALOG_METADATA_KEY = 'catalog';
 export const OFFLINE_AUTHORIZATION_KEY = 'offlineAuthorization';
@@ -135,7 +140,7 @@ export interface OfflineStockMovement {
   quantity: number;
 }
 
-export interface BaannoiPosDatabase extends DBSchema {
+export interface PromttakPosDatabase extends DBSchema {
   productSnapshot: {
     key: typeof PRODUCT_SNAPSHOT_KEY;
     value: ProductSnapshotRecord;
@@ -169,8 +174,8 @@ export interface BaannoiPosDatabase extends DBSchema {
   };
 }
 
-export function openBaannoiPosDatabase(): Promise<IDBPDatabase<BaannoiPosDatabase>> {
-  return openDB<BaannoiPosDatabase>(BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION, {
+export function openPromttakPosDatabase(): Promise<IDBPDatabase<PromttakPosDatabase>> {
+  return openDB<PromttakPosDatabase>(PROMTTAK_POS_DATABASE_NAME, PROMTTAK_POS_SCHEMA_VERSION, {
     upgrade(database, oldVersion, _newVersion, transaction) {
       if (oldVersion < 1) {
         database.createObjectStore('productSnapshot', { keyPath: 'key' });

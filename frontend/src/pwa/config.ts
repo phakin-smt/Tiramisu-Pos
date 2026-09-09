@@ -5,9 +5,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   registerType: 'prompt',
   injectRegister: null,
   manifest: {
-    name: 'Baannoi-POS',
-    short_name: 'Baannoi POS',
-    description: 'Baannoi point-of-sale application',
+    name: 'Promttak-POS',
+    short_name: 'Promttak POS',
+    description: 'Promttak point-of-sale application',
     start_url: '/next/',
     scope: '/next/',
     display: 'standalone',

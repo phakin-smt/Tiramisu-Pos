@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BAANNOI_POS_DATABASE_NAME, openBaannoiPosDatabase, type OfflineOrder } from './database';
+import { PROMTTAK_POS_DATABASE_NAME, openPromttakPosDatabase, type OfflineOrder } from './database';
 import {
   getPendingStockReviewCount,
   getPendingStockReviews,
@@ -11,7 +11,7 @@ import {
 } from './stockReconciliation';
 
 async function putOrder(order: Partial<OfflineOrder> & { localOrderId: string }) {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   await database.put('offlineOrders', {
     localOrderNumber: `OFF-${order.localOrderId}`,
     createdAt: '2026-08-21T07:35:00.000Z',
@@ -29,7 +29,7 @@ async function putOrder(order: Partial<OfflineOrder> & { localOrderId: string })
 }
 
 async function readOrder(localOrderId: string) {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     return await database.get('offlineOrders', localOrderId);
   } finally {
@@ -39,8 +39,8 @@ async function readOrder(localOrderId: string) {
 
 const tiramisu = { productId: 1, productName: 'ทีรามิสุ Original', shortfall: 2 };
 
-beforeEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
-afterEach(async () => { await deleteDB(BAANNOI_POS_DATABASE_NAME); });
+beforeEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
+afterEach(async () => { await deleteDB(PROMTTAK_POS_DATABASE_NAME); });
 
 describe('offline stock review aggregation', () => {
   it('reports nothing when no synced order raised a review', async () => {

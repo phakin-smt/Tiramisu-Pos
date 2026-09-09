@@ -9,7 +9,7 @@ import {
   remainingStock,
 } from './cart';
 import type { CartItem, Product } from '../types/domain';
-import { BAANNOI_PRICING_RULES } from './promotion';
+import { PROMTTAK_PRICING_RULES } from './promotion';
 
 const product: Product = { id: 1, price: 69, stock: 3, category: 'Tiramisu' };
 
@@ -51,7 +51,7 @@ describe('current cart invariants', () => {
 
   it('excludes giveaways from paid subtotal while they consume cart stock', () => {
     const cart: CartItem[] = [{ productId: 1, qty: 3, giveawayQty: 2 }];
-    const totals = calculateCartTotals([product], cart, undefined, undefined, BAANNOI_PRICING_RULES);
+    const totals = calculateCartTotals([product], cart, undefined, undefined, PROMTTAK_PRICING_RULES);
     expect(totals.subtotal).toBe(69);
     expect(remainingStock(product, cart)).toBe(0);
   });

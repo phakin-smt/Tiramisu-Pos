@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CatalogProduct } from '../types/products';
 import { replaceConfirmedCatalogSnapshot, replaceConfirmedCatalogSnapshotIfNoPendingOrders, readConfirmedCatalogSnapshot } from './catalogSnapshot';
-import { BAANNOI_POS_DATABASE_NAME, openBaannoiPosDatabase } from './database';
+import { PROMTTAK_POS_DATABASE_NAME, openPromttakPosDatabase } from './database';
 import { refreshOfflineAuthorization } from './offlineAuthorization';
 import {
   getPendingOfflineOrderCount,
@@ -58,14 +58,14 @@ function bodyOf(call: unknown[]) {
 
 describe('offline order sync', () => {
   beforeEach(async () => {
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
     await replaceConfirmedCatalogSnapshot(products, 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
   });
 
   afterEach(async () => {
     vi.unstubAllGlobals();
-    await deleteDB(BAANNOI_POS_DATABASE_NAME);
+    await deleteDB(PROMTTAK_POS_DATABASE_NAME);
   });
 
   it('replays pending sales oldest first and releases the latch when the queue empties', async () => {
@@ -212,7 +212,7 @@ describe('offline order sync', () => {
 
   it('mints and persists a key for a pre-v4 order instead of stranding it', async () => {
     await seedSale('40009', '35');
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     const legacy = await database.get('offlineOrders', '550e8400-e29b-41d4-a716-446655440009');
     delete legacy!.idempotencyKey;
     await database.put('offlineOrders', legacy!);

@@ -172,7 +172,7 @@ export function LoginForm() {
     <div className="login-screen">
       <form className="login-panel" onSubmit={handleSubmit}>
         <div className="brand-mark" aria-hidden="true">BP</div>
-        <h1>Baannoi-POS</h1>
+        <h1>Promttak-POS</h1>
         <span className="version-label">v1.1.0</span>
         <p>Enter your PIN to continue</p>
         <label htmlFor="login-pin">PIN</label>
@@ -213,7 +213,7 @@ function OfflineWorkspaceLocked() {
     <div className="login-screen">
       <div className="login-panel" role="alert">
         <div className="brand-mark" aria-hidden="true">BP</div>
-        <h1>Baannoi-POS</h1>
+        <h1>Promttak-POS</h1>
         <p>{OFFLINE_WORKSPACE_LOCKED_MESSAGE}</p>
         <div className="auth-message">{OFFLINE_WORKSPACE_LOCKED_GUIDANCE}</div>
       </div>

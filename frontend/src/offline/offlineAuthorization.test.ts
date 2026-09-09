@@ -3,19 +3,19 @@ import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BAANNOI_POS_DATABASE_NAME, BAANNOI_POS_SCHEMA_VERSION, openBaannoiPosDatabase } from './database';
+import { PROMTTAK_POS_DATABASE_NAME, PROMTTAK_POS_SCHEMA_VERSION, openPromttakPosDatabase } from './database';
 import { readOfflineAuthorization, refreshOfflineAuthorization } from './offlineAuthorization';
 
 describe('offline trusted-device authorization', () => {
-  beforeEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
-  afterEach(async () => deleteDB(BAANNOI_POS_DATABASE_NAME));
+  beforeEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
+  afterEach(async () => deleteDB(PROMTTAK_POS_DATABASE_NAME));
 
   it('creates and refreshes a seven-day marker without persisting a PIN or secret', async () => {
     const enabled = new Date('2026-08-21T00:00:00.000Z');
     const record = await refreshOfflineAuthorization(enabled);
     expect(record).toEqual({
       key: 'offlineAuthorization', enabledAt: enabled.toISOString(),
-      expiresAt: '2026-08-28T00:00:00.000Z', schemaVersion: BAANNOI_POS_SCHEMA_VERSION,
+      expiresAt: '2026-08-28T00:00:00.000Z', schemaVersion: PROMTTAK_POS_SCHEMA_VERSION,
     });
     expect(JSON.stringify(record).toLowerCase()).not.toMatch(/pin|secret|hash|cookie/);
     expect((await readOfflineAuthorization(new Date('2026-08-27T23:59:59.000Z'))).authorized).toBe(true);
@@ -29,7 +29,7 @@ describe('offline trusted-device authorization', () => {
 
   it('stores only the minimal authorization record in metadata', async () => {
     await refreshOfflineAuthorization(new Date('2026-08-21T00:00:00.000Z'));
-    const database = await openBaannoiPosDatabase();
+    const database = await openPromttakPosDatabase();
     const records = await database.getAll('metadata');
     database.close();
     expect(records).toHaveLength(1);

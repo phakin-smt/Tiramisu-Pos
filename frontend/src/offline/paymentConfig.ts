@@ -1,7 +1,7 @@
 import { getOfflinePaymentConfig } from '../api/offlinePaymentConfig';
 import {
   PROMPTPAY_CONFIG_KEY,
-  openBaannoiPosDatabase,
+  openPromttakPosDatabase,
   type OfflinePaymentConfigRecord,
 } from './database';
 
@@ -19,7 +19,7 @@ export async function replaceOfflinePaymentConfig(
     version,
     provisionedAt,
   };
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     await database.put('offlinePaymentConfig', record);
     return record;
@@ -29,7 +29,7 @@ export async function replaceOfflinePaymentConfig(
 }
 
 export async function readOfflinePaymentConfig(): Promise<OfflinePaymentConfigRecord | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     return await database.get('offlinePaymentConfig', PROMPTPAY_CONFIG_KEY) ?? null;
   } finally {
@@ -45,7 +45,7 @@ export async function provisionOfflinePaymentConfig(): Promise<OfflinePaymentCon
 
 /** Drops the provisioned PromptPay receiver when the device is signed out. */
 export async function clearOfflinePaymentConfig(): Promise<void> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     await database.delete('offlinePaymentConfig', PROMPTPAY_CONFIG_KEY);
   } finally {

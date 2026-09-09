@@ -4,7 +4,7 @@ import {
   CATALOG_METADATA_KEY,
   OFFLINE_AUTHORIZATION_KEY,
   PRODUCT_SNAPSHOT_KEY,
-  openBaannoiPosDatabase,
+  openPromttakPosDatabase,
   type CatalogSnapshotMetadata,
   type OfflineAuthorizationRecord,
   type PricingRulesRecord,
@@ -97,7 +97,7 @@ export async function recordOfflineSale(input: OfflineSaleInput): Promise<Offlin
     && (input.amountTendered === undefined || input.changeAmount === undefined)) {
     throw new Error('ข้อมูลการรับเงินสดไม่ครบถ้วน');
   }
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const transaction = database.transaction(
     ['metadata', 'productSnapshot', 'offlineOrders', 'offlineOrderItems', 'offlineStockMovements'],
     'readwrite',
@@ -218,7 +218,7 @@ export function orderStoreId(order: OfflineOrder): number {
 }
 
 export async function getPendingOfflineOrderCount(storeId: number): Promise<number> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const pending = await database.getAllFromIndex('offlineOrders', 'by-sync-status', 'pending');
     return pending.filter((order) => orderStoreId(order) === storeId).length;
@@ -233,7 +233,7 @@ export async function getPendingOfflineOrderCount(storeId: number): Promise<numb
  * server rejected is still money that has not been recorded upstream.
  */
 export async function getUnsyncedOfflineOrderCount(storeId: number): Promise<number> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const orders = await database.getAll('offlineOrders');
     return orders.filter((order) =>
@@ -251,7 +251,7 @@ export async function getUnsyncedOfflineOrderCount(storeId: number): Promise<num
  * waits until that shop is selected again.
  */
 export async function getOfflineOrdersToSync(storeId: number): Promise<OfflineOrder[]> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-sync-status', 'pending');
     return orders
@@ -271,7 +271,7 @@ export async function getOfflineOrdersToSync(storeId: number): Promise<OfflineOr
  * drain interrupted after the POST still finds the same key next time.
  */
 export async function ensureOfflineOrderIdempotencyKey(localOrderId: string): Promise<string | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const transaction = database.transaction('offlineOrders', 'readwrite');
   try {
     const store = transaction.objectStore('offlineOrders');
@@ -313,7 +313,7 @@ export async function markOfflineOrderSynced(
   result: OfflineOrderSyncResult,
   syncedAt = new Date().toISOString(),
 ): Promise<OfflineOrder | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const transaction = database.transaction('offlineOrders', 'readwrite');
   try {
     const store = transaction.objectStore('offlineOrders');
@@ -344,7 +344,7 @@ export async function markOfflineOrderSynced(
 
 /** Everything the server has not accepted yet, oldest first, for the queue UI. */
 export async function getUnsyncedOfflineOrders(storeId: number): Promise<OfflineOrder[]> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
     return orders.filter((order) =>
@@ -361,7 +361,7 @@ export async function getUnsyncedOfflineOrders(storeId: number): Promise<Offline
  * new one — only the failure marker is cleared.
  */
 export async function retryFailedOfflineOrder(localOrderId: string): Promise<OfflineOrder | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   const transaction = database.transaction('offlineOrders', 'readwrite');
   try {
     const store = transaction.objectStore('offlineOrders');
@@ -386,7 +386,7 @@ export async function retryFailedOfflineOrder(localOrderId: string): Promise<Off
 export async function getOfflineOrderByIdempotencyKey(
   idempotencyKey: string,
 ): Promise<OfflineOrder | null> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     return await database.getFromIndex('offlineOrders', 'by-idempotency-key', idempotencyKey) ?? null;
   } finally {
@@ -395,7 +395,7 @@ export async function getOfflineOrderByIdempotencyKey(
 }
 
 export async function getRecentOfflineOrders(limit = 10): Promise<OfflineOrder[]> {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const orders = await database.getAllFromIndex('offlineOrders', 'by-created-at');
     return orders.reverse().slice(0, Math.max(0, limit));
@@ -405,7 +405,7 @@ export async function getRecentOfflineOrders(limit = 10): Promise<OfflineOrder[]
 }
 
 export async function getOfflineOrderDetails(localOrderId: string) {
-  const database = await openBaannoiPosDatabase();
+  const database = await openPromttakPosDatabase();
   try {
     const transaction = database.transaction(['offlineOrders', 'offlineOrderItems', 'offlineStockMovements']);
     const [order, items, movements] = await Promise.all([

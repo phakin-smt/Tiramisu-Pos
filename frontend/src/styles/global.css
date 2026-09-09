@@ -420,7 +420,7 @@ body.cash-payment-open { overflow: hidden; }
 .close-day-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 body.close-day-open { overflow: hidden; }
 
-/* Baannoi visual parity pass: warm, tactile surfaces for a touch-first POS. */
+/* Promttak visual parity pass: warm, tactile surfaces for a touch-first POS. */
 :root {
   --panel: #fffdf9;
   --panel-soft: #f5eadf;
