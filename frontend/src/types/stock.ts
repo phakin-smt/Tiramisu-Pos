@@ -4,6 +4,7 @@ export interface StockSummaryItem {
   name: string;
   category: string;
   icon: string;
+  imageUrl: string | null;
   active: boolean;
   price: number;
   cost: number;

@@ -655,7 +655,7 @@ def stock_data(store,report_date):
  connection=connect_db()
  try:
   cursor=connection.cursor()
-  result=execute(cursor,'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE store_id=? ORDER BY category,name',(store,)).fetchall(); movements=movement_summary(connection,store,report_date)
+  result=execute(cursor,'SELECT p.id,p.sku,p.name,p.category,p.unit_price,p.cost_price,p.stock_qty,p.stock_min,p.is_active,i.checksum AS image_checksum FROM products p LEFT JOIN product_images i ON i.product_id=p.id WHERE p.store_id=? ORDER BY p.category,p.name',(store,)).fetchall(); movements=movement_summary(connection,store,report_date)
   _,day_end=local_day_bounds(report_date)
   future_rows=execute(cursor,'SELECT product_id,COALESCE(SUM(quantity),0) total_qty FROM stock_movements WHERE store_id=? AND created_at>=? GROUP BY product_id',(store,day_end)).fetchall()
   future_movements={row['product_id']:row['total_qty'] for row in future_rows}
@@ -664,7 +664,7 @@ def stock_data(store,report_date):
  for p in result:
   m=movements.get(p['id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0}); prepared=m['prepared']
   stock_at_day_end=p['stock_qty']-future_movements.get(p['id'],0)
-  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':stock_at_day_end,**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
+  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'imageUrl':product_image_url(p['id'],p['image_checksum']),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':stock_at_day_end,**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
  return items
 
 @app.get('/api/stock/daily-summary')

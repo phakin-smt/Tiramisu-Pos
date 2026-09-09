@@ -17,9 +17,9 @@ const STORE_PRICING = {
 
 const TODAY = '2026-08-17';
 const stock: StockSummaryResponse = { date: TODAY, items: [
-  { productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 },
-  { productId: 2, code: 'REST', name: 'Resting Stocked', category: 'classic', icon: '', active: false, price: 69, cost: 25, minStock: 4, stockNow: 3, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
-  { productId: 3, code: 'REST0', name: 'Resting Empty', category: 'classic', icon: '', active: false, price: 69, cost: 25, minStock: 4, stockNow: 0, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
+  { productId: 1, code: 'ORI', name: 'Original', category: 'classic', icon: '', imageUrl: null, active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 15, sold: 5, giveaway: 1, waste: 1, sellThrough: 0.4 },
+  { productId: 2, code: 'REST', name: 'Resting Stocked', category: 'classic', icon: '', imageUrl: null, active: false, price: 69, cost: 25, minStock: 4, stockNow: 3, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
+  { productId: 3, code: 'REST0', name: 'Resting Empty', category: 'classic', icon: '', imageUrl: null, active: false, price: 69, cost: 25, minStock: 4, stockNow: 0, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
 ] };
 const plan: StockPlan = { id: 9, productId: 1, date: '2026-08-20', quantity: 12, name: 'Original', code: 'ORI' };
 

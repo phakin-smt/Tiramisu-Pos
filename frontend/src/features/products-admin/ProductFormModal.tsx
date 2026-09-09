@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { createProduct, updateProduct } from '../../api/products';
+import { createProduct, deleteProductImage, setProductImage, updateProduct } from '../../api/products';
 import { MutationFeedback } from '../../components/MutationFeedback';
 import { acceptMoneyInput } from '../../domain/money';
+import { shrinkImageForUpload } from '../../domain/productImage';
 import type { ProductPayload } from '../../types/products';
 import type { StockSummaryItem } from '../../types/stock';
 import { useSafeMutation } from '../shared/useSafeMutation';
@@ -29,6 +30,14 @@ function initialValues(product: StockSummaryItem | null): FormValues {
 export function ProductFormModal({ product, categories, onClose, onSaved }: Props) {
   const [values, setValues] = useState(() => initialValues(product));
   const [validation, setValidation] = useState('');
+  // A picture chosen but not saved yet, and the intent to drop the saved one.
+  // Both stay local until the menu itself saves, so a cancelled edit changes
+  // nothing on the server.
+  const [pickedImage, setPickedImage] = useState('');
+  const [dropImage, setDropImage] = useState(false);
+  const [imageProblem, setImageProblem] = useState('');
+  const savedImage = product?.imageUrl ?? null;
+  const preview = pickedImage || (dropImage ? '' : savedImage || '');
   const mutation = useSafeMutation();
   const firstInput = useRef<HTMLInputElement>(null);
 
@@ -42,6 +51,26 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
   }, [mutation.pending, onClose]);
 
   const field = (name: keyof FormValues, value: string | boolean) => setValues((current) => ({ ...current, [name]: value }));
+
+  const pickImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Clearing it lets the same file be chosen again after a failure.
+    event.target.value = '';
+    if (!file) return;
+    setImageProblem('');
+    try {
+      setPickedImage(await shrinkImageForUpload(file));
+      setDropImage(false);
+    } catch (error) {
+      setImageProblem(error instanceof Error ? error.message : 'ใช้รูปนี้ไม่ได้');
+    }
+  };
+
+  const clearImage = () => {
+    setPickedImage('');
+    setImageProblem('');
+    setDropImage(Boolean(savedImage));
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -59,8 +88,15 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
       setValidation('ราคาและจำนวนต้องเป็นตัวเลขไม่ติดลบ และจำนวนสต็อกต้องเป็นจำนวนเต็ม'); return;
     }
     setValidation('');
+    // The menu saves first: a new one has no id to hang a picture on until it
+    // exists, and a failed upload should not also lose the edited fields.
     const result = await mutation.run(
-      () => product ? updateProduct(product.productId, payload) : createProduct(payload),
+      async () => {
+        const saved = product ? await updateProduct(product.productId, payload) : await createProduct(payload);
+        if (pickedImage) await setProductImage(saved.id, pickedImage);
+        else if (dropImage && savedImage) await deleteProductImage(saved.id);
+        return saved;
+      },
       product ? 'แก้ไขเมนูแล้ว' : 'เพิ่มเมนูใหม่แล้ว',
     );
     if (result) onSaved(product ? 'แก้ไขเมนูแล้ว' : 'เพิ่มเมนูใหม่แล้ว');
@@ -78,6 +114,22 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
           <label><span>ต้นทุน/ชิ้น (บาท)</span><input type="text" inputMode="decimal" autoComplete="off" value={values.cost} onChange={(event) => field('cost', acceptMoneyInput(event.target.value, values.cost))} /></label>
           <label><span>จำนวนคงเหลือ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.stock} onChange={(event) => field('stock', event.target.value)} /></label>
           <label><span>จุดสั่งเตรียมขั้นต่ำ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.minStock} onChange={(event) => field('minStock', event.target.value)} /></label>
+          <div className="product-image-field form-wide">
+            <span>รูปเมนู</span>
+            <div className="product-image-row">
+              {preview
+                ? <img className="product-image-preview" src={preview} alt="" />
+                : <span className="product-image-empty" aria-hidden="true">{product?.icon ?? '🧁'}</span>}
+              <div className="product-image-actions">
+                <label className="secondary-button file-button">
+                  <span>{preview ? 'เปลี่ยนรูป' : 'เลือกรูป'}</span>
+                  <input type="file" accept="image/*" className="file-input" disabled={mutation.pending} onChange={pickImage} />
+                </label>
+                {preview && <button type="button" className="secondary-button" disabled={mutation.pending} onClick={clearImage}>ลบรูป</button>}
+              </div>
+            </div>
+            {imageProblem && <div className="form-error" role="alert">{imageProblem}</div>}
+          </div>
           <label className="active-toggle form-wide"><input type="checkbox" checked={values.active} onChange={(event) => field('active', event.target.checked)} /><span>เปิดขายเมนูนี้</span></label>
         </div>
         {validation && <div className="form-error" role="alert">{validation}</div>}

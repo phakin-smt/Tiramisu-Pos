@@ -881,3 +881,19 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   justify-items: center;
 }
 .promptpay-content img { width: min(100%, 74vh); }
+
+/* A menu's own photo takes over the tile the category emoji used to sit in.
+   The tile centres its contents, and a grid item that is not stretched has no
+   definite height to take a percentage of -- so the photo is positioned against
+   the tile instead, which clips it to its own rounded corners. */
+.sell-product-icon { position: relative; overflow: hidden; }
+.sell-product-photo { position: absolute; display: block; width: 100%; height: 100%; inset: 0; object-fit: cover; }
+.product-image-field { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
+.product-image-row { display: flex; align-items: center; gap: 12px; }
+.product-image-preview, .product-image-empty { width: 84px; height: 84px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: var(--radius-md); object-fit: cover; }
+.product-image-empty { display: grid; place-items: center; background: var(--panel-soft); font-size: 34px; }
+.product-image-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.file-button { display: inline-grid; margin: 0; padding: 0 16px; place-items: center; cursor: pointer; }
+/* Kept in the layout rather than display:none, which stops some browsers from
+   passing the label's click through to the file picker. */
+.file-input { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }

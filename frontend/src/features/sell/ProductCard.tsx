@@ -18,7 +18,11 @@ export function ProductCard({ product, remaining, onAdd }: ProductCardProps) {
     aria-label={unavailable ? `${product.name} สินค้าหมด` : `เพิ่ม ${product.name} ลงตะกร้า`}
     onClick={() => onAdd(product)}
   >
-    <span className="sell-product-icon" aria-hidden="true">{product.icon || '□'}</span>
+    <span className="sell-product-icon" aria-hidden="true">
+      {product.imageUrl
+        ? <img className="sell-product-photo" src={product.imageUrl} alt="" loading="lazy" />
+        : product.icon || '□'}
+    </span>
     <strong>{product.name}</strong>
     <span className="sell-product-code">{product.code}</span>
     <span className="sell-product-price">{formatCurrency(product.price)}</span>

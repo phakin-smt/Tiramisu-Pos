@@ -23,8 +23,8 @@ import {
 } from './offlineOrders';
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
-  { id: 2, code: 'OLD', barcode: null, name: 'Inactive Stocked', category: 'Bakery', price: 50, cost: 18, stock: 2, minStock: 1, active: false, icon: '🍪' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
+  { id: 2, code: 'OLD', barcode: null, name: 'Inactive Stocked', category: 'Bakery', price: 50, cost: 18, stock: 2, minStock: 1, active: false, icon: '🍪', imageUrl: null },
 ];
 
 const identity = {

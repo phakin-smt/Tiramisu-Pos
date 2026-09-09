@@ -25,6 +25,21 @@ export function setProductActive(id: number, active: boolean): Promise<ProductAc
   });
 }
 
+export interface ProductImageResponse { id: number; imageUrl: string | null; }
+
+/** `image` is the data URI produced by shrinkImageForUpload. */
+export function setProductImage(id: number, image: string): Promise<ProductImageResponse> {
+  return apiRequest(`/api/products/${id}/image`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image }),
+  });
+}
+
+export function deleteProductImage(id: number): Promise<ProductImageResponse> {
+  return apiRequest(`/api/products/${id}/image`, { method: 'DELETE' });
+}
+
 export function deleteProduct(id: number): Promise<DeleteProductResponse> {
   return apiRequest(`/api/products/${id}`, { method: 'DELETE' });
 }

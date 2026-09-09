@@ -34,7 +34,7 @@ vi.mock('qrcode', () => ({
 }));
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
 ];
 const summary = { date: '2026-08-17', orderCount: 3, cashTotal: 200, transferTotal: 150, totalRevenue: 350 };
 const order = { orderNumber: '202608172300', subtotal: 207, discount: 7, vat: 0, total: 200, paymentMethod: 'cash' };

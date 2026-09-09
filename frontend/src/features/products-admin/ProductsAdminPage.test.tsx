@@ -14,8 +14,8 @@ const STORE_PRICING = {
 const summary: StockSummaryResponse = {
   date: '2026-08-17',
   items: [
-    { productId: 1, code: 'ORI', name: 'Original', category: 'Tiramisu', icon: '', active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 3, sold: 1, giveaway: 0, waste: 0, sellThrough: 0.3333 },
-    { productId: 2, code: 'MAT', name: 'Matcha', category: 'Tiramisu', icon: '', active: false, price: 79, cost: 30, minStock: 2, stockNow: 5, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
+    { productId: 1, code: 'ORI', name: 'Original', category: 'Tiramisu', icon: '', imageUrl: null, active: true, price: 69, cost: 25, minStock: 4, stockNow: 8, prepared: 3, sold: 1, giveaway: 0, waste: 0, sellThrough: 0.3333 },
+    { productId: 2, code: 'MAT', name: 'Matcha', category: 'Tiramisu', icon: '', imageUrl: null, active: false, price: 79, cost: 30, minStock: 2, stockNow: 5, prepared: 0, sold: 0, giveaway: 0, waste: 0, sellThrough: null },
   ],
 };
 

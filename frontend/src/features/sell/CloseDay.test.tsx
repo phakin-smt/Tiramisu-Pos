@@ -18,7 +18,7 @@ const STORE_PRICING = {
 };
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
 ];
 const summary = { date: '2026-08-17', orderCount: 2, cashTotal: 200, transferTotal: 193, totalRevenue: 393 };
 const report = {
