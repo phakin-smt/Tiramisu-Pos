@@ -61,7 +61,7 @@ describe('trusted device authorization', () => {
 
   it('blocks a local sale once authorization has been revoked', async () => {
     await replaceConfirmedCatalogSnapshot([
-      { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
+      { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
     ], 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
     await revokeOfflineAuthorization();
@@ -117,7 +117,7 @@ describe('trusted device authorization', () => {
 
   it('keeps unsynced sales through a revocation because they are revenue, not credentials', async () => {
     await replaceConfirmedCatalogSnapshot([
-      { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
+      { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
     ], 1, '2026-08-21T07:00:00.000Z');
     await refreshOfflineAuthorization();
     await recordOfflineCashSale({ storeId: 1,

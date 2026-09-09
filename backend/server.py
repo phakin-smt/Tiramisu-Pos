@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import os
 import hmac
 import secrets
@@ -36,6 +38,10 @@ LOGIN_ATTEMPTS_LOCK = threading.Lock()
 LOGIN_LIMIT = 5
 LOGIN_WINDOW_SECONDS = 300
 PAYMENT_METHODS = {'cash', 'transfer'}
+# A menu picture arrives already shrunk by the browser. The ceiling is a guard
+# against an unshrunk camera original, not a quality setting.
+PRODUCT_IMAGE_TYPES = {'image/webp', 'image/jpeg', 'image/png'}
+PRODUCT_IMAGE_MAX_BYTES = 400 * 1024
 STOCK_REVIEW_NOTE = 'ตรวจสอบสต็อก (Sync ออฟไลน์):'
 # Machine-readable reference_type for reconciliation movements. Existing values
 # ('order', 'giveaway', 'waste', 'correction', 'daily_prep') keep their meaning.
@@ -287,8 +293,10 @@ def health():
 @app.get('/api/products')
 def products():
  ensure_daily_plans_applied()
- result=rows('SELECT id,sku,barcode,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE store_id=? AND (is_active=1 OR stock_qty>0) ORDER BY category,name',(current_store(),))
- return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON)} for r in result])
+ # The join reaches for the checksum and never the bytes: this response is read
+ # on every visit to the sell screen and is what the offline snapshot stores.
+ result=rows('SELECT p.id,p.sku,p.barcode,p.name,p.category,p.unit_price,p.cost_price,p.stock_qty,p.stock_min,p.is_active,i.checksum AS image_checksum FROM products p LEFT JOIN product_images i ON i.product_id=p.id WHERE p.store_id=? AND (p.is_active=1 OR p.stock_qty>0) ORDER BY p.category,p.name',(current_store(),))
+ return jsonify([{'id':r['id'],'code':r['sku'],'barcode':r['barcode'],'name':r['name'],'category':r['category'],'price':number(r['unit_price']),'cost':number(r['cost_price'] or 0),'stock':r['stock_qty'],'minStock':r['stock_min'],'active':bool(r['is_active']),'icon':CATEGORY_ICONS.get(r['category'],DEFAULT_ICON),'imageUrl':product_image_url(r['id'],r['image_checksum'])} for r in result])
 
 @app.get('/api/products/categories')
 def categories(): return jsonify(categories=[r['category'] for r in rows('SELECT DISTINCT category FROM products WHERE store_id=? AND (is_active=1 OR stock_qty>0) ORDER BY category',(current_store(),))])
@@ -341,6 +349,60 @@ def delete_product(product_id):
   if used: execute(cursor,'UPDATE products SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?',(product_id,))
   else: execute(cursor,'DELETE FROM products WHERE id=?',(product_id,))
  return jsonify(id=product_id,deleted=True)
+
+def product_image_url(product_id,checksum):
+ """Where a menu picture lives, or None for a menu that has none."""
+ return '/api/products/{}/image?v={}'.format(product_id,checksum) if checksum else None
+
+def decode_product_image(raw):
+ """Validate the data URI a canvas export produces, returning (type,bytes,problem)."""
+ if not isinstance(raw,str) or not raw.startswith('data:'): return None,None,'รูปแบบรูปไม่ถูกต้อง'
+ header,_,encoded=raw.partition(',')
+ if not encoded or ';base64' not in header: return None,None,'รูปแบบรูปไม่ถูกต้อง'
+ content_type=header[len('data:'):].split(';')[0].strip().lower()
+ if content_type not in PRODUCT_IMAGE_TYPES: return None,None,'รองรับเฉพาะไฟล์ WebP, JPEG และ PNG'
+ try: blob=base64.b64decode(encoded,validate=True)
+ except ValueError: return None,None,'ไฟล์รูปเสียหาย'
+ if not blob: return None,None,'ไฟล์รูปว่างเปล่า'
+ if len(blob)>PRODUCT_IMAGE_MAX_BYTES: return None,None,'ไฟล์รูปใหญ่เกิน {} KB'.format(PRODUCT_IMAGE_MAX_BYTES//1024)
+ return content_type,blob,None
+
+def owned_product(cursor,product_id):
+ return execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone()
+
+@app.get('/api/products/<int:product_id>/image')
+def product_image(product_id):
+ found=rows('SELECT i.content_type,i.checksum,i.data FROM product_images i JOIN products p ON p.id=i.product_id WHERE i.product_id=? AND p.store_id=?',(product_id,current_store()))
+ if not found: return error('ไม่พบรูปเมนูนี้',404)
+ row=found[0]
+ tag='"{}"'.format(row['checksum'])
+ if request.headers.get('If-None-Match')==tag: response=app.response_class(status=304)
+ else: response=send_file(BytesIO(bytes(row['data'])),mimetype=row['content_type'])
+ response.headers['ETag']=tag
+ # The address already names these exact bytes, so a picture that changes arrives
+ # under a different URL and this copy never has to be revalidated. Private
+ # because the menu sits behind the shop's PIN.
+ response.headers['Cache-Control']='private, max-age=31536000, immutable'
+ return response
+
+@app.put('/api/products/<int:product_id>/image')
+def set_product_image(product_id):
+ payload=request.get_json(silent=True) or {}
+ content_type,blob,problem=decode_product_image(payload.get('image'))
+ if problem: return error(problem)
+ checksum=hashlib.sha256(blob).hexdigest()[:16]
+ with transaction() as (_,cursor):
+  if not owned_product(cursor,product_id): return error('ไม่พบเมนูนี้',404)
+  execute(cursor,'DELETE FROM product_images WHERE product_id=?',(product_id,))
+  execute(cursor,"INSERT INTO product_images (product_id,content_type,byte_size,checksum,data,updated_at) VALUES (?,?,?,?,?,datetime('now'))",(product_id,content_type,len(blob),checksum,blob))
+ return jsonify(id=product_id,imageUrl=product_image_url(product_id,checksum),byteSize=len(blob))
+
+@app.delete('/api/products/<int:product_id>/image')
+def delete_product_image(product_id):
+ with transaction() as (_,cursor):
+  if not owned_product(cursor,product_id): return error('ไม่พบเมนูนี้',404)
+  execute(cursor,'DELETE FROM product_images WHERE product_id=?',(product_id,))
+ return jsonify(id=product_id,imageUrl=None)
 
 @app.post('/api/orders')
 def create_order():
@@ -593,7 +655,7 @@ def stock_data(store,report_date):
  connection=connect_db()
  try:
   cursor=connection.cursor()
-  result=execute(cursor,'SELECT id,sku,name,category,unit_price,cost_price,stock_qty,stock_min,is_active FROM products WHERE store_id=? ORDER BY category,name',(store,)).fetchall(); movements=movement_summary(connection,store,report_date)
+  result=execute(cursor,'SELECT p.id,p.sku,p.name,p.category,p.unit_price,p.cost_price,p.stock_qty,p.stock_min,p.is_active,i.checksum AS image_checksum FROM products p LEFT JOIN product_images i ON i.product_id=p.id WHERE p.store_id=? ORDER BY p.category,p.name',(store,)).fetchall(); movements=movement_summary(connection,store,report_date)
   _,day_end=local_day_bounds(report_date)
   future_rows=execute(cursor,'SELECT product_id,COALESCE(SUM(quantity),0) total_qty FROM stock_movements WHERE store_id=? AND created_at>=? GROUP BY product_id',(store,day_end)).fetchall()
   future_movements={row['product_id']:row['total_qty'] for row in future_rows}
@@ -602,7 +664,7 @@ def stock_data(store,report_date):
  for p in result:
   m=movements.get(p['id'],{'prepared':0,'sold':0,'giveaway':0,'waste':0}); prepared=m['prepared']
   stock_at_day_end=p['stock_qty']-future_movements.get(p['id'],0)
-  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':stock_at_day_end,**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
+  items.append({'productId':p['id'],'code':p['sku'],'name':p['name'],'category':p['category'],'icon':CATEGORY_ICONS.get(p['category'],DEFAULT_ICON),'imageUrl':product_image_url(p['id'],p['image_checksum']),'active':bool(p['is_active']),'price':number(p['unit_price']),'cost':number(p['cost_price'] or 0),'minStock':p['stock_min'],'stockNow':stock_at_day_end,**m,'sellThrough':round(m['sold']/prepared,4) if prepared else None})
  return items
 
 @app.get('/api/stock/daily-summary')

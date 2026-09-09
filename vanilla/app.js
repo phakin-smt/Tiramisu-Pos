@@ -4,6 +4,11 @@ let stockPlans = [];
 let stockPlanMutationPending = false;
 let settingsMenuItems = [];
 let editingProductId = null;
+// A picture chosen but not saved, and the intent to drop the saved one. Both
+// stay here until the menu itself saves, so cancelling changes nothing.
+let pickedProductImage = '';
+let dropProductImage = false;
+let savedProductImage = null;
 let discountManual = false;
 const cart = [];
 let orderSubmitting = false;
@@ -319,6 +324,18 @@ function renderCategoryTabs() {
 }
 
 
+/**
+ * The tile that stands for a menu: its photo where it has one, and its category
+ * emoji where it does not. Used by the sell grid, the cart, and the menu and
+ * stock lists, so all four agree on what a menu looks like.
+ */
+function menuThumbnail(item, fallback) {
+  return item.imageUrl
+    ? `<img class="thumbnail-photo" src="${item.imageUrl}" alt="" loading="lazy" />`
+    : (item.icon || fallback);
+}
+
+
 function renderProductGrid() {
   const categoryFilter = selectedCategory;
 
@@ -344,7 +361,7 @@ function renderProductGrid() {
 
 
     card.innerHTML = `
-      <div class="image">${product.icon || '📦'}</div>
+      <div class="image">${menuThumbnail(product, '📦')}</div>
       <h3>${product.name}</h3>
       <div class="product-price">${formatCurrency(product.price)}</div>
       <div class="product-stock">คงเหลือ ${product.stock} ชิ้น</div>
@@ -469,7 +486,7 @@ function renderCart() {
 
       cartRow.innerHTML = `
         <div class="cart-item-left">
-          <div class="cart-img">${product.icon || '📦'}</div>
+          <div class="cart-img">${menuThumbnail(product, '📦')}</div>
           <div>
             <div class="cart-name">${product.name}</div>
             <div class="cart-detail">${formatCurrency(product.price)} x ${item.qty}${item.giveawayQty ? ` · แถม ${item.giveawayQty}` : ''}</div>
@@ -1106,7 +1123,7 @@ function renderMenuSettings(items, totalCount = items.length) {
     const card = document.createElement('article');
     card.className = `settings-menu-item${item.active ? '' : ' is-inactive'}`;
     card.innerHTML = `
-      <div class="stock-menu-icon">${item.icon || '🧁'}</div>
+      <div class="stock-menu-icon">${menuThumbnail(item, '🧁')}</div>
       <div class="settings-menu-info">
         <strong>${item.name}</strong>
         <span>${item.code} · ${item.category} · ${formatCurrency(item.price)}</span>
@@ -1165,7 +1182,7 @@ function renderStockTable(items, editable = true) {
     row.innerHTML = `
       <td>
         <div class="stock-menu-cell">
-          <div class="stock-menu-icon">${item.icon || '🧁'}</div>
+          <div class="stock-menu-icon">${menuThumbnail(item, '🧁')}</div>
           <div>
             <div class="stock-menu-name">${item.name}</div>
             <div class="stock-menu-meta">${item.code} · คงเหลือ ${item.stockNow} ชิ้น${item.active ? '' : ' · พักขาย'}</div>
@@ -1251,6 +1268,117 @@ async function submitHistoricalCorrection(item) {
 }
 
 
+const PRODUCT_IMAGE_MAX_BYTES = 400 * 1024;
+const PRODUCT_IMAGE_LONGEST_SIDE = 600;
+
+
+function dataUriContentType(dataUri) {
+  const comma = dataUri.indexOf(',');
+  if (!dataUri.startsWith('data:') || comma < 0) return '';
+  return dataUri.slice(5, comma).split(';')[0].trim().toLowerCase();
+}
+
+
+function dataUriByteLength(dataUri) {
+  const comma = dataUri.indexOf(',');
+  if (comma < 0) return 0;
+  const encoded = dataUri.slice(comma + 1);
+  if (!encoded) return 0;
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((encoded.length * 3) / 4) - padding);
+}
+
+
+/**
+ * Shrink a chosen photo down to something the server will accept. A camera
+ * original is several megabytes; what leaves the till is already the size it
+ * will be stored at. WebP first, JPEG as the fallback, chosen by what the
+ * canvas actually returns -- a browser that cannot encode WebP quietly hands
+ * back a PNG, which would be larger than the photo we started with.
+ */
+async function shrinkImageForUpload(file) {
+  const source = await createImageBitmap(file);
+  let canvas;
+  try {
+    const longest = Math.max(source.width, source.height);
+    if (!longest) throw new Error('ไฟล์นี้ไม่ใช่รูปภาพ');
+    const scale = longest > PRODUCT_IMAGE_LONGEST_SIDE ? PRODUCT_IMAGE_LONGEST_SIDE / longest : 1;
+    canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('เบราว์เซอร์นี้ย่อรูปไม่ได้');
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  } finally {
+    if (source.close) source.close();
+  }
+
+  for (const format of ['image/webp', 'image/jpeg']) {
+    for (const quality of [0.82, 0.7, 0.55]) {
+      const encoded = canvas.toDataURL(format, quality);
+      if (dataUriContentType(encoded) !== format) break;
+      if (dataUriByteLength(encoded) <= PRODUCT_IMAGE_MAX_BYTES) return encoded;
+    }
+  }
+  throw new Error('รูปนี้ใหญ่เกินไป ลองเลือกรูปอื่น');
+}
+
+
+function renderProductImageField() {
+  const shown = pickedProductImage || (dropProductImage ? '' : savedProductImage || '');
+  const preview = document.getElementById('productImagePreview');
+  preview.innerHTML = shown ? '' : '<span>🧁</span>';
+  if (shown) {
+    const image = document.createElement('img');
+    image.src = shown;
+    image.alt = '';
+    preview.appendChild(image);
+  }
+  document.getElementById('productImagePickLabel').textContent = shown ? 'เปลี่ยนรูป' : 'เลือกรูป';
+  document.getElementById('productImageClear').hidden = !shown;
+}
+
+
+async function pickProductImage(event) {
+  const file = event.target.files && event.target.files[0];
+  // Clearing it lets the same file be chosen again after a failure.
+  event.target.value = '';
+  if (!file) return;
+  document.getElementById('productImageError').textContent = '';
+  try {
+    pickedProductImage = await shrinkImageForUpload(file);
+    dropProductImage = false;
+  } catch (error) {
+    document.getElementById('productImageError').textContent = error.message || 'ใช้รูปนี้ไม่ได้';
+  }
+  renderProductImageField();
+}
+
+
+function clearProductImage() {
+  pickedProductImage = '';
+  dropProductImage = Boolean(savedProductImage);
+  document.getElementById('productImageError').textContent = '';
+  renderProductImageField();
+}
+
+
+/** Attach the picture to a menu that has just been saved. */
+async function saveProductImage(productId) {
+  if (pickedProductImage) {
+    const response = await apiFetch(`/api/products/${productId}/image`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: pickedProductImage })
+    });
+    if (!response.ok) throw new Error((await response.json()).error || 'บันทึกรูปไม่สำเร็จ');
+  } else if (dropProductImage && savedProductImage) {
+    const response = await apiFetch(`/api/products/${productId}/image`, { method: 'DELETE' });
+    if (!response.ok) throw new Error((await response.json()).error || 'ลบรูปไม่สำเร็จ');
+  }
+}
+
+
 function openProductModal(item) {
   editingProductId = item ? item.productId : null;
 
@@ -1266,6 +1394,13 @@ function openProductModal(item) {
   document.getElementById('productActive').checked = item ? item.active : true;
 
 
+  pickedProductImage = '';
+  dropProductImage = false;
+  savedProductImage = item ? item.imageUrl || null : null;
+  document.getElementById('productImageError').textContent = '';
+  renderProductImageField();
+
+
   document.getElementById('productModal').hidden = false;
 }
 
@@ -1273,6 +1408,9 @@ function openProductModal(item) {
 function closeProductModal() {
   document.getElementById('productModal').hidden = true;
   editingProductId = null;
+  pickedProductImage = '';
+  dropProductImage = false;
+  savedProductImage = null;
 }
 
 
@@ -1314,6 +1452,11 @@ async function saveProduct() {
     if (!response.ok) {
       throw new Error(data.error || 'บันทึกเมนูไม่สำเร็จ');
     }
+
+
+    // The menu saves first: a new one has no id to hang a picture on until it
+    // exists, and a failed upload should not also lose the edited fields.
+    await saveProductImage(isEditing ? editingProductId : data.id);
 
 
     showToast(isEditing ? 'แก้ไขเมนูแล้ว' : 'เพิ่มเมนูใหม่แล้ว');
@@ -1841,6 +1984,8 @@ async function init() {
   });
 
   document.getElementById('productModalSave').addEventListener('click', saveProduct);
+  document.getElementById('productImageInput').addEventListener('change', pickProductImage);
+  document.getElementById('productImageClear').addEventListener('click', clearProductImage);
   document.getElementById('productModalCancel').addEventListener('click', closeProductModal);
   document.getElementById('productModalClose').addEventListener('click', closeProductModal);
   document.getElementById('productModal').addEventListener('click', (event) => {

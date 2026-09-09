@@ -8,7 +8,7 @@ import type { CatalogProduct } from '../types/products';
 // with the trusted-device marker and the catalog snapshot. Renaming it is a
 // migration, not an edit -- and only worth doing once every device is synced.
 export const PROMTTAK_POS_DATABASE_NAME = 'BaannoiPOS';
-export const PROMTTAK_POS_SCHEMA_VERSION = 4;
+export const PROMTTAK_POS_SCHEMA_VERSION = 5;
 export const PRODUCT_SNAPSHOT_KEY = 'confirmed';
 export const CATALOG_METADATA_KEY = 'catalog';
 export const OFFLINE_AUTHORIZATION_KEY = 'offlineAuthorization';
@@ -111,6 +111,26 @@ export interface OfflineOrder {
   stockReviewResolvedAt?: string;
 }
 
+/**
+ * One menu's photo, kept so the sell screen still has pictures with no network.
+ *
+ * The bytes are held as an ArrayBuffer rather than a Blob: every engine can
+ * structured-clone one, and a Blob read back from IndexedDB has historically
+ * been the shakier of the two. It becomes a Blob again at read time.
+ *
+ * `version` is the checksum the server put in the picture's URL, so a photo
+ * that has been replaced is recognised by comparing two strings rather than by
+ * re-downloading anything.
+ */
+export interface ProductImageRecord {
+  productId: number;
+  storeId: number;
+  version: string;
+  contentType: string;
+  bytes: ArrayBuffer;
+  savedAt: string;
+}
+
 export interface OfflineStockShortfall {
   productId: number;
   productName: string;
@@ -172,6 +192,11 @@ export interface PromttakPosDatabase extends DBSchema {
     key: typeof PROMPTPAY_CONFIG_KEY;
     value: OfflinePaymentConfigRecord;
   };
+  productImages: {
+    key: number;
+    value: ProductImageRecord;
+    indexes: { 'by-store': number };
+  };
 }
 
 export function openPromttakPosDatabase(): Promise<IDBPDatabase<PromttakPosDatabase>> {
@@ -199,6 +224,12 @@ export function openPromttakPosDatabase(): Promise<IDBPDatabase<PromttakPosDatab
         // index rather than colliding on it.
         transaction.objectStore('offlineOrders')
           .createIndex('by-idempotency-key', 'idempotencyKey', { unique: true });
+      }
+      if (oldVersion < 5) {
+        // Purely additive: menu photos arrive in a store of their own, so a till
+        // upgrading with sales still queued keeps every one of them.
+        database.createObjectStore('productImages', { keyPath: 'productId' })
+          .createIndex('by-store', 'storeId');
       }
     },
     /**

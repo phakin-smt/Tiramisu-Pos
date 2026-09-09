@@ -20,7 +20,7 @@ const PASTA = 2;
 function product(id: number, name: string, price: number): CatalogProduct {
   return {
     id, code: `C${id}`, barcode: null, name, category: 'Tiramisu',
-    price, cost: 10, stock: 20, minStock: 1, active: true, icon: '🍰',
+    price, cost: 10, stock: 20, minStock: 1, active: true, icon: '🍰', imageUrl: null,
   };
 }
 

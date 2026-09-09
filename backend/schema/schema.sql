@@ -138,6 +138,22 @@ CREATE TABLE IF NOT EXISTS stock_plans (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
+-- One picture per menu item, kept out of products so that the many queries
+-- reading a product's price or stock never drag its image bytes along. Bytes
+-- rather than a file path: the deployment's filesystem is read-only, and a
+-- single database keeps one backup covering everything.
+CREATE TABLE IF NOT EXISTS product_images (
+    product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+    -- Names this picture's bytes. It versions the URL and doubles as the ETag,
+    -- so replacing an image always changes its address -- which a timestamp
+    -- resolved to the second could not promise.
+    checksum TEXT NOT NULL,
+    data BLOB NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_stock_plans_date ON stock_plans(plan_date);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);

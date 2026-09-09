@@ -21,6 +21,8 @@ export interface CatalogProduct {
   minStock: number;
   active: boolean;
   icon: string;
+  // Null for a menu with no photo, which falls back to the category emoji.
+  imageUrl: string | null;
 }
 
 export interface ProductMutationResponse {

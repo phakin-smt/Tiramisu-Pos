@@ -25,6 +25,7 @@ const original: CatalogProduct = {
   minStock: 2,
   active: false,
   icon: '🍰',
+  imageUrl: null,
 };
 
 describe('catalog snapshot IndexedDB storage', () => {

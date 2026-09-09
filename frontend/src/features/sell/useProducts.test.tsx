@@ -16,7 +16,7 @@ import type { CatalogProduct } from '../../types/products';
 import { useProducts } from './useProducts';
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
 ];
 
 function json(body: unknown): Response {

@@ -19,7 +19,7 @@ import { getPendingStockReviews, resolveStockReview } from './stockReconciliatio
 import { syncPendingOfflineOrders } from './syncOfflineOrders';
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 20, minStock: 2, active: true, icon: '🍰' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 20, minStock: 2, active: true, icon: '🍰', imageUrl: null },
 ];
 
 function jsonResponse(body: unknown, status = 200): Response {

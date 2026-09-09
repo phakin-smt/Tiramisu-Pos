@@ -8,6 +8,7 @@ import { PaymentSelector, type PaymentMethod } from './PaymentSelector';
 
 interface CartProps {
   products: readonly CatalogProduct[]; cart: readonly CartItemModel[]; totals: Totals; discountState: DiscountState;
+  photos?: ReadonlyMap<number, string>;
   totalQuantity: number; paidQuantity: number; customerType: CustomerType; paymentMethod: PaymentMethod; mobile: boolean; open: boolean;
   rules: PricingRules;
   cashPaymentDisabled: boolean;
@@ -20,7 +21,7 @@ interface CartProps {
   onHold(): void;
 }
 
-export function Cart({ products, cart, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, rules, cashPaymentDisabled, promptPayDisabled, checkoutUnavailableMessages, holdNotice, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate, onHold }: CartProps) {
+export function Cart({ products, cart, photos, totals, discountState, totalQuantity, paidQuantity, customerType, paymentMethod, mobile, open, rules, cashPaymentDisabled, promptPayDisabled, checkoutUnavailableMessages, holdNotice, onClose, onClear, onQuantityChange, onGiveawayChange, onRemove, onDiscountChange, onCustomerChange, onPaymentActivate, onHold }: CartProps) {
   return <aside id="sell-cart" className={`sell-cart${open ? ' is-open' : ''}`} aria-label="ออเดอร์ปัจจุบัน" role={mobile ? 'dialog' : undefined} aria-modal={mobile || undefined} aria-hidden={mobile ? !open : undefined} inert={mobile && !open}>
     <header className="sell-cart-header">
       <div><h2>ออเดอร์ปัจจุบัน</h2><span>{totalQuantity} ชิ้น</span></div>
@@ -32,7 +33,7 @@ export function Cart({ products, cart, totals, discountState, totalQuantity, pai
       {!cart.length && <div className="empty-state">ยังไม่มีสินค้าในตะกร้า</div>}
       {cart.map((item) => {
         const product = products.find((candidate) => candidate.id === item.productId);
-        return product ? <CartItem key={item.productId} item={item} product={product} onQuantityChange={(delta) => onQuantityChange(product, delta)} onGiveawayChange={(delta) => onGiveawayChange(product.id, delta)} onRemove={() => onRemove(product.id)} /> : null;
+        return product ? <CartItem key={item.productId} item={item} product={product} photoUrl={photos?.get(product.id)} onQuantityChange={(delta) => onQuantityChange(product, delta)} onGiveawayChange={(delta) => onGiveawayChange(product.id, delta)} onRemove={() => onRemove(product.id)} /> : null;
       })}
     </div>
     <CartTotals totals={totals} discountState={discountState} totalQuantity={totalQuantity} paidQuantity={paidQuantity} rules={rules} onDiscountChange={onDiscountChange} />

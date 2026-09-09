@@ -23,8 +23,8 @@ import {
 } from './offlineOrders';
 
 const products: CatalogProduct[] = [
-  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰' },
-  { id: 2, code: 'OLD', barcode: null, name: 'Inactive Stocked', category: 'Bakery', price: 50, cost: 18, stock: 2, minStock: 1, active: false, icon: '🍪' },
+  { id: 1, code: 'ORI', barcode: null, name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 10, minStock: 2, active: true, icon: '🍰', imageUrl: null },
+  { id: 2, code: 'OLD', barcode: null, name: 'Inactive Stocked', category: 'Bakery', price: 50, cost: 18, stock: 2, minStock: 1, active: false, icon: '🍪', imageUrl: null },
 ];
 
 const identity = {
@@ -236,7 +236,7 @@ describe('PromttakPOS migrations', () => {
     const upgraded = await openPromttakPosDatabase();
     expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect([...upgraded.objectStoreNames]).toEqual([
-      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productSnapshot',
+      'metadata', 'offlineOrderItems', 'offlineOrders', 'offlinePaymentConfig', 'offlineStockMovements', 'productImages', 'productSnapshot',
     ]);
     upgraded.close();
     expect(await readConfirmedCatalogSnapshot(1)).toEqual({
@@ -318,7 +318,7 @@ describe('PromttakPOS migrations', () => {
     versionThree.close();
 
     const upgraded = await openPromttakPosDatabase();
-    expect(upgraded.version).toBe(4);
+    expect(upgraded.version).toBe(PROMTTAK_POS_SCHEMA_VERSION);
     expect([...upgraded.transaction('offlineOrders').store.indexNames].sort())
       .toEqual(['by-created-at', 'by-idempotency-key', 'by-sync-status']);
     expect(await upgraded.count('offlineOrders')).toBe(1);

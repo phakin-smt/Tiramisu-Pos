@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS stock_plans (
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency_key ON orders(idempotency_key);
 
+-- One picture per menu item. See schema.sql for why the bytes live in their own
+-- table rather than beside the price and the stock count.
+CREATE TABLE IF NOT EXISTS product_images (
+ product_id BIGINT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+ content_type TEXT NOT NULL, byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+ checksum TEXT NOT NULL, data BYTEA NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Everything past this point brings a database created before multi-store
 -- support up to the definitions above. Each statement is idempotent, because
 -- init_schema() runs this file on every start.

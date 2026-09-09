@@ -1,5 +1,7 @@
 """Start the real Flask app with deterministic, disposable E2E data."""
 
+import base64
+import hashlib
 import os
 import sys
 from datetime import datetime
@@ -40,6 +42,12 @@ with database.transaction() as (_, cursor):
     # 404 -- Flask only exposes a fixed set of files under vanilla/.
     database.execute(cursor, "UPDATE stores SET logo_url='/logos/promtak.png' WHERE id=1")
 
+# A one-pixel WebP: the tests care that the bytes stored are the bytes served,
+# not what the picture looks like.
+E2E_MENU_PHOTO = base64.b64decode(
+    'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=='
+)
+
 products = [
     ("E2E-ORI", "E2E Original", "Tiramisu", 69, 20, 20, 2, 1),
     ("E2E-COF", "E2E Coffee", "Tiramisu", 69, 25, 15, 2, 1),
@@ -72,6 +80,17 @@ with database.transaction() as (_, cursor):
                VALUES (?,?,'','',?,1)""",
             (code, name, customer_type),
         )
+    # One menu wears a photo, so the offline tests can tell a picture kept on the
+    # device from one that only ever came off the network.
+    photographed = database.execute(cursor, "SELECT id FROM products WHERE sku=?", ("E2E-ORI",)).fetchone()
+    database.execute(
+        cursor,
+        """INSERT INTO product_images (product_id,content_type,byte_size,checksum,data,updated_at)
+           VALUES (?,?,?,?,?,datetime('now'))""",
+        (photographed["id"], "image/webp", len(E2E_MENU_PHOTO),
+         hashlib.sha256(E2E_MENU_PHOTO).hexdigest()[:16], E2E_MENU_PHOTO),
+    )
+
     undo_product = database.execute(cursor, "SELECT id FROM products WHERE sku=?", ("E2E-UNDO",)).fetchone()
     movement_date = datetime.now(ZoneInfo("Asia/Bangkok")).date().isoformat()
     for movement_type, quantity, reference_type in (

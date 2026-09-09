@@ -4,10 +4,13 @@ import type { CatalogProduct } from '../../types/products';
 interface ProductCardProps {
   product: CatalogProduct;
   remaining: number;
+  /** The photo held on this till, which is what shows with no network. */
+  photoUrl?: string;
   onAdd(product: CatalogProduct): void;
 }
 
-export function ProductCard({ product, remaining, onAdd }: ProductCardProps) {
+export function ProductCard({ product, remaining, photoUrl, onAdd }: ProductCardProps) {
+  const photo = photoUrl || product.imageUrl;
   const unavailable = remaining <= 0;
   const lowStock = remaining > 0 && remaining <= 5;
   return <button
@@ -18,7 +21,11 @@ export function ProductCard({ product, remaining, onAdd }: ProductCardProps) {
     aria-label={unavailable ? `${product.name} สินค้าหมด` : `เพิ่ม ${product.name} ลงตะกร้า`}
     onClick={() => onAdd(product)}
   >
-    <span className="sell-product-icon" aria-hidden="true">{product.icon || '□'}</span>
+    <span className="sell-product-icon" aria-hidden="true">
+      {photo
+        ? <img className="sell-product-photo" src={photo} alt="" loading="lazy" />
+        : product.icon || '□'}
+    </span>
     <strong>{product.name}</strong>
     <span className="sell-product-code">{product.code}</span>
     <span className="sell-product-price">{formatCurrency(product.price)}</span>
