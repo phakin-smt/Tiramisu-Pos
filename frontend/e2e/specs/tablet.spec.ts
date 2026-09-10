@@ -21,7 +21,13 @@ test('tablet workspace, swipe exclusions, modal scrolling, and data views remain
   await expect(page.getByRole('button', { name: 'เงินสด' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'QR พร้อมเพย์' })).toBeVisible();
   const columns = await page.locator('.sell-product-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-  expect(columns).toBe(2);
+  // This case runs at both tablet orientations, and they want different answers.
+  // A landscape till gets three: a square photo makes a card as tall as its
+  // column is wide, and at two columns on 1180px that came to 455px -- one row
+  // of menu at a time for someone with a queue. Portrait stays at two, where the
+  // grid area is already narrow enough that a third column would be unreadable.
+  const landscape = page.viewportSize()!.width >= 1024;
+  expect(columns).toBe(landscape ? 3 : 2);
   await expectNoHorizontalOverflow(page);
 
   const main = page.locator('.main-content');

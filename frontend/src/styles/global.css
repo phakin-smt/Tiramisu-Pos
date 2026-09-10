@@ -669,6 +669,17 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   .close-day-content > .metrics-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
 }
 
+/* A landscape till is the widest part of the tablet range, and two columns there
+   made each card as wide as the column -- and, with a square photo, just as
+   tall. One row of menu at a time is a lot of scrolling for someone with a queue
+   in front of them. Three columns is not a smaller photo so much as more menu:
+   measured, it takes the card from 455px tall to 343px, which fits two full rows
+   instead of one. Portrait tablets keep two columns; the grid area there is
+   already narrow enough that a third would make the cards unreadable. */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .sell-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 767px) {
   body.sell-cart-open { overflow: hidden; }
   .sell-page { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
