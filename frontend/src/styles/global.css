@@ -897,3 +897,13 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
 /* Kept in the layout rather than display:none, which stops some browsers from
    passing the label's click through to the file picker. */
 .file-input { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.store-settings-section { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-soft); }
+.store-settings-section .page-toolbar { padding: 0; border: 0; background: none; }
+.store-qr-preview, .store-qr-empty { width: 120px; height: 120px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; object-fit: contain; }
+.store-qr-empty { display: grid; place-items: center; background: var(--panel-soft); color: var(--text-soft); font-size: 40px; }
+.store-qr-note { margin: 0; color: var(--text-soft); font-size: 12px; }
+/* The total a picture of a QR cannot carry, sized to be read across a counter
+   and said out loud while the customer keys it in. */
+.qr-amount-callout { display: grid; gap: 2px; justify-items: center; padding: 8px 14px; border: 2px solid var(--line); border-radius: var(--radius-md); background: #fff; }
+.qr-amount-callout span { color: var(--text-soft); font-size: 12px; font-weight: 700; }
+.qr-amount-callout strong { font-size: 30px; line-height: 1.1; letter-spacing: -0.5px; }

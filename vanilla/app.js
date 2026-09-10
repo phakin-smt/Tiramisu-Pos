@@ -664,7 +664,14 @@ function checkout() {
 }
 
 
-function openQrModal() {
+let qrObjectUrl = '';
+
+
+// Fetched rather than set as an img src so the response header can be read: a
+// shop paid through a picture of its own QR gets a code with no amount in it,
+// and telling the cashier otherwise would have them wave a customer through
+// without checking what was actually transferred.
+async function openQrModal() {
   const totals = computeTotals();
   setCartOpen(false);
   document.getElementById('qrAmountDue').textContent = formatCurrency(totals.grandTotal);
@@ -675,24 +682,35 @@ function openQrModal() {
   confirm.disabled = true;
   status.textContent = 'กำลังสร้าง QR ตามยอด...';
   status.classList.remove('is-error');
-  qr.onload = () => {
+  document.getElementById('qrModal').hidden = false;
+
+  if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = ''; }
+  try {
+    const response = await fetch(`/api/payment-qr?amount=${encodeURIComponent(totals.grandTotal.toFixed(2))}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('qr');
+    const amountInQr = response.headers.get('X-Payment-QR-Amount') !== 'manual';
+    qrObjectUrl = URL.createObjectURL(await response.blob());
+    qr.src = qrObjectUrl;
     qr.hidden = false;
     confirm.disabled = false;
-    status.textContent = 'QR นี้ใส่ยอดให้แล้ว กรุณาตรวจชื่อผู้รับก่อนโอน';
-  };
-  qr.onerror = () => {
+    status.textContent = amountInQr
+      ? 'QR นี้ใส่ยอดให้แล้ว กรุณาตรวจชื่อผู้รับก่อนโอน'
+      : 'QR ร้านไม่มียอดในตัว ลูกค้าต้องกรอกยอดตามด้านบน กรุณาตรวจยอดและชื่อผู้รับก่อนโอน';
+  } catch (error) {
     qr.hidden = true;
     confirm.disabled = true;
     status.textContent = 'สร้าง QR ไม่สำเร็จ กรุณาตรวจการตั้งค่าพร้อมเพย์';
     status.classList.add('is-error');
-  };
-  qr.src = `/api/payment-qr?amount=${encodeURIComponent(totals.grandTotal.toFixed(2))}&t=${Date.now()}`;
-  document.getElementById('qrModal').hidden = false;
+  }
 }
 
 
 function closeQrModal() {
   document.getElementById('qrModal').hidden = true;
+  if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = ''; }
 }
 
 

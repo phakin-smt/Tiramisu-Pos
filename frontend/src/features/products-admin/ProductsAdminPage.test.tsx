@@ -46,6 +46,7 @@ function mockProducts(handler?: (url: string, init: RequestInit) => Response | P
     if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json(summary));
     if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
     if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
+    if (url === '/api/offline-payment-config') return Promise.resolve(json({ configured: true, mode: 'promptpay', version: 1 }));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
