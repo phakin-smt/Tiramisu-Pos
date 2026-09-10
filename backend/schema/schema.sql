@@ -154,6 +154,22 @@ CREATE TABLE IF NOT EXISTS product_images (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- The QR a shop is paid through, when it would rather show its own than have one
+-- generated from a PromptPay id. Bytes here for the same reason menu pictures
+-- are: the deployment's filesystem is read-only and one database is the whole
+-- backup. A shop with no row here falls back to the deployment-wide
+-- PROMPTPAY_ID, which is the only path that can still carry the amount.
+CREATE TABLE IF NOT EXISTS store_payment_qr (
+    store_id INTEGER PRIMARY KEY REFERENCES stores(id),
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+    -- Names these exact bytes, so a replaced QR arrives at a new address and a
+    -- till never scans a cached copy of the QR it used yesterday.
+    checksum TEXT NOT NULL,
+    data BLOB NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_stock_plans_date ON stock_plans(plan_date);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
