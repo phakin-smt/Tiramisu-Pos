@@ -74,7 +74,7 @@ export function SellPage() {
   const totals = calculateCartTotals(products, cart, discountState, customerType, storeRules);
   const totalQuantity = totalCartQuantity(cart);
   const paidQuantity = paidCartQuantity(cart);
-  const promptPayQr = usePromptPayQr(promptPayOpen, totals.grandTotal, promptPayLocalMode);
+  const promptPayQr = usePromptPayQr(promptPayOpen, totals.grandTotal, promptPayLocalMode, storeId ?? undefined);
 
   useEffect(() => {
     if (!categories.includes(selectedCategory)) setSelectedCategory(ALL_CATEGORIES);
@@ -279,7 +279,7 @@ export function SellPage() {
     <button type="button" className={`mobile-cart-backdrop${cartOpen ? ' is-open' : ''}`} aria-label="ปิดตะกร้า" tabIndex={cartOpen ? 0 : -1} onClick={() => setCartOpen(false)} />
     <MobileCartBar count={totalQuantity} total={totals.grandTotal} expanded={cartOpen} onOpen={() => setCartOpen(true)} />
     {cashPaymentOpen && <CashPaymentModal open amount={totals.grandTotal} checkoutError={checkout.error} submitting={checkout.pending} onClose={closeCashPayment} onConfirm={(details) => { void submitOrder('cash', details); }} />}
-    <PromptPayModal open={promptPayOpen} amount={totals.grandTotal} localMode={promptPayQr.mode === 'local'} qrUrl={promptPayQr.url} loading={promptPayQr.loading} qrError={qrImageError || promptPayQr.error} qrGuidance={promptPayQr.guidance} checkoutError={checkout.error} submitting={checkout.pending} onClose={closePromptPay} onConfirm={() => { void submitOrder('transfer'); }} onImageError={() => setQrImageError('ไม่สามารถแสดง QR พร้อมเพย์ได้')} />
+    <PromptPayModal open={promptPayOpen} amount={totals.grandTotal} localMode={promptPayQr.mode === 'local'} qrUrl={promptPayQr.url} amountInQr={promptPayQr.amountInQr} loading={promptPayQr.loading} qrError={qrImageError || promptPayQr.error} qrGuidance={promptPayQr.guidance} checkoutError={checkout.error} submitting={checkout.pending} onClose={closePromptPay} onConfirm={() => { void submitOrder('transfer'); }} onImageError={() => setQrImageError('ไม่สามารถแสดง QR พร้อมเพย์ได้')} />
     <CloseDayModal open={closeDay.open} report={closeDay.report} closedAt={closeDay.closedAt} closureStatusUnavailable={closeDay.closureStatusUnavailable} pending={closeDay.pending} error={closeDay.mutationError} confirmation={closeDay.confirmation} onClose={closeDay.closePreview} onConfirm={() => { void closeDay.confirm(); }} />
   </section>;
 }

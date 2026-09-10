@@ -42,6 +42,11 @@ PAYMENT_METHODS = {'cash', 'transfer'}
 # against an unshrunk camera original, not a quality setting.
 PRODUCT_IMAGE_TYPES = {'image/webp', 'image/jpeg', 'image/png'}
 PRODUCT_IMAGE_MAX_BYTES = 400 * 1024
+# A shop's own payment QR. The ceiling is higher than a menu picture's because a
+# QR has to survive being scanned across a counter: the browser keeps it larger
+# and encodes it losslessly, and compression artefacts on the finder patterns
+# cost more than the bytes do.
+PAYMENT_QR_MAX_BYTES = 600 * 1024
 STOCK_REVIEW_NOTE = 'ตรวจสอบสต็อก (Sync ออฟไลน์):'
 # Machine-readable reference_type for reconciliation movements. Existing values
 # ('order', 'giveaway', 'waste', 'correction', 'daily_prep') keep their meaning.
@@ -204,6 +209,22 @@ def logout():
 
 @app.get('/api/payment-qr')
 def payment_qr():
+ """The code this shop's customer scans, whichever kind it is.
+
+ One endpoint rather than two because the till must not have to ask which kind
+ first: that is a second round trip at the counter, and a till working from a
+ stale answer would show the shared QR to a shop that has since uploaded its
+ own -- money into somebody else's account, invisible until the day is
+ reconciled short. The header says whether the amount is inside the code, since
+ only the generated one can carry it.
+ """
+ own=store_payment_qr_row(current_store())
+ if own is not None:
+  response=send_file(BytesIO(bytes(own['data'])),mimetype=own['content_type'])
+  response.headers['X-Payment-QR-Amount']='manual'
+  response.headers['Cache-Control']='private, no-store'
+  response.headers['X-Content-Type-Options']='nosniff'
+  return response
  promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
  if not promptpay_id:
   return error('ระบบพร้อมเพย์ยังไม่ได้ตั้งค่า',503)
@@ -222,9 +243,55 @@ def payment_qr():
   output,
   mimetype='image/png',
  )
+ response.headers['X-Payment-QR-Amount']='embedded'
  response.headers['Cache-Control']='private, no-store'
  response.headers['X-Content-Type-Options']='nosniff'
  return response
+
+def store_payment_qr_row(store_id):
+ found=rows('SELECT content_type,checksum,data FROM store_payment_qr WHERE store_id=?',(store_id,))
+ return found[0] if found else None
+
+def store_payment_qr_checksum(store_id):
+ found=rows('SELECT checksum FROM store_payment_qr WHERE store_id=?',(store_id,))
+ return found[0]['checksum'] if found else None
+
+def store_payment_qr_url(checksum):
+ """Where this shop's QR lives, or None for a shop that shows the generated one."""
+ return '/api/store/payment-qr?v={}'.format(checksum) if checksum else None
+
+@app.get('/api/store/payment-qr')
+def store_payment_qr():
+ row=store_payment_qr_row(current_store())
+ if row is None: return error('ร้านนี้ยังไม่ได้ตั้ง QR รับเงิน',404)
+ tag='"{}"'.format(row['checksum'])
+ if request.headers.get('If-None-Match')==tag: response=app.response_class(status=304)
+ else: response=send_file(BytesIO(bytes(row['data'])),mimetype=row['content_type'])
+ response.headers['ETag']=tag
+ # The address names these exact bytes, so a replaced QR arrives somewhere else
+ # and no till can scan yesterday's. Private: this is how the shop gets paid.
+ response.headers['Cache-Control']='private, max-age=31536000, immutable'
+ response.headers['X-Content-Type-Options']='nosniff'
+ return response
+
+@app.put('/api/store/payment-qr')
+def set_store_payment_qr():
+ payload=request.get_json(silent=True) or {}
+ content_type,blob,problem=decode_uploaded_image(payload.get('image'),PAYMENT_QR_MAX_BYTES)
+ if problem: return error(problem)
+ checksum=hashlib.sha256(blob).hexdigest()[:16]
+ store=current_store()
+ with transaction() as (_,cursor):
+  execute(cursor,'DELETE FROM store_payment_qr WHERE store_id=?',(store,))
+  execute(cursor,"INSERT INTO store_payment_qr (store_id,content_type,byte_size,checksum,data,updated_at) VALUES (?,?,?,?,?,datetime('now'))",(store,content_type,len(blob),checksum,blob))
+ return jsonify(storeId=store,imageUrl=store_payment_qr_url(checksum),byteSize=len(blob))
+
+@app.delete('/api/store/payment-qr')
+def delete_store_payment_qr():
+ store=current_store()
+ with transaction() as (_,cursor):
+  execute(cursor,'DELETE FROM store_payment_qr WHERE store_id=?',(store,))
+ return jsonify(storeId=store,imageUrl=None)
 
 def rows(query,params=()):
  connection=connect_db()
@@ -355,6 +422,9 @@ def product_image_url(product_id,checksum):
  return '/api/products/{}/image?v={}'.format(product_id,checksum) if checksum else None
 
 def decode_product_image(raw):
+ return decode_uploaded_image(raw,PRODUCT_IMAGE_MAX_BYTES)
+
+def decode_uploaded_image(raw,max_bytes):
  """Validate the data URI a canvas export produces, returning (type,bytes,problem)."""
  if not isinstance(raw,str) or not raw.startswith('data:'): return None,None,'รูปแบบรูปไม่ถูกต้อง'
  header,_,encoded=raw.partition(',')
@@ -364,7 +434,7 @@ def decode_product_image(raw):
  try: blob=base64.b64decode(encoded,validate=True)
  except ValueError: return None,None,'ไฟล์รูปเสียหาย'
  if not blob: return None,None,'ไฟล์รูปว่างเปล่า'
- if len(blob)>PRODUCT_IMAGE_MAX_BYTES: return None,None,'ไฟล์รูปใหญ่เกิน {} KB'.format(PRODUCT_IMAGE_MAX_BYTES//1024)
+ if len(blob)>max_bytes: return None,None,'ไฟล์รูปใหญ่เกิน {} KB'.format(max_bytes//1024)
  return content_type,blob,None
 
 def owned_product(cursor,product_id):
@@ -758,6 +828,20 @@ def react_index(route=None):
 
 @app.get('/api/offline-payment-config')
 def offline_payment_config():
+ """How this shop takes a transfer, and everything a till needs to show it offline.
+
+ A shop that uploaded its own QR is paid through that picture; one that did not
+ falls back to the deployment-wide PROMPTPAY_ID. Only the generated path can
+ carry the amount, so the mode travels with the config: the till has to know
+ whether to put the total in the QR or in front of the customer to type.
+ """
+ checksum=store_payment_qr_checksum(current_store())
+ if checksum:
+  payload={'configured':True,'mode':'image','version':1,'imageChecksum':checksum,'imageUrl':store_payment_qr_url(checksum)}
+  response=jsonify(payload)
+  response.headers['Cache-Control']='private, no-store'
+  response.headers['X-Content-Type-Options']='nosniff'
+  return response
  promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
  configured=False
  merchant_account_info=None
@@ -767,7 +851,7 @@ def offline_payment_config():
    configured=True
   except PromptPayError:
    pass
- payload={'configured':configured,'version':1}
+ payload={'configured':configured,'mode':'promptpay' if configured else 'none','version':1}
  if merchant_account_info is not None:
   payload['merchantAccountInfo']=merchant_account_info
  response=jsonify(payload)

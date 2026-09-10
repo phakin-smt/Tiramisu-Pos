@@ -54,10 +54,30 @@ export interface PricingRulesRecord {
   savedAt: string;
 }
 
+/**
+ * How the till gets paid while it cannot reach the server.
+ *
+ * `storeId` is the whole point of the record carrying anything beyond the
+ * receiver: a QR belongs to one shop's bank account, and a till that switched
+ * shops offline must be told it has nothing rather than handed the last shop's.
+ * A record written before stores were per-shop has no id and belongs to the
+ * first store, the only one whose QR it could have been.
+ *
+ * In `image` mode the picture's own bytes are held here. There is nothing to
+ * generate from -- the shop's QR is a photograph, not a payload -- so the till
+ * has to have kept the file itself.
+ */
 export interface OfflinePaymentConfigRecord {
   key: typeof PROMPTPAY_CONFIG_KEY;
+  storeId?: number;
   version: number;
+  /** Absent on records written before a shop could upload its own QR. */
+  mode?: 'promptpay' | 'image';
+  /** Empty in `image` mode: there is no payload to build. */
   merchantAccountInfo: string;
+  imageChecksum?: string;
+  imageType?: string;
+  imageData?: ArrayBuffer;
   provisionedAt: string;
 }
 

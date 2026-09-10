@@ -43,6 +43,7 @@ class PaymentQrEndpointTests(unittest.TestCase):
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         self.assertEqual(response.json, {
             "configured": True,
+            "mode": "promptpay",
             "merchantAccountInfo": "0016A00000067701011101130066801234567",
             "version": 1,
         })
@@ -81,7 +82,7 @@ class PaymentQrEndpointTests(unittest.TestCase):
         try:
             response = self.client.get("/api/offline-payment-config")
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json, {"configured": False, "version": 1})
+            self.assertEqual(response.json, {"configured": False, "mode": "none", "version": 1})
             self.assertEqual(response.headers["Cache-Control"], "private, no-store")
         finally:
             os.environ["PROMPTPAY_ID"] = original

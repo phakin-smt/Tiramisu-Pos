@@ -10,6 +10,7 @@ import { useStockSummary } from '../stock/useStockSummary';
 import { ProductFilters, type ProductStatusFilter } from './ProductFilters';
 import { ProductFormModal } from './ProductFormModal';
 import { ProductList } from './ProductList';
+import { StorePaymentQrSection } from './StorePaymentQrSection';
 
 export function ProductsAdminPage() {
   const today = bangkokDateISO();
@@ -51,6 +52,7 @@ export function ProductsAdminPage() {
 
   return <section className="data-page products-admin-page">
     <PageHeader title="ตั้งค่า" />
+    <StorePaymentQrSection />
     <div className="page-toolbar"><div><h2>เมนูทั้งหมด</h2><span>{items.length} เมนู · เปิดขาย {items.filter((item) => item.active).length} เมนู</span></div><button type="button" className="primary-button" disabled={mutation.pending} onClick={openCreate}>+ เพิ่มเมนูใหม่</button></div>
     <ProductFilters query={query} status={status} category={category} categories={categories} onQuery={setQuery} onStatus={setStatus} onCategory={setCategory} />
     <MutationFeedback error={mutation.error} success={notice || mutation.success} />

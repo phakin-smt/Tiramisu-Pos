@@ -43,10 +43,10 @@ export function dataUriByteLength(dataUri: string): number {
   return Math.max(0, Math.floor((encoded.length * 3) / 4) - padding);
 }
 
-async function drawToCanvas(file: Blob): Promise<HTMLCanvasElement> {
+export async function drawToCanvas(file: Blob, longestSide = LONGEST_SIDE): Promise<HTMLCanvasElement> {
   const source = await createImageBitmap(file);
   try {
-    const { width, height } = targetDimensions(source.width, source.height);
+    const { width, height } = targetDimensions(source.width, source.height, longestSide);
     if (!width || !height) throw new Error('ไฟล์นี้ไม่ใช่รูปภาพ');
     const canvas = document.createElement('canvas');
     canvas.width = width;

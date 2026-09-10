@@ -65,6 +65,12 @@ export interface ApiRequestOptions extends RequestInit {
   notifyUnauthorized?: boolean;
   /** Milliseconds before the request is aborted. Pass `0` to opt out. */
   timeoutMs?: number;
+  /**
+   * Reads the response headers of a successful blob request. Some responses
+   * describe themselves in a header -- what a QR is, rather than what it shows
+   * -- and the bytes alone cannot say it.
+   */
+  onHeaders?(headers: Headers): void;
 }
 
 interface TimedRequest {
@@ -127,7 +133,7 @@ async function parseJson(response: Response): Promise<unknown> {
 
 export async function apiRequest<T>(
   path: string,
-  { notifyUnauthorized = true, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal, ...init }: ApiRequestOptions = {},
+  { notifyUnauthorized = true, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal, onHeaders: _onHeaders, ...init }: ApiRequestOptions = {},
 ): Promise<T> {
   const request = startTimedRequest(signal, timeoutMs);
   let response: Response;
@@ -165,7 +171,7 @@ export async function apiRequest<T>(
 
 export async function apiBlobRequest(
   path: string,
-  { notifyUnauthorized = true, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal, ...init }: ApiRequestOptions = {},
+  { notifyUnauthorized = true, headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, signal, onHeaders, ...init }: ApiRequestOptions = {},
 ): Promise<Blob> {
   const request = startTimedRequest(signal, timeoutMs);
   let response: Response;
@@ -194,6 +200,7 @@ export async function apiBlobRequest(
     );
   }
 
+  onHeaders?.(response.headers);
   return response.blob();
 }
 

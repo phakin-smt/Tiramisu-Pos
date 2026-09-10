@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS product_images (
  checksum TEXT NOT NULL, data BYTEA NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- The QR a shop is paid through. See schema.sql for why the bytes live here and
+-- what a shop with no row falls back to.
+CREATE TABLE IF NOT EXISTS store_payment_qr (
+ store_id BIGINT PRIMARY KEY REFERENCES stores(id),
+ content_type TEXT NOT NULL, byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+ checksum TEXT NOT NULL, data BYTEA NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Everything past this point brings a database created before multi-store
 -- support up to the definitions above. Each statement is idempotent, because
 -- init_schema() runs this file on every start.

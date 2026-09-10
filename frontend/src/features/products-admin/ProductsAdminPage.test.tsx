@@ -4,6 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StockSummaryResponse } from '../../types/stock';
 import { ProductsAdminPage } from './ProductsAdminPage';
 
+// The shrink step needs a canvas and createImageBitmap, neither of which jsdom
+// has. Its own rules are covered in domain/productImage.test.ts; what these
+// cases care about is that the form offers a picture and hands it on.
+const shrinkImageForUpload = vi.hoisted(() => vi.fn(async () => 'data:image/webp;base64,UElD'));
+vi.mock('../../domain/productImage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../domain/productImage')>()),
+  shrinkImageForUpload,
+}));
+
 const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi' }], storeId: 1 };
 const STORE_PRICING = {
   storeId: 1,
@@ -37,6 +46,7 @@ function mockProducts(handler?: (url: string, init: RequestInit) => Response | P
     if (url.startsWith('/api/stock/daily-summary')) return Promise.resolve(json(summary));
     if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
     if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
+    if (url === '/api/offline-payment-config') return Promise.resolve(json({ configured: true, mode: 'promptpay', version: 1 }));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -51,8 +61,13 @@ function fillCreateForm() {
   fireEvent.change(dialog.getByLabelText('ราคาขาย (บาท)'), { target: { value: '89' } });
 }
 
+function pickFile() {
+  const input = within(screen.getByRole('dialog')).getByLabelText('เลือกรูป');
+  fireEvent.change(input, { target: { files: [new File(['photo'], 'menu.jpg', { type: 'image/jpeg' })] } });
+}
+
 describe('ProductsAdminPage', () => {
-  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date('2026-08-16T18:30:00Z')); });
+  beforeEach(() => { shrinkImageForUpload.mockClear(); vi.useFakeTimers({ shouldAdvanceTime: true }); vi.setSystemTime(new Date('2026-08-16T18:30:00Z')); });
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   it('lists active and inactive products and filters by search and status', async () => {
@@ -146,5 +161,66 @@ describe('ProductsAdminPage', () => {
     expect(submit).toBeDisabled();
     pending.resolve(json({ id: 3, code: 'COC' }));
     expect(await screen.findByRole('status')).toHaveTextContent('เพิ่มเมนูใหม่แล้ว');
+  });
+
+  it('offers a picture control in the menu form, holding the emoji until one is chosen', async () => {
+    mockProducts();
+    render(<ProductsAdminPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /เพิ่มเมนูใหม่/ }));
+    const dialog = within(screen.getByRole('dialog'));
+    const picker = dialog.getByLabelText('เลือกรูป');
+    expect(picker).toHaveAttribute('type', 'file');
+    expect(picker).toHaveAttribute('accept', 'image/*');
+    expect(dialog.queryByRole('button', { name: 'ลบรูป' })).not.toBeInTheDocument();
+    pickFile();
+    expect(await dialog.findByLabelText('เปลี่ยนรูป')).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'ลบรูป' })).toBeInTheDocument();
+  });
+
+  it('sends the chosen picture to the image endpoint only after the menu itself is created', async () => {
+    const fetchMock = mockProducts((url, init) => {
+      if (url === '/api/products' && init.method === 'POST') return json({ id: 3, code: 'COC' });
+      if (url === '/api/products/3/image') return json({ id: 3, imageUrl: '/api/products/3/image?v=abc' });
+    });
+    render(<ProductsAdminPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /เพิ่มเมนูใหม่/ }));
+    fillCreateForm();
+    pickFile();
+    await screen.findByLabelText('เปลี่ยนรูป');
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึกเมนู' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('เพิ่มเมนูใหม่แล้ว');
+    const writes = fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith('/api/products'));
+    expect(writes).toEqual(['/api/products', '/api/products/3/image']);
+    const upload = fetchMock.mock.calls.find(([url]) => url === '/api/products/3/image');
+    expect(upload?.[1]?.method).toBe('PUT');
+    expect(JSON.parse(String(upload?.[1]?.body))).toEqual({ image: 'data:image/webp;base64,UElD' });
+  });
+
+  it('drops a saved picture through the image endpoint when it is cleared', async () => {
+    const withPhoto = { ...summary, items: [{ ...summary.items[0], imageUrl: '/api/products/1/image?v=abc' }, summary.items[1]] };
+    const fetchMock = mockProducts((url, init) => {
+      if (url.startsWith('/api/stock/daily-summary')) return json(withPhoto);
+      if (url === '/api/products/1' && init.method === 'PUT') return json({ id: 1, code: 'ORI' });
+      if (url === '/api/products/1/image' && init.method === 'DELETE') return json({ id: 1, imageUrl: null });
+    });
+    render(<ProductsAdminPage />);
+    await screen.findByText('Original');
+    fireEvent.click(screen.getByRole('button', { name: 'แก้ไข Original' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ลบรูป' }));
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึกเมนู' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('แก้ไขเมนูแล้ว');
+    const remove = fetchMock.mock.calls.find(([url]) => url === '/api/products/1/image');
+    expect(remove?.[1]?.method).toBe('DELETE');
+  });
+
+  it('leaves the server untouched when an edit with a new picture is cancelled', async () => {
+    const fetchMock = mockProducts();
+    render(<ProductsAdminPage />);
+    await screen.findByText('Original');
+    fireEvent.click(screen.getByRole('button', { name: 'แก้ไข Original' }));
+    pickFile();
+    await screen.findByLabelText('เปลี่ยนรูป');
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/products/1'))).toBe(false);
   });
 });
