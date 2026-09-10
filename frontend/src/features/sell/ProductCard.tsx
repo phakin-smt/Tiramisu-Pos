@@ -26,9 +26,13 @@ export function ProductCard({ product, remaining, photoUrl, onAdd }: ProductCard
         ? <img className="sell-product-photo" src={photo} alt="" loading="lazy" />
         : product.icon || '□'}
     </span>
-    <strong>{product.name}</strong>
-    <span className="sell-product-code">{product.code}</span>
-    <span className="sell-product-price">{formatCurrency(product.price)}</span>
-    <span className="sell-product-stock">{unavailable ? 'สินค้าหมด' : lowStock ? `เหลือน้อย · ${remaining} ชิ้น` : `คงเหลือ ${remaining} ชิ้น`}</span>
+    {/* The card carries no padding of its own so the photo can reach its edges;
+        the text is inset by this block instead. */}
+    <span className="sell-product-body">
+      <strong>{product.name}</strong>
+      <span className="sell-product-code">{product.code}</span>
+      <span className="sell-product-price">{formatCurrency(product.price)}</span>
+      <span className="sell-product-stock">{unavailable ? 'สินค้าหมด' : lowStock ? `เหลือน้อย · ${remaining} ชิ้น` : `คงเหลือ ${remaining} ชิ้น`}</span>
+    </span>
   </button>;
 }

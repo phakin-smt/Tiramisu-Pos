@@ -14,8 +14,11 @@ describe('targetDimensions', () => {
   });
 
   it('shrinks by the longest side, whichever way the photo is held', () => {
-    expect(targetDimensions(3000, 2000)).toEqual({ width: 600, height: 400 });
-    expect(targetDimensions(2000, 3000)).toEqual({ width: 400, height: 600 });
+    // Derived from the constant rather than restated: the ceiling has moved once
+    // already, and a test that hardcodes it fails for the wrong reason.
+    const shorter = Math.round((LONGEST_SIDE * 2) / 3);
+    expect(targetDimensions(3000, 2000)).toEqual({ width: LONGEST_SIDE, height: shorter });
+    expect(targetDimensions(2000, 3000)).toEqual({ width: shorter, height: LONGEST_SIDE });
   });
 
   it('keeps the shape of the original', () => {
