@@ -863,6 +863,7 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
 /* Square, and bounded by height rather than width: in landscape the height is
    what actually limits how large a scannable code can be. */
 .promptpay-content img { width: min(100%, 62vh); }
+.promptpay-content .qr-total { width: min(100%, 62vh); }
 
 /* The PromptPay dialog is the one screen a customer looks at, so it takes the
    whole viewport and spends all of it on the code. Sized by height because the
@@ -881,6 +882,7 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
   justify-items: center;
 }
 .promptpay-content img { width: min(100%, 74vh); }
+.promptpay-content .qr-total { width: min(100%, 74vh); }
 
 /* A menu's own photo takes over the tile the category emoji used to sit in.
    Every one of these tiles centres its contents, and a grid item that is not
@@ -902,8 +904,17 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
 .store-qr-preview, .store-qr-empty { width: 120px; height: 120px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; object-fit: contain; }
 .store-qr-empty { display: grid; place-items: center; background: var(--panel-soft); color: var(--text-soft); font-size: 40px; }
 .store-qr-note { margin: 0; color: var(--text-soft); font-size: 12px; }
-/* The total a picture of a QR cannot carry, sized to be read across a counter
-   and said out loud while the customer keys it in. */
-.qr-amount-callout { display: grid; gap: 2px; justify-items: center; padding: 8px 14px; border: 2px solid var(--line); border-radius: var(--radius-md); background: #fff; }
-.qr-amount-callout span { color: var(--text-soft); font-size: 12px; font-weight: 700; }
-.qr-amount-callout strong { font-size: 30px; line-height: 1.1; letter-spacing: -0.5px; }
+/* The total, read across a counter. A generated QR carries it and a picture of
+   one cannot, so in the second case it is the only place the customer can get
+   it from -- which is why it leads the modal rather than sitting in the header,
+   and why it is treated exactly like the cash modal's total. */
+.qr-total { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 16px; width: min(100%, 360px); padding: 12px 18px; border-radius: var(--radius-md); color: #fff; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); }
+.qr-total span { min-width: 0; font-size: 13px; font-weight: 700; }
+/* On a phone the manual-entry label and the total are close to touching. The
+   total is the half that has to stay big, so the label gives way first. */
+@media (max-width: 430px) {
+  .qr-total { padding: 10px 14px; gap: 10px; }
+  .qr-total span { font-size: 12px; }
+  .qr-total strong { font-size: 30px; }
+}
+.qr-total strong { font-size: 36px; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1.1; }

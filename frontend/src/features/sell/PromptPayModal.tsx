@@ -42,15 +42,15 @@ export function PromptPayModal({ open, amount, localMode, qrUrl, amountInQr, loa
 
   return <div className="promptpay-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="promptpay-modal" role="dialog" aria-modal="true" aria-labelledby="promptpay-title">
-      <header><div><h2 id="promptpay-title">QR พร้อมเพย์</h2><span>ยอดชำระ {formatCurrency(amount)}</span>{localMode && <span>Local Mode · สร้าง QR ในเครื่อง</span>}</div><button type="button" className="icon-button" aria-label="ปิด QR พร้อมเพย์" disabled={submitting} onClick={onClose}>×</button></header>
+      <header><div><h2 id="promptpay-title">QR พร้อมเพย์</h2>{localMode && <span>Local Mode · สร้าง QR ในเครื่อง</span>}</div><button type="button" className="icon-button" aria-label="ปิด QR พร้อมเพย์" disabled={submitting} onClick={onClose}>×</button></header>
       <div className="promptpay-content">
+        <div className="qr-total"><span>{amountInQr ? 'ยอดชำระ' : 'ยอดชำระ · ลูกค้ากรอกเอง'}</span><strong>{formatCurrency(amount)}</strong></div>
         {loading && <div className="qr-status" role="status">{amountInQr ? 'กำลังสร้าง QR ตามยอด...' : 'กำลังเปิด QR ร้าน...'}</div>}
         {qrError && <div className="qr-status is-error" role="alert">{qrError}</div>}
         {qrGuidance && <div className="qr-status" role="status">{qrGuidance}</div>}
         {checkoutError && <div className="qr-status is-error" role="alert">{checkoutError}</div>}
         {qrUrl && <img src={qrUrl} alt={amountInQr ? `QR พร้อมเพย์ ยอด ${amount.toFixed(2)} บาท` : 'QR รับเงินของร้าน'} onLoad={() => setReadyUrl(qrUrl)} onError={() => { setReadyUrl(''); onImageError(); }} />}
         {qrUrl && !imageReady && !qrError && <div className="qr-status" role="status">กำลังแสดง QR...</div>}
-        {imageReady && !amountInQr && <div className="qr-amount-callout" role="status"><span>ลูกค้าต้องกรอกยอดเอง</span><strong>{formatCurrency(amount)}</strong></div>}
         {imageReady && <div className="qr-status" role="status">{amountInQr
           ? 'สแกนเพื่อชำระเงิน · กรุณาตรวจชื่อผู้รับก่อนยืนยันการโอน'
           : 'สแกนแล้วกรอกยอดตามด้านบน · กรุณาตรวจยอดและชื่อผู้รับก่อนยืนยันการโอน'}</div>}

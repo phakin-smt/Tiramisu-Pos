@@ -54,7 +54,7 @@ test('cash, PromptPay, cancellation, reports, analytics, and close-day use the r
   });
   await page.getByRole('button', { name: 'QR พร้อมเพย์' }).click();
   const qrModal = page.getByRole('dialog', { name: 'QR พร้อมเพย์' });
-  await expect(qrModal).toContainText('ยอดชำระ ฿69.00');
+  await expect(qrModal.locator('.qr-total')).toContainText('฿69.00');
   const transferConfirm = qrModal.getByRole('button', { name: 'ยืนยันว่าโอนแล้ว' });
   await expect(transferConfirm).toBeDisabled();
   expect(orderRequests).toHaveLength(1);

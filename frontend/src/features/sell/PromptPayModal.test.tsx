@@ -98,6 +98,30 @@ describe('PromptPayModal readiness', () => {
     expect(confirmButton()).toBeDisabled();
   });
 
+  it('leads with the total, large enough to be read across a counter', () => {
+    renderModal({ amount: 1234.5 });
+    const total = document.querySelector('.qr-total');
+    expect(total).toHaveTextContent('฿1,234.50');
+    // Before the code, not after it: the cashier says it while the customer scans.
+    expect(total?.compareDocumentPosition(screen.getByRole('img')))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('shows the total even while the code is still loading', () => {
+    renderModal({ qrUrl: '', loading: true });
+    expect(document.querySelector('.qr-total')).toHaveTextContent('฿69.00');
+  });
+
+  it('says who enters the amount, depending on which kind of code this is', () => {
+    const { rerender } = renderModal();
+    expect(document.querySelector('.qr-total')).toHaveTextContent('ยอดชำระ');
+    expect(document.querySelector('.qr-total')).not.toHaveTextContent('ลูกค้ากรอกเอง');
+
+    // A picture of a shop's QR holds no total, so the customer keys it in.
+    rerender({ amountInQr: false });
+    expect(document.querySelector('.qr-total')).toHaveTextContent('ลูกค้ากรอกเอง');
+  });
+
   it('keeps confirmation blocked while a checkout is submitting', () => {
     const { rerender } = renderModal();
     fireEvent.load(screen.getByRole('img'));
