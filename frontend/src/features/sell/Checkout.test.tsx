@@ -54,6 +54,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+const MERCHANT_ACCOUNT_INFO = '0016A00000067701011101130066801234567';
+
 type Handler = (url: string, init: RequestInit) => Response | Promise<Response> | undefined;
 
 function mockCheckout(handler?: Handler) {
@@ -68,6 +70,11 @@ function mockCheckout(handler?: Handler) {
     if (url === '/api/orders' && init.method === 'POST') return Promise.resolve(json(order));
     if (url === '/api/stores') return Promise.resolve(json(STORE_LIST));
     if (url === '/api/pricing-rules') return Promise.resolve(json(STORE_PRICING));
+    // Provisioned for the selling store as soon as the shell knows which one it
+    // is, so it can land in the middle of any of these cases.
+    if (url === '/api/offline-payment-config') return Promise.resolve(json({
+      configured: true, mode: 'promptpay', merchantAccountInfo: MERCHANT_ACCOUNT_INFO, version: 1,
+    }));
     throw new Error(`Unexpected request: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);

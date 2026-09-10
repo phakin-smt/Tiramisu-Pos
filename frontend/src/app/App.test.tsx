@@ -16,6 +16,13 @@ const STORE_PRICING = {
   wholesale: { category: 'Tiramisu', discountPerItem: 9 },
 };
 
+const PAYMENT_CONFIG = {
+  configured: true,
+  mode: 'promptpay',
+  merchantAccountInfo: '0016A00000067701011101130066801234567',
+  version: 1,
+};
+
 interface MockResponse {
   status?: number;
   body: unknown;
@@ -32,12 +39,15 @@ function response({ status = 200, body }: MockResponse): Response {
 
 function mockResponses(...items: MockResponse[]) {
   const queue = [...items];
-  // The shell asks which store it sells for on every render. Answering those two
-  // by URL keeps the queue describing only the calls a test is actually about.
+  // The shell asks which store it sells for on every render, and provisions that
+  // store's payment QR once it knows. Answering those by URL keeps the queue
+  // describing only the calls a test is actually about -- and keeps it from
+  // depending on when in the render the provisioning happens to land.
   const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/stores') return Promise.resolve(response({ body: STORE_LIST }));
     if (url === '/api/pricing-rules') return Promise.resolve(response({ body: STORE_PRICING }));
+    if (url === '/api/offline-payment-config') return Promise.resolve(response({ body: PAYMENT_CONFIG }));
     const next = queue.shift();
     if (!next) return Promise.reject(new Error(`Unexpected request: ${url}`));
     return Promise.resolve(response(next));
@@ -78,10 +88,7 @@ describe('authentication and application shell', () => {
   });
 
   it('shows the application shell for an initially authenticated session', async () => {
-    mockResponses(
-      { body: { authenticated: true, configured: true } },
-      { body: { configured: true, merchantAccountInfo: '0016A00000067701011101130066801234567', version: 1 } },
-    );
+    mockResponses({ body: { authenticated: true, configured: true } });
     renderApplication('/sell');
     expect(await screen.findByRole('heading', { name: 'ขายสินค้า' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'เมนูหลัก' })).toBeInTheDocument();

@@ -11,6 +11,7 @@ import {
 import { getPricingRules, getStores, selectStore, type Store } from '../../api/stores';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
 import { NO_PRICING_RULES, type PricingRules } from '../../domain/promotion';
+import { provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
 import { readSelectedStore, saveSelectedStore } from '../../offline/selectedStore';
 
 interface StoreState {
@@ -115,6 +116,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
         });
+        // The QR belongs to whichever shop was just settled on, so it is fetched
+        // here rather than at login: at login the session may not have picked a
+        // shop yet, and a device that switches shops has to replace what it kept.
+        void provisionOfflinePaymentConfig(listed.storeId).catch(() => {});
       } catch (error) {
         if (active) setState((previous) => ({ ...previous, loading: false, error: message(error, 'โหลดข้อมูลร้านไม่สำเร็จ') }));
       }
@@ -140,6 +145,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           storeLogoUrl,
           rules: { bundle: rules.bundle, wholesale: rules.wholesale },
         });
+        void provisionOfflinePaymentConfig(storeId).catch(() => {});
         return {
           ...previous,
           storeId,

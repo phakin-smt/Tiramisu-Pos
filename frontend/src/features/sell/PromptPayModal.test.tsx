@@ -12,6 +12,7 @@ function renderModal(overrides: Partial<Parameters<typeof PromptPayModal>[0]> = 
     amount: 69,
     localMode: false,
     qrUrl: 'blob:qr-1',
+    amountInQr: true,
     loading: false,
     qrError: '',
     qrGuidance: '',

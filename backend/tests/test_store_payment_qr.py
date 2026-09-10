@@ -78,7 +78,9 @@ class StorePaymentQrTests(unittest.TestCase):
         self.use(1)
         self.assertEqual(404, self.client.get('/api/store/payment-qr').status_code)
         self.assertEqual('promptpay', self.config()['mode'])
-        self.assertEqual(200, self.client.get('/api/payment-qr?amount=69.00').status_code)
+        generated = self.client.get('/api/payment-qr?amount=69.00')
+        self.assertEqual(200, generated.status_code)
+        self.assertEqual('image/png', generated.content_type)
 
     def test_stores_and_serves_the_picture_under_an_address_naming_its_bytes(self):
         self.use(1)
@@ -123,8 +125,18 @@ class StorePaymentQrTests(unittest.TestCase):
     def test_a_shop_with_its_own_qr_is_never_served_the_shared_one(self):
         self.use(1)
         self.upload()
-        refused = self.client.get('/api/payment-qr?amount=69.00')
-        self.assertEqual(409, refused.status_code)
+        served = self.client.get('/api/payment-qr?amount=69.00')
+        self.assertEqual(200, served.status_code)
+        # Its own picture, not a code generated from the shared PromptPay id.
+        self.assertEqual(PNG_BYTES, served.data)
+        self.assertEqual('manual', served.headers['X-Payment-QR-Amount'])
+
+    def test_says_when_the_amount_is_inside_the_code_and_when_it_is_not(self):
+        self.use(1)
+        generated = self.client.get('/api/payment-qr?amount=69.00')
+        self.assertEqual('embedded', generated.headers['X-Payment-QR-Amount'])
+        self.upload()
+        self.assertEqual('manual', self.client.get('/api/payment-qr?amount=69.00').headers['X-Payment-QR-Amount'])
 
     def test_one_shops_qr_never_reaches_another(self):
         self.use(2)

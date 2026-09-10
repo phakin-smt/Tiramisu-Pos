@@ -14,7 +14,7 @@ import { subscribeToUnauthorized } from '../../api/client';
 import { useConnectivity } from '../../connectivity/ConnectivityContext';
 import { useOfflineAuthorization } from '../../offline/useOfflineAuthorization';
 import { refreshOfflineAuthorization, revokeOfflineAuthorization } from '../../offline/offlineAuthorization';
-import { clearOfflinePaymentConfig, provisionOfflinePaymentConfig } from '../../offline/paymentConfig';
+import { clearOfflinePaymentConfig } from '../../offline/paymentConfig';
 import { clearSelectedStore } from '../../offline/selectedStore';
 import {
   requestPersistentStorage,
@@ -54,11 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Everything a trusted device needs for offline selling, provisioned on the
    * one occasion we know we are both online and authenticated. Settled, not
    * awaited for success: none of these may block a cashier from logging in.
+   *
+   * The payment QR is not here. It belongs to one shop, and at login the session
+   * may not have chosen one yet -- StoreContext provisions it once the shop is
+   * settled, and again whenever it changes.
    */
   const provisionOfflineDevice = useCallback(async () => {
-    const [, , persistence] = await Promise.allSettled([
+    const [, persistence] = await Promise.allSettled([
       refreshOfflineAuthorization(),
-      provisionOfflinePaymentConfig(),
       requestPersistentStorage(),
     ]);
     setStoragePersistence(persistence.status === 'fulfilled' ? persistence.value : 'unsupported');

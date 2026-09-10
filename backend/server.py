@@ -209,10 +209,22 @@ def logout():
 
 @app.get('/api/payment-qr')
 def payment_qr():
- # A shop with its own QR is never served the shared one: that substitution is
- # invisible at the counter and sends the takings to somebody else's account.
- if store_payment_qr_checksum(current_store()):
-  return error('ร้านนี้ใช้ QR ของร้านเอง',409)
+ """The code this shop's customer scans, whichever kind it is.
+
+ One endpoint rather than two because the till must not have to ask which kind
+ first: that is a second round trip at the counter, and a till working from a
+ stale answer would show the shared QR to a shop that has since uploaded its
+ own -- money into somebody else's account, invisible until the day is
+ reconciled short. The header says whether the amount is inside the code, since
+ only the generated one can carry it.
+ """
+ own=store_payment_qr_row(current_store())
+ if own is not None:
+  response=send_file(BytesIO(bytes(own['data'])),mimetype=own['content_type'])
+  response.headers['X-Payment-QR-Amount']='manual'
+  response.headers['Cache-Control']='private, no-store'
+  response.headers['X-Content-Type-Options']='nosniff'
+  return response
  promptpay_id=os.getenv('PROMPTPAY_ID','').strip()
  if not promptpay_id:
   return error('ระบบพร้อมเพย์ยังไม่ได้ตั้งค่า',503)
@@ -231,6 +243,7 @@ def payment_qr():
   output,
   mimetype='image/png',
  )
+ response.headers['X-Payment-QR-Amount']='embedded'
  response.headers['Cache-Control']='private, no-store'
  response.headers['X-Content-Type-Options']='nosniff'
  return response

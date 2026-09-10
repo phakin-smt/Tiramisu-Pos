@@ -29,18 +29,18 @@ describe('offline PromptPay configuration', () => {
     })));
     const record = await provisionOfflinePaymentConfig();
     expect(await readOfflinePaymentConfig()).toEqual(record);
-    expect(Object.keys(record!).sort()).toEqual(['key', 'merchantAccountInfo', 'provisionedAt', 'version']);
+    expect(Object.keys(record!).sort()).toEqual(['key', 'merchantAccountInfo', 'mode', 'provisionedAt', 'storeId', 'version']);
     expect(JSON.stringify(record).toLowerCase()).not.toMatch(/pin|secret|database|cookie|session/);
   });
 
   it.each(['request failure', 'unconfigured response'])('preserves previous valid config after %s', async (scenario) => {
-    const previous = await replaceOfflinePaymentConfig('0016A00000067701011102131111111111111', 1, '2026-08-20T00:00:00.000Z');
+    const previous = await replaceOfflinePaymentConfig('0016A00000067701011102131111111111111', 1, '2026-08-20T00:00:00.000Z', 1);
     vi.stubGlobal('fetch', scenario === 'request failure'
       ? vi.fn().mockRejectedValue(new TypeError('network unavailable'))
       : vi.fn().mockResolvedValue(json({ configured: false, version: 1 })));
-    if (scenario === 'request failure') await expect(provisionOfflinePaymentConfig()).rejects.toThrow('network unavailable');
-    else expect(await provisionOfflinePaymentConfig()).toBeNull();
-    expect(await readOfflinePaymentConfig()).toEqual(previous);
+    if (scenario === 'request failure') await expect(provisionOfflinePaymentConfig(1)).rejects.toThrow('network unavailable');
+    else expect(await provisionOfflinePaymentConfig(1)).toBeNull();
+    expect(await readOfflinePaymentConfig(1)).toEqual(previous);
   });
 
   it('uses the dedicated IndexedDB store rather than metadata or localStorage', async () => {

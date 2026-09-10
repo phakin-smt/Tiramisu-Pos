@@ -7,6 +7,8 @@ interface PromptPayModalProps {
   amount: number;
   localMode: boolean;
   qrUrl: string;
+  /** False when the code is the shop's own picture and holds no total. */
+  amountInQr: boolean;
   loading: boolean;
   qrError: string;
   qrGuidance: string;
@@ -17,7 +19,7 @@ interface PromptPayModalProps {
   onImageError(): void;
 }
 
-export function PromptPayModal({ open, amount, localMode, qrUrl, loading, qrError, qrGuidance, checkoutError, submitting, onClose, onConfirm, onImageError }: PromptPayModalProps) {
+export function PromptPayModal({ open, amount, localMode, qrUrl, amountInQr, loading, qrError, qrGuidance, checkoutError, submitting, onClose, onConfirm, onImageError }: PromptPayModalProps) {
   // Readiness is tied to the URL that actually loaded, never reset by an effect:
   // a `load` event that lands before React flushes would otherwise be undone and
   // leave confirmation disabled with no second event to re-enable it.
@@ -42,13 +44,16 @@ export function PromptPayModal({ open, amount, localMode, qrUrl, loading, qrErro
     <section className="promptpay-modal" role="dialog" aria-modal="true" aria-labelledby="promptpay-title">
       <header><div><h2 id="promptpay-title">QR พร้อมเพย์</h2><span>ยอดชำระ {formatCurrency(amount)}</span>{localMode && <span>Local Mode · สร้าง QR ในเครื่อง</span>}</div><button type="button" className="icon-button" aria-label="ปิด QR พร้อมเพย์" disabled={submitting} onClick={onClose}>×</button></header>
       <div className="promptpay-content">
-        {loading && <div className="qr-status" role="status">กำลังสร้าง QR ตามยอด...</div>}
+        {loading && <div className="qr-status" role="status">{amountInQr ? 'กำลังสร้าง QR ตามยอด...' : 'กำลังเปิด QR ร้าน...'}</div>}
         {qrError && <div className="qr-status is-error" role="alert">{qrError}</div>}
         {qrGuidance && <div className="qr-status" role="status">{qrGuidance}</div>}
         {checkoutError && <div className="qr-status is-error" role="alert">{checkoutError}</div>}
-        {qrUrl && <img src={qrUrl} alt={`QR พร้อมเพย์ ยอด ${amount.toFixed(2)} บาท`} onLoad={() => setReadyUrl(qrUrl)} onError={() => { setReadyUrl(''); onImageError(); }} />}
+        {qrUrl && <img src={qrUrl} alt={amountInQr ? `QR พร้อมเพย์ ยอด ${amount.toFixed(2)} บาท` : 'QR รับเงินของร้าน'} onLoad={() => setReadyUrl(qrUrl)} onError={() => { setReadyUrl(''); onImageError(); }} />}
         {qrUrl && !imageReady && !qrError && <div className="qr-status" role="status">กำลังแสดง QR...</div>}
-        {imageReady && <div className="qr-status" role="status">สแกนเพื่อชำระเงิน · กรุณาตรวจชื่อผู้รับก่อนยืนยันการโอน</div>}
+        {imageReady && !amountInQr && <div className="qr-amount-callout" role="status"><span>ลูกค้าต้องกรอกยอดเอง</span><strong>{formatCurrency(amount)}</strong></div>}
+        {imageReady && <div className="qr-status" role="status">{amountInQr
+          ? 'สแกนเพื่อชำระเงิน · กรุณาตรวจชื่อผู้รับก่อนยืนยันการโอน'
+          : 'สแกนแล้วกรอกยอดตามด้านบน · กรุณาตรวจยอดและชื่อผู้รับก่อนยืนยันการโอน'}</div>}
       </div>
       <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" disabled={confirmationDisabled} onClick={onConfirm}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันว่าโอนแล้ว'}</button></footer>
     </section>
