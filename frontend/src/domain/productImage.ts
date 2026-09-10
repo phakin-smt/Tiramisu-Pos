@@ -10,8 +10,15 @@
 /** Matches PRODUCT_IMAGE_MAX_BYTES on the server. */
 export const MAX_UPLOAD_BYTES = 400 * 1024;
 
-/** Big enough for a menu card on an iPad, small enough to be worth caching. */
-export const LONGEST_SIDE = 600;
+/**
+ * Big enough for a menu card on an iPad, small enough to be worth caching.
+ *
+ * 800 rather than 600 because the sell grid's photo box grew: the largest one is
+ * 327 css px wide, which is 654 physical pixels on a 2x screen. A 4:3 photo
+ * lands at 800x600 here, so the biggest tile is still sampling down rather than
+ * stretching. Measured, not guessed -- see README, "รูปเมนู".
+ */
+export const LONGEST_SIDE = 800;
 
 /** Tried in order until one fits under the ceiling. */
 const QUALITY_STEPS = [0.82, 0.7, 0.55];

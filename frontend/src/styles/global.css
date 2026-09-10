@@ -896,12 +896,16 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
    positioned against the tile instead, which clips it to its own corners. */
 .sell-product-icon, .cart-item-icon, .product-admin-icon { position: relative; overflow: hidden; }
 .sell-product-photo, .thumbnail-photo { position: absolute; display: block; width: 100%; height: 100%; inset: 0; object-fit: cover; }
-/* The sell grid shows the whole photo rather than filling the tile with part of
-   it. A menu is photographed however it happened to be held, and a cropped tall
-   cake is a picture of its middle -- which is not what the cashier is looking
-   for. The tile's own colour fills whatever the picture does not, so a card with
-   a portrait photo still reads as a card. Cart and admin thumbnails keep cover:
-   they are small squares where filling the tile is worth the crop. */
+/* The sell grid's photo box is a fixed 4:3, and the photo is fitted inside it
+   whole rather than cropped to fill it. A photo shot to that shape fills the box
+   exactly, with no bars and nothing lost -- which is the point of publishing the
+   shape rather than guessing at it (see README, "รูปเมนู").
+
+   The two rejected alternatives, recorded so they are not retried: cropping to
+   fill shows the middle of a tall cake, and letting the box follow each photo
+   leaves a row as tall as its tallest picture, with the shorter cards trailing
+   empty space. Cart and admin thumbnails keep cover -- small squares where
+   filling the tile is worth the crop, and the name sits right beside them. */
 .sell-product-card .sell-product-photo { object-fit: contain; }
 .product-image-field { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
 .product-image-row { display: flex; align-items: center; gap: 12px; }
