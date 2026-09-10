@@ -320,7 +320,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .sell-product-body { display: grid; align-content: start; min-width: 0; padding: 11px 13px 13px; }
 .sell-product-card:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 6px 16px rgba(61, 43, 34, 0.1); transform: translateY(-1px); }
 .sell-product-card:disabled { cursor: not-allowed; opacity: 0.52; background: #f2f1ef; }
-.sell-product-icon { display: grid; width: 100%; aspect-ratio: 4 / 3; place-items: center; border-radius: 0; background: #edf5ef; font-size: 40px; }
+.sell-product-icon { display: grid; width: 100%; aspect-ratio: 1 / 1; place-items: center; border-radius: 0; background: #edf5ef; font-size: 40px; }
 .sell-product-card strong { overflow-wrap: anywhere; margin-top: 0; font-size: 15px; }
 .sell-product-code { overflow: hidden; margin-top: 2px; color: var(--text-soft); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .sell-product-price { margin-top: 10px; color: var(--primary-dark); font-size: 17px; font-weight: 800; }
@@ -896,10 +896,12 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
    positioned against the tile instead, which clips it to its own corners. */
 .sell-product-icon, .cart-item-icon, .product-admin-icon { position: relative; overflow: hidden; }
 .sell-product-photo, .thumbnail-photo { position: absolute; display: block; width: 100%; height: 100%; inset: 0; object-fit: cover; }
-/* The sell grid's photo box is a fixed 4:3, and the photo is fitted inside it
-   whole rather than cropped to fill it. A photo shot to that shape fills the box
+/* The sell grid's photo box is a fixed square, and the photo is fitted inside it
+   whole rather than cropped to fill it. A photo cropped square fills the box
    exactly, with no bars and nothing lost -- which is the point of publishing the
-   shape rather than guessing at it (see README, "รูปเมนู").
+   shape rather than guessing at it (see README, "รูปเมนู"). Square because that
+   is the crop a person can do by eye in any photo app, which is what the shop
+   will actually be doing.
 
    The two rejected alternatives, recorded so they are not retried: cropping to
    fill shows the middle of a tall cake, and letting the box follow each photo
