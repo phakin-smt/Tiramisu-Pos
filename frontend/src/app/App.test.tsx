@@ -9,7 +9,7 @@ import { readOfflinePaymentConfig } from '../offline/paymentConfig';
 import { AppRoutes } from './router';
 import { saveSelectedStore } from '../offline/selectedStore';
 
-const STORE_LIST = { stores: [{ id: 1, code: 'baannoi', name: 'Baannoi', logoUrl: null }], storeId: 1 };
+const STORE_LIST = { stores: [{ id: 1, code: 'Promttak', name: 'Promttak', logoUrl: null }], storeId: 1 };
 const STORE_PRICING = {
   storeId: 1,
   bundle: { unitPrice: 69, quantity: 3, price: 200 },
