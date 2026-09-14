@@ -120,6 +120,10 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .segmented-control button[aria-pressed="true"] { color: #fff; background: var(--primary); }
 .date-control { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
 .date-control input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: #fff; }
+.analytics-range { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.segmented-control.analytics-range-presets { grid-template-columns: repeat(4, 1fr); }
+.analytics-range-dates { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.analytics-range-error { flex-basis: 100%; color: var(--danger); font-size: 12px; font-weight: 700; }
 .read-only-label { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-soft); font-size: 12px; }
 .content-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .ranked-list { margin: 12px 0 0; padding-left: 24px; }
@@ -226,6 +230,7 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .page-toolbar { align-items: stretch; flex-direction: column; }
   .segmented-control { width: 100%; }
   .segmented-control button { min-width: 0; }
+  .analytics-range, .analytics-range-dates { align-items: stretch; flex-direction: column; }
   .report-workspace, .content-grid { grid-template-columns: 1fr; }
   .report-days-panel { padding: 14px; }
   .report-day-button { align-items: flex-start; }

@@ -1,4 +1,7 @@
-export type AnalyticsRange = 1 | 7 | 30;
+export type AnalyticsPreset = 1 | 7 | 30;
+
+/** A preset counts back from today; a custom range names both ends, inclusive. */
+export type AnalyticsRange = AnalyticsPreset | { start: string; end: string };
 
 export interface AnalyticsOverview {
   revenue: number;

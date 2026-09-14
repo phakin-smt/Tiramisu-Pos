@@ -688,12 +688,24 @@ def mark_day_closed():
   closed=execute(cursor,'SELECT closed_at FROM daily_closures WHERE store_id=? AND report_date=?',(store,report_date)).fetchone()
  return jsonify(date=report_date,closedAt=local_timestamp(closed['closed_at']))
 
+ANALYTICS_MAX_DAYS=366
+
 @app.get('/api/analytics')
 def analytics():
- try: days=int(request.args.get('days','7'))
- except (TypeError,ValueError): return error('ช่วงเวลาไม่ถูกต้อง')
- if days not in {1,7,30}: return error('รองรับช่วงเวลา 1, 7 หรือ 30 วัน')
- end_date=bangkok_today(); start_date=end_date-timedelta(days=days-1)
+ raw_start=request.args.get('start'); raw_end=request.args.get('end')
+ if raw_start is not None or raw_end is not None:
+  try: start_date=date.fromisoformat(str(raw_start)); end_date=date.fromisoformat(str(raw_end))
+  except ValueError: return error('วันที่ไม่ถูกต้อง')
+  if start_date.isoformat()!=raw_start or end_date.isoformat()!=raw_end: return error('วันที่ไม่ถูกต้อง')
+  if start_date>end_date: return error('วันเริ่มต้องไม่เกินวันสิ้นสุด')
+  if end_date>bangkok_today(): return error('เลือกวันที่ไม่เกินวันนี้')
+  days=(end_date-start_date).days+1
+  if days>ANALYTICS_MAX_DAYS: return error('เลือกช่วงได้ไม่เกิน {} วัน'.format(ANALYTICS_MAX_DAYS))
+ else:
+  try: days=int(request.args.get('days','7'))
+  except (TypeError,ValueError): return error('ช่วงเวลาไม่ถูกต้อง')
+  if days not in {1,7,30}: return error('รองรับช่วงเวลา 1, 7 หรือ 30 วัน')
+  end_date=bangkok_today(); start_date=end_date-timedelta(days=days-1)
  start_iso=start_date.isoformat(); end_iso=end_date.isoformat()
  movement_start,_=local_day_bounds(start_iso); _,movement_end=local_day_bounds(end_iso)
  store=current_store(); connection=connect_db()
