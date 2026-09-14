@@ -75,7 +75,6 @@ test('cash, PromptPay, cancellation, reports, analytics, and close-day use the r
   await page.getByRole('link', { name: 'ออเดอร์' }).click();
   const transferCard = orderCard(page, transferOrder!);
   await expect(transferCard).toContainText('โอน/พร้อมเพย์');
-  await transferCard.getByRole('button', { name: 'ดูรายละเอียด' }).click();
   await expect(transferCard).toContainText('E2E Coffee');
   const cashCard = orderCard(page, cashOrder!);
   page.once('dialog', (dialog) => dialog.accept());
