@@ -31,6 +31,8 @@ export function CashPaymentModal({ open, amount, checkoutError, submitting, onCl
 
   const receivedAmount = Number(received);
   const validReceived = received !== '' && Number.isFinite(receivedAmount) && receivedAmount >= amount;
+  // Leaving the field blank means the customer paid exactly; a typed amount still has to cover the total.
+  const canConfirm = received === '' || validReceived;
   const change = validReceived ? receivedAmount - amount : 0;
   const presets = useMemo(() => CASH_PRESETS.filter((preset) => preset >= amount), [amount]);
 
@@ -45,7 +47,7 @@ export function CashPaymentModal({ open, amount, checkoutError, submitting, onCl
         <div className={`cash-change${validReceived ? ' is-ready' : ''}`} aria-live="polite"><span>เงินทอน</span><strong>{formatCurrency(change)}</strong></div>
         {checkoutError && <div className="qr-status is-error" role="alert">{checkoutError}</div>}
       </div>
-      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!validReceived || submitting} onClick={() => onConfirm({ amountTendered: receivedAmount, changeAmount: change })}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
+      <footer><button type="button" className="secondary-button" disabled={submitting} onClick={onClose}>ยกเลิก</button><button type="button" className="primary-button" aria-label="ยืนยันรับเงิน" disabled={!canConfirm || submitting} onClick={() => onConfirm(validReceived ? { amountTendered: receivedAmount, changeAmount: change } : { amountTendered: amount, changeAmount: 0 })}>{submitting ? 'กำลังบันทึก...' : 'ยืนยันรับเงิน'}</button></footer>
     </section>
   </div>;
 }

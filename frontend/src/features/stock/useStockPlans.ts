@@ -4,5 +4,5 @@ import { useAbortableQuery } from '../shared/useAbortableQuery';
 
 export function useStockPlans(revision = 0) {
   const request = useMemo(() => (signal: AbortSignal) => getStockPlans(signal), [revision]);
-  return useAbortableQuery(request, [request]);
+  return useAbortableQuery(request, [request], 'plans');
 }

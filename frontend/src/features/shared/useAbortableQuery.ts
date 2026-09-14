@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface QueryState<T> {
   data: T | null;
@@ -6,27 +6,42 @@ export interface QueryState<T> {
   error: string;
 }
 
+const NO_RESET_KEY = Symbol('no-reset-key');
+
+/**
+ * Without a `resetKey` every reload clears the data first. With one, a reload
+ * under the same key keeps the last data on screen until the new data arrives,
+ * so a refresh after an edit updates in place instead of blanking the page.
+ * Change the key (a different date, say) to clear stale data from another view.
+ */
 export function useAbortableQuery<T>(
   request: ((signal: AbortSignal) => Promise<T>) | null,
   dependencies: readonly unknown[],
-): QueryState<T> {
+  resetKey: unknown = NO_RESET_KEY,
+): QueryState<T> & { setData(update: (current: T) => T): void } {
   const [state, setState] = useState<QueryState<T>>({ data: null, loading: Boolean(request), error: '' });
+  const loadedKey = useRef<unknown>(NO_RESET_KEY);
 
   useEffect(() => {
     if (!request) {
+      loadedKey.current = NO_RESET_KEY;
       setState({ data: null, loading: false, error: '' });
       return;
     }
 
     const controller = new AbortController();
     let current = true;
-    setState({ data: null, loading: true, error: '' });
+    const keepData = resetKey !== NO_RESET_KEY && Object.is(loadedKey.current, resetKey);
+    setState((previous) => ({ data: keepData ? previous.data : null, loading: true, error: '' }));
     request(controller.signal)
       .then((data) => {
-        if (current) setState({ data, loading: false, error: '' });
+        if (!current) return;
+        loadedKey.current = resetKey;
+        setState({ data, loading: false, error: '' });
       })
       .catch((error: unknown) => {
         if (!current || controller.signal.aborted) return;
+        loadedKey.current = NO_RESET_KEY;
         setState({
           data: null,
           loading: false,
@@ -42,5 +57,10 @@ export function useAbortableQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
-  return state;
+  // Patches loaded data in place, e.g. from a mutation's response, without a reload.
+  const setData = useCallback((update: (current: T) => T) => {
+    setState((previous) => (previous.data === null ? previous : { ...previous, data: update(previous.data) }));
+  }, []);
+
+  return { ...state, setData };
 }

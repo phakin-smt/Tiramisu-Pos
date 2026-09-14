@@ -10,13 +10,21 @@ describe('CashPaymentModal', () => {
     document.body.classList.remove('cash-payment-open');
   });
 
+  it('confirms without a received amount as an exact payment', () => {
+    const onConfirm = vi.fn();
+    render(<CashPaymentModal open amount={138} checkoutError="" submitting={false} onClose={vi.fn()} onConfirm={onConfirm} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยืนยันรับเงิน' }));
+    expect(onConfirm).toHaveBeenCalledWith({ amountTendered: 138, changeAmount: 0 });
+  });
+
   it('calculates change and blocks confirmation below the grand total', () => {
     const onConfirm = vi.fn();
     render(<CashPaymentModal open amount={138} checkoutError="" submitting={false} onClose={vi.fn()} onConfirm={onConfirm} />);
 
     const confirm = screen.getByRole('button', { name: 'ยืนยันรับเงิน' });
     expect(screen.getByText('฿138.00')).toBeInTheDocument();
-    expect(confirm).toBeDisabled();
+    expect(confirm).toBeEnabled();
 
     fireEvent.change(screen.getByLabelText('จำนวนเงินที่รับ'), { target: { value: '100' } });
     expect(confirm).toBeDisabled();
