@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ErrorState, LoadingState } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
-import { formatThaiDate } from '../../domain/date';
+import { daysInRange } from '../../domain/analyticsRange';
+import { bangkokDateISO, formatThaiDate } from '../../domain/date';
 import type { AnalyticsRange } from '../../types/analytics';
 import { AnalyticsRangeSelector } from './AnalyticsRangeSelector';
 import { Losses, LowStockList, TopProducts } from './AnalyticsLists';
@@ -10,17 +11,18 @@ import { SalesChart } from './SalesChart';
 import { useAnalytics } from './useAnalytics';
 
 export function AnalyticsPage() {
+  const today = bangkokDateISO();
   const [range, setRange] = useState<AnalyticsRange>(7);
   const query = useAnalytics(range);
   return (
     <section className="data-page">
       <PageHeader title="วิเคราะห์" />
-      <div className="page-toolbar"><AnalyticsRangeSelector value={range} onChange={setRange} /></div>
+      <div className="page-toolbar"><AnalyticsRangeSelector value={range} today={today} onChange={setRange} /></div>
       <div aria-live="polite">
         {query.loading && <LoadingState label="กำลังโหลดข้อมูลวิเคราะห์" />}
         {query.error && <ErrorState message={query.error} />}
         {query.data && <>
-          <div className="section-heading"><div><h2>{formatThaiDate(query.data.startDate)} – {formatThaiDate(query.data.endDate)}</h2><span>ข้อมูลย้อนหลัง {range} วัน</span></div></div>
+          <div className="section-heading"><div><h2>{formatThaiDate(query.data.startDate)} – {formatThaiDate(query.data.endDate)}</h2><span>{typeof range === 'number' ? `ข้อมูลย้อนหลัง ${range} วัน` : `ช่วงที่เลือก ${daysInRange(query.data.startDate, query.data.endDate)} วัน`}</span></div></div>
           <AnalyticsSummary overview={query.data.overview} />
           <section className="surface"><h2>แนวโน้มยอดขาย</h2><SalesChart days={query.data.daily} /></section>
           <div className="content-grid">

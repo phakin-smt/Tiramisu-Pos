@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnalyticsResponse } from '../../types/analytics';
 import { AnalyticsPage } from './AnalyticsPage';
 
@@ -76,5 +76,43 @@ describe('AnalyticsPage', () => {
     seven.resolve(json({ ...analytics, topProducts: [{ ...analytics.topProducts[0], name: 'Stale product' }] }));
     await Promise.resolve();
     expect(screen.queryByText('Stale product')).not.toBeInTheDocument();
+  });
+
+  describe('custom range', () => {
+    // 2026-08-16 in Bangkok. Only Date is faked, so fetch promises still settle.
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-08-16T05:00:00Z')); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('requests a chosen date range and labels its length', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        const params = new URL(url, 'http://test').searchParams;
+        return json({ ...analytics, startDate: params.get('start') ?? analytics.startDate, endDate: params.get('end') ?? analytics.endDate });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AnalyticsPage />);
+      await screen.findByText('Original');
+
+      fireEvent.click(screen.getByRole('button', { name: 'กำหนดเอง' }));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/analytics?start=2026-08-10&end=2026-08-16', expect.anything()));
+      expect(screen.getByRole('button', { name: 'กำหนดเอง' })).toHaveAttribute('aria-pressed', 'true');
+
+      fireEvent.change(screen.getByLabelText('ตั้งแต่'), { target: { value: '2026-08-01' } });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/analytics?start=2026-08-01&end=2026-08-16', expect.anything()));
+      expect(await screen.findByText('ช่วงที่เลือก 16 วัน')).toBeInTheDocument();
+      expect(screen.getByLabelText('ถึง')).toHaveAttribute('max', '2026-08-16');
+    });
+
+    it('explains an invalid range and does not request it', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json(analytics));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AnalyticsPage />);
+      await screen.findByText('Original');
+      fireEvent.click(screen.getByRole('button', { name: 'กำหนดเอง' }));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      fireEvent.change(screen.getByLabelText('ตั้งแต่'), { target: { value: '2026-08-20' } });
+      expect(screen.getByRole('alert')).toHaveTextContent('วันเริ่มต้องไม่เกินวันสิ้นสุด');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 });

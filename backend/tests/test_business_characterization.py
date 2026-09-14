@@ -425,6 +425,36 @@ class ReportsCharacterizationTests(PosApiTestCase):
             [{"date": "2026-08-18", "orderCount": 1, "revenue": 69}],
         )
 
+    def test_analytics_accepts_a_custom_date_range(self):
+        product_id = self.add_product(price=100, stock=5)
+        self.create_order([{"productId": product_id, "qty": 1}], key="range")
+        today = server.bangkok_today()
+        start = (today - timedelta(days=2)).isoformat()
+
+        response = self.client.get(f"/api/analytics?start={start}&end={today.isoformat()}")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual((body["startDate"], body["endDate"]), (start, today.isoformat()))
+        self.assertEqual([day["date"] for day in body["daily"]][-1], today.isoformat())
+        self.assertEqual(len(body["daily"]), 3)
+        self.assertEqual(body["overview"]["revenue"], 100)
+
+    def test_analytics_rejects_an_invalid_custom_range(self):
+        today = server.bangkok_today()
+        tomorrow = (today + timedelta(days=1)).isoformat()
+        cases = [
+            f"start={today.isoformat()}",
+            "start=2026-13-01&end=2026-13-02",
+            "start=20260801&end=20260802",
+            f"start={today.isoformat()}&end={(today - timedelta(days=1)).isoformat()}",
+            f"start={today.isoformat()}&end={tomorrow}",
+            f"start={(today - timedelta(days=366)).isoformat()}&end={today.isoformat()}",
+        ]
+        for query in cases:
+            with self.subTest(query=query):
+                self.assertEqual(self.client.get(f"/api/analytics?{query}").status_code, 400)
+
     def test_reports_separate_payment_totals_and_reflect_discounts(self):
         product_id = self.add_product(price=100, stock=5)
         self.create_order([{"productId": product_id, "qty": 1}], key="cash", discount=10)
