@@ -169,6 +169,33 @@ describe('StockPage', () => {
     expect(JSON.parse(String(fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust')?.[1]?.body)).reason).toBe('undo_giveaway');
   });
 
+  it('keeps the table on screen while it refreshes after an adjustment', async () => {
+    const refreshed = deferred<Response>();
+    let summaryCalls = 0;
+    mockStockRoutes((url) => {
+      if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return summaryCalls === 1 ? json(stock) : refreshed.promise; }
+      if (url === '/api/stock/adjust') return json({ productId: 1, stock: 9 });
+    });
+    render(<StoreProvider><StockPage /></StoreProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' }));
+    await vi.waitFor(() => expect(summaryCalls).toBe(2));
+    expect(screen.queryByText('กำลังโหลดข้อมูลสต็อก')).not.toBeInTheDocument();
+    expect(screen.getByText('Original').closest('tr')).toHaveTextContent('15');
+
+    refreshed.resolve(json({ ...stock, items: stock.items.map((item) => item.productId === 1 ? { ...item, prepared: 16, stockNow: 9 } : item) }));
+    await vi.waitFor(() => expect(screen.getByText('Original').closest('tr')).toHaveTextContent('16'));
+  });
+
+  it('clears the table when the date changes', async () => {
+    const otherDay = deferred<Response>();
+    mockStockRoutes((url) => url.includes('date=2026-08-16') ? otherDay.promise : undefined);
+    render(<StoreProvider><StockPage /></StoreProvider>);
+    expect(await screen.findByText('Original')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('วันที่สต็อก'), { target: { value: '2026-08-16' } });
+    expect(await screen.findByText('กำลังโหลดข้อมูลสต็อก')).toBeInTheDocument();
+    expect(screen.queryByText('Resting Stocked')).not.toBeInTheDocument();
+  });
+
   it('shows an undo rejection and preserves confirmed data', async () => {
     mockStockRoutes((url) => url === '/api/stock/adjust' ? json({ error: 'ไม่มีรายการของวันนี้ให้ยกเลิก' }, 400) : undefined);
     render(<StoreProvider><StockPage /></StoreProvider>);

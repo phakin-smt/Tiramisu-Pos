@@ -62,7 +62,7 @@ export function StockPage() {
         onReconciled={() => setStockRevision((current) => current + 1)}
       />
       <div aria-live="polite">
-        {query.loading && <LoadingState label="กำลังโหลดข้อมูลสต็อก" />}
+        {query.loading && !query.data && <LoadingState label="กำลังโหลดข้อมูลสต็อก" />}
         {query.error && <ErrorState message={query.error} />}
         {query.data && (
           <section className="surface">

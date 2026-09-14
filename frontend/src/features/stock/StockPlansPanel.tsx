@@ -57,7 +57,7 @@ export function StockPlansPanel({ plans, products, loading, error, editable, tod
         </form>
       )}
       <MutationFeedback error={mutation.error} success={mutation.success} />
-      {loading && <LoadingState label="กำลังโหลดแผนสต็อก" />}
+      {loading && !plans && <LoadingState label="กำลังโหลดแผนสต็อก" />}
       {error && <ErrorState message={error} />}
       {plans && !plans.length && <EmptyState message="ไม่มีแผนเตรียมสต็อกที่รอดำเนินการ" />}
       {!!plans?.length && <div className="compact-list stock-plan-list">{plans.map((plan) => <div key={plan.id}><span><strong>{plan.name}</strong><small>{plan.code} · {formatThaiDate(plan.date)} · {plan.quantity} ชิ้น</small></span><span className="plan-actions"><span className="status-label">รอดำเนินการ</span>{editable && <button type="button" className="danger-text-button" aria-label={`ยกเลิกแผน ${plan.name}`} disabled={mutation.pending} onClick={() => cancel(plan)}>ยกเลิก</button>}</span></div>)}</div>}
