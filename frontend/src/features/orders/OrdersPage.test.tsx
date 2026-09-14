@@ -61,10 +61,7 @@ describe('OrdersPage', () => {
     expect(screen.getByText('โอน/พร้อมเพย์')).toBeInTheDocument();
     expect(screen.getByText('เสร็จสิ้น')).toBeInTheDocument();
     expect(screen.getByText('ยกเลิกแล้ว')).toBeInTheDocument();
-    const detailButton = screen.getAllByRole('button', { name: 'ดูรายละเอียด' })[0];
-    expect(detailButton).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(detailButton);
-    expect(detailButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: 'ดูรายละเอียด' })).not.toBeInTheDocument();
     expect(screen.getByText('ทีรามิสุออริจินัล')).toBeInTheDocument();
     const itemRow = screen.getByText('ORI').closest('tr');
     expect(itemRow).toHaveTextContent('4');

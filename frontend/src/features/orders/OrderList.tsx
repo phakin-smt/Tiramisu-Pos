@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { EmptyState } from '../../components/AsyncState';
 import { formatTime } from '../../domain/date';
 import { formatCurrency } from '../../domain/format';
@@ -15,11 +14,8 @@ interface Props {
 }
 
 export function OrderList({ orders, cancellationPending, onCancel }: Props) {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
   if (!orders.length) return <EmptyState message="ยังไม่มีออเดอร์ในวันที่เลือก" />;
   return <div className="order-list">{orders.map((order) => {
-    const expanded = expandedId === order.id;
-    const detailId = `order-details-${order.id}`;
     const itemCount = order.items.reduce((total, item) => total + item.qty, 0);
     return <article className={`order-card${order.status === 'cancelled' ? ' is-cancelled' : ''}`} key={order.id}>
       <div className="order-card-summary">
@@ -27,11 +23,10 @@ export function OrderList({ orders, cancellationPending, onCancel }: Props) {
         <span className={`order-status ${order.status}`}>{statusLabels[order.status] ?? order.status}</span>
         <div className="order-payment"><strong>{formatCurrency(order.total)}</strong><span>{paymentLabels[order.paymentMethod] ?? order.paymentMethod}</span></div>
         <div className="order-actions">
-          <button type="button" className="secondary-button" aria-expanded={expanded} aria-controls={detailId} onClick={() => setExpandedId(expanded ? null : order.id)}>{expanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}</button>
           {order.status === 'completed' && <button type="button" className="danger-text-button" aria-label={`ยกเลิกออเดอร์ ${order.orderNumber}`} disabled={cancellationPending} aria-busy={cancellationPending} onClick={() => onCancel(order)}>{cancellationPending ? 'กำลังยกเลิก...' : 'ยกเลิก'}</button>}
         </div>
       </div>
-      {expanded && <div id={detailId}><OrderDetails order={order} /></div>}
+      <OrderDetails order={order} />
     </article>;
   })}</div>;
 }
