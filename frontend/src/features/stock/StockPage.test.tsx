@@ -128,7 +128,7 @@ describe('StockPage', () => {
     ['เพิ่มเตรียมวันนี้ Original', 'prepare'],
     ['เพิ่มแถมวันนี้ Original', 'giveaway'],
     ['เพิ่มเสียวันนี้ Original', 'waste'],
-  ])('submits %s once and refetches confirmed stock', async (buttonName, reason) => {
+  ])('submits %s once and updates the row from the confirmed stock', async (buttonName, reason) => {
     let summaryCalls = 0;
     const fetchMock = mockStockRoutes((url, init) => {
       if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return json(stock); }
@@ -136,7 +136,9 @@ describe('StockPage', () => {
     });
     render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: buttonName }));
-    await vi.waitFor(() => expect(summaryCalls).toBe(2));
+    expect(await screen.findByRole('status')).toHaveTextContent('1 ชิ้นแล้ว');
+    expect(screen.getByText('Original').closest('tr')?.querySelector('.stock-balance-value')).toHaveTextContent('9');
+    expect(summaryCalls).toBe(1);
     const request = fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust');
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({ productId: 1, reason, quantity: 1 });
   });
@@ -169,21 +171,22 @@ describe('StockPage', () => {
     expect(JSON.parse(String(fetchMock.mock.calls.find(([url]) => url === '/api/stock/adjust')?.[1]?.body)).reason).toBe('undo_giveaway');
   });
 
-  it('keeps the table on screen while it refreshes after an adjustment', async () => {
-    const refreshed = deferred<Response>();
+  it('adjusts one row without reloading or locking the rest of the table', async () => {
+    const pending = deferred<Response>();
     let summaryCalls = 0;
     mockStockRoutes((url) => {
-      if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return summaryCalls === 1 ? json(stock) : refreshed.promise; }
-      if (url === '/api/stock/adjust') return json({ productId: 1, stock: 9 });
+      if (url.startsWith('/api/stock/daily-summary')) { summaryCalls += 1; return json(stock); }
+      if (url === '/api/stock/adjust') return pending.promise;
     });
     render(<StoreProvider><StockPage /></StoreProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' }));
-    await vi.waitFor(() => expect(summaryCalls).toBe(2));
-    expect(screen.queryByText('กำลังโหลดข้อมูลสต็อก')).not.toBeInTheDocument();
-    expect(screen.getByText('Original').closest('tr')).toHaveTextContent('15');
+    expect(screen.getByRole('button', { name: 'เพิ่มเตรียมวันนี้ Original' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'เพิ่มเตรียมวันนี้ Resting Stocked' })).toBeEnabled();
 
-    refreshed.resolve(json({ ...stock, items: stock.items.map((item) => item.productId === 1 ? { ...item, prepared: 16, stockNow: 9 } : item) }));
-    await vi.waitFor(() => expect(screen.getByText('Original').closest('tr')).toHaveTextContent('16'));
+    pending.resolve(json({ productId: 1, stock: 9 }));
+    await vi.waitFor(() => expect(screen.getByText('Original').closest('tr')?.querySelector('td:nth-child(2)')).toHaveTextContent('16'));
+    expect(screen.queryByText('กำลังโหลดข้อมูลสต็อก')).not.toBeInTheDocument();
+    expect(summaryCalls).toBe(1);
   });
 
   it('clears the table when the date changes', async () => {

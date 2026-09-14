@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface QueryState<T> {
   data: T | null;
@@ -18,7 +18,7 @@ export function useAbortableQuery<T>(
   request: ((signal: AbortSignal) => Promise<T>) | null,
   dependencies: readonly unknown[],
   resetKey: unknown = NO_RESET_KEY,
-): QueryState<T> {
+): QueryState<T> & { setData(update: (current: T) => T): void } {
   const [state, setState] = useState<QueryState<T>>({ data: null, loading: Boolean(request), error: '' });
   const loadedKey = useRef<unknown>(NO_RESET_KEY);
 
@@ -57,5 +57,10 @@ export function useAbortableQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
-  return state;
+  // Patches loaded data in place, e.g. from a mutation's response, without a reload.
+  const setData = useCallback((update: (current: T) => T) => {
+    setState((previous) => (previous.data === null ? previous : { ...previous, data: update(previous.data) }));
+  }, []);
+
+  return { ...state, setData };
 }
