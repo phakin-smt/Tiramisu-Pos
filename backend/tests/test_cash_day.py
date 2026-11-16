@@ -38,14 +38,14 @@ class CashDayApiTests(unittest.TestCase):
         with patch.object(server, 'bangkok_today', return_value=date(2026, 8, 18)):
             response = self.client.get('/api/cash-day')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {'date': '2026-08-18', 'openingFloat': None})
+        self.assertEqual(response.get_json(), {'date': '2026-08-18', 'openingFloat': None, 'denominations': None})
 
     def test_create_and_update_same_bangkok_date(self):
         with patch.object(server, 'bangkok_today', return_value=date(2026, 8, 18)):
             created = self.client.put('/api/cash-day', json={'openingFloat': 1260})
             updated = self.client.put('/api/cash-day', json={'openingFloat': 1500.5})
-        self.assertEqual(created.get_json(), {'date': '2026-08-18', 'openingFloat': 1260.0})
-        self.assertEqual(updated.get_json(), {'date': '2026-08-18', 'openingFloat': 1500.5})
+        self.assertEqual(created.get_json(), {'date': '2026-08-18', 'openingFloat': 1260.0, 'denominations': None})
+        self.assertEqual(updated.get_json(), {'date': '2026-08-18', 'openingFloat': 1500.5, 'denominations': None})
         records = self.rows('SELECT report_date,opening_float FROM cash_days')
         self.assertEqual(len(records), 1)
         self.assertEqual(tuple(records[0]), ('2026-08-18', 1500.5))
@@ -59,6 +59,34 @@ class CashDayApiTests(unittest.TestCase):
         for value in (-1, 'not-money', None, True):
             with self.subTest(value=value):
                 response = self.client.put('/api/cash-day', json={'openingFloat': value})
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(len(self.rows('SELECT report_date FROM cash_days')), 0)
+
+    def test_counted_notes_come_back_so_the_count_can_be_corrected(self):
+        with patch.object(server, 'bangkok_today', return_value=date(2026, 8, 18)):
+            saved = self.client.put('/api/cash-day', json={'openingFloat': 1580, 'denominations': {'500': 3, '20': 4, '10': 0}})
+            fetched = self.client.get('/api/cash-day')
+        self.assertEqual(saved.status_code, 200)
+        # A zero count is not part of the breakdown.
+        self.assertEqual(saved.get_json()['denominations'], {'500': 3, '20': 4})
+        self.assertEqual(fetched.get_json(), {'date': '2026-08-18', 'openingFloat': 1580.0, 'denominations': {'500': 3, '20': 4}})
+
+    def test_typing_the_total_by_hand_drops_an_earlier_count(self):
+        with patch.object(server, 'bangkok_today', return_value=date(2026, 8, 18)):
+            self.client.put('/api/cash-day', json={'openingFloat': 500, 'denominations': {'100': 5}})
+            self.client.put('/api/cash-day', json={'openingFloat': 650})
+            fetched = self.client.get('/api/cash-day')
+        self.assertEqual(fetched.get_json(), {'date': '2026-08-18', 'openingFloat': 650.0, 'denominations': None})
+
+    def test_a_count_that_does_not_add_up_to_the_total_is_rejected(self):
+        response = self.client.put('/api/cash-day', json={'openingFloat': 600, 'denominations': {'100': 5}})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(len(self.rows('SELECT report_date FROM cash_days')), 0)
+
+    def test_unknown_notes_and_bad_counts_are_rejected(self):
+        for denominations in ({'25': 2}, {'0100': 1}, {'100': -1}, {'100': 1.5}, {'100': True}, {'100': '5'}, {'1': 10000}, ['100']):
+            with self.subTest(denominations=denominations):
+                response = self.client.put('/api/cash-day', json={'openingFloat': 100, 'denominations': denominations})
                 self.assertEqual(response.status_code, 400)
         self.assertEqual(len(self.rows('SELECT report_date FROM cash_days')), 0)
 

@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS daily_closures (
 );
 CREATE TABLE IF NOT EXISTS cash_days (
  store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id), report_date DATE NOT NULL,
- opening_float NUMERIC(12,2) NOT NULL CHECK (opening_float >= 0),
+ opening_float NUMERIC(12,2) NOT NULL CHECK (opening_float >= 0), denominations TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY (store_id, report_date)
 );
@@ -109,6 +109,10 @@ ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DE
 ALTER TABLE stock_plans ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id);
 ALTER TABLE daily_closures ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id);
 ALTER TABLE cash_days ADD COLUMN IF NOT EXISTS store_id BIGINT NOT NULL DEFAULT 1 REFERENCES stores(id);
+
+-- The notes and coins counted into the float, so the count can be corrected
+-- later instead of keyed in again. NULL when the total was typed by hand.
+ALTER TABLE cash_days ADD COLUMN IF NOT EXISTS denominations TEXT;
 
 -- A SKU and an order number only have to be unique within their own store.
 ALTER TABLE products DROP CONSTRAINT IF EXISTS products_sku_key;

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OpeningFloatCard } from './OpeningFloatCard';
@@ -8,15 +8,15 @@ function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body } as Response;
 }
 
-function mockCashDay(openingFloat: number | null, save?: (amount: number) => Response) {
+function mockCashDay(openingFloat: number | null, save?: (amount: number) => Response, denominations: Record<string, number> | null = null) {
   const fetchMock = vi.fn((input: string | URL | Request, init: RequestInit = {}) => {
     const url = String(input);
     if (url !== '/api/cash-day') throw new Error(`Unexpected request: ${url}`);
     if (init.method === 'PUT') {
-      const amount = JSON.parse(String(init.body)).openingFloat;
-      return Promise.resolve(save?.(amount) ?? json({ date: '2026-08-18', openingFloat: amount }));
+      const body = JSON.parse(String(init.body));
+      return Promise.resolve(save?.(body.openingFloat) ?? json({ date: '2026-08-18', openingFloat: body.openingFloat, denominations: body.denominations ?? null }));
     }
-    return Promise.resolve(json({ date: '2026-08-18', openingFloat }));
+    return Promise.resolve(json({ date: '2026-08-18', openingFloat, denominations }));
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -88,8 +88,8 @@ describe('OpeningFloatCard', () => {
   const totalField = () => screen.getByLabelText('เงินทอนตั้งต้น');
   const countField = (denomination: number) => screen.getByLabelText(`จำนวน ${denomination} บาท`);
 
-  async function openEditor(openingFloat: number | null = null) {
-    const fetchMock = mockCashDay(openingFloat);
+  async function openEditor(openingFloat: number | null = null, denominations: Record<string, number> | null = null) {
+    const fetchMock = mockCashDay(openingFloat, undefined, denominations);
     render(<OpeningFloatCard cashSales={2450} />);
     const label = openingFloat === null ? 'ตั้งเงินทอน' : 'แก้ไข';
     const trigger = await screen.findByRole('button', { name: label });
@@ -114,7 +114,11 @@ describe('OpeningFloatCard', () => {
     expect(screen.getByText('฿100.00')).toBeInTheDocument();
   });
 
-  it('saves the counted total as a single amount', async () => {
+  const putBodies = (fetchMock: ReturnType<typeof mockCashDay>) => fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit)?.method === 'PUT')
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+
+  it('saves the counted notes along with the total', async () => {
     const fetchMock = await openEditor();
 
     fireEvent.change(countField(500), { target: { value: '3' } });
@@ -122,10 +126,17 @@ describe('OpeningFloatCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
 
     await vi.waitFor(() => {
-      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
-      // The breakdown is an input aid only; the API still receives one number.
-      expect(JSON.parse(String((put?.[1] as RequestInit).body))).toEqual({ openingFloat: 1580 });
+      expect(putBodies(fetchMock)).toEqual([{ openingFloat: 1580, denominations: { '500': 3, '20': 4 } }]);
     });
+  });
+
+  it('saves a hand-typed total without a breakdown', async () => {
+    const fetchMock = await openEditor();
+
+    fireEvent.change(totalField(), { target: { value: '1250' } });
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+
+    await vi.waitFor(() => expect(putBodies(fetchMock)).toEqual([{ openingFloat: 1250 }]));
   });
 
   it('clears the breakdown when the total is typed by hand', async () => {
@@ -164,12 +175,42 @@ describe('OpeningFloatCard', () => {
     expect(screen.getByRole('button', { name: 'บันทึก' })).toBeDisabled();
   });
 
-  it('starts a fresh count each time the editor is opened', async () => {
+  it('leaves the counts blank when the saved float was typed by hand', async () => {
     await openEditor(1500);
 
     expect(totalField()).toHaveValue('1500');
     // The stored float prefills the total, never a fabricated breakdown.
     expect(countField(1000)).toHaveValue('');
     expect(countField(100)).toHaveValue('');
+  });
+
+  it('brings back the saved count so one face can be corrected', async () => {
+    const fetchMock = await openEditor(1580, { '500': 3, '20': 4 });
+
+    expect(countField(500)).toHaveValue('3');
+    expect(countField(20)).toHaveValue('4');
+    expect(countField(100)).toHaveValue('');
+    expect(totalField()).toHaveValue('1580');
+
+    // One more 20 found in the drawer: change only that line.
+    fireEvent.change(countField(20), { target: { value: '5' } });
+    expect(totalField()).toHaveValue('1600');
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+
+    await vi.waitFor(() => {
+      expect(putBodies(fetchMock)).toEqual([{ openingFloat: 1600, denominations: { '500': 3, '20': 5 } }]);
+    });
+  });
+
+  it('keeps the count it just saved when the editor is reopened', async () => {
+    await openEditor();
+
+    fireEvent.change(countField(100), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึก' }));
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog', { name: 'เงินทอนตั้งต้นวันนี้' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'แก้ไข' }));
+    expect(countField(100)).toHaveValue('5');
+    expect(totalField()).toHaveValue('500');
   });
 });
