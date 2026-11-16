@@ -2,24 +2,17 @@ import { useState } from 'react';
 
 import { formatCurrency } from '../../domain/format';
 import { acceptMoneyInput } from '../../domain/money';
+import { countedTotal, countOf, DENOMINATIONS, toCountDrafts, toDenominationCounts, type CountDrafts } from '../../domain/openingFloat';
 import { useCashDay } from './useCashDay';
-
-/** Thai notes and coins a dessert-shop drawer actually holds, largest first. */
-const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5, 2, 1] as const;
-
-function countOf(raw: string): number {
-  const trimmed = raw.trim();
-  if (!/^\d{1,4}$/.test(trimmed)) return 0;
-  return Number(trimmed);
-}
 
 export function OpeningFloatCard({ cashSales }: { cashSales: number | null }) {
   const cashDay = useCashDay();
   const [modalOpen, setModalOpen] = useState(false);
   const [amount, setAmount] = useState('');
   // Counting the drawer by denomination is how it is actually done, and it makes
-  // a slipped digit obvious. Nothing is stored: this only fills the total below.
-  const [counts, setCounts] = useState<Record<number, string>>({});
+  // a slipped digit obvious. The count is saved with the total, so correcting
+  // one face later does not mean keying every note in again.
+  const [counts, setCounts] = useState<CountDrafts>({});
   const openingFloat = cashDay.data?.openingFloat ?? null;
   const parsedAmount = Number(amount);
   const validAmount = amount !== '' && Number.isFinite(parsedAmount) && parsedAmount >= 0;
@@ -27,13 +20,13 @@ export function OpeningFloatCard({ cashSales }: { cashSales: number | null }) {
 
   const openModal = () => {
     setAmount(openingFloat === null ? '' : String(openingFloat));
-    setCounts({});
+    setCounts(toCountDrafts(cashDay.data?.denominations));
     setModalOpen(true);
   };
   const changeCount = (denomination: number, raw: string) => {
     const next = { ...counts, [denomination]: raw };
     setCounts(next);
-    const total = DENOMINATIONS.reduce((sum, value) => sum + value * countOf(next[value] ?? ''), 0);
+    const total = countedTotal(next);
     setAmount(total === 0 ? '' : String(total));
   };
   const changeAmount = (raw: string) => {
@@ -44,7 +37,7 @@ export function OpeningFloatCard({ cashSales }: { cashSales: number | null }) {
   };
   const save = async () => {
     if (!validAmount) return;
-    if (await cashDay.save(parsedAmount)) setModalOpen(false);
+    if (await cashDay.save(parsedAmount, toDenominationCounts(counts))) setModalOpen(false);
   };
 
   return <>

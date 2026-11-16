@@ -82,6 +82,9 @@ def init_schema():
             item_columns = {row[1] for row in connection.execute('PRAGMA table_info(order_items)')}
             if 'giveaway_qty' not in item_columns:
                 connection.execute('ALTER TABLE order_items ADD COLUMN giveaway_qty INTEGER NOT NULL DEFAULT 0')
+            cash_day_columns = {row[1] for row in connection.execute('PRAGMA table_info(cash_days)')}
+            if 'denominations' not in cash_day_columns:
+                connection.execute('ALTER TABLE cash_days ADD COLUMN denominations TEXT')
             # Last, so a rebuilt table carries the columns added just above.
             apply_store_migration(connection, schema)
         connection.commit()

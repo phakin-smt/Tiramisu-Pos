@@ -2,6 +2,7 @@ import base64
 import hashlib
 import os
 import hmac
+import json
 import secrets
 import threading
 import time
@@ -298,9 +299,31 @@ def rows(query,params=()):
  try: return execute(connection.cursor(),query,params).fetchall()
  finally: connection.close()
 
+# Thai notes and coins a drawer holds. Mirrors frontend/src/domain/openingFloat.ts.
+FLOAT_DENOMINATIONS=(1000,500,100,50,20,10,5,2,1)
+MAX_DENOMINATION_COUNT=9999
+
+def parse_denominations(raw):
+ """Read a {"100": 5, ...} count. Returns (counts or None, error message or None)."""
+ if raw is None: return None,None
+ if not isinstance(raw,dict): return None,'จำนวนแบงก์และเหรียญไม่ถูกต้อง'
+ counts={}
+ for key,value in raw.items():
+  if not isinstance(key,str) or not key.isdecimal() or int(key) not in FLOAT_DENOMINATIONS or str(int(key))!=key: return None,'ชนิดเงินไม่ถูกต้อง'
+  if isinstance(value,bool) or not isinstance(value,int) or value<0 or value>MAX_DENOMINATION_COUNT: return None,'จำนวนแบงก์และเหรียญไม่ถูกต้อง'
+  if value: counts[int(key)]=value
+ return (counts or None),None
+
+def stored_denominations(text):
+ if not text: return None
+ try: counts=json.loads(text)
+ except ValueError: return None
+ return counts if isinstance(counts,dict) and counts else None
+
 def cash_day_response(store,report_date):
- result=rows('SELECT opening_float FROM cash_days WHERE store_id=? AND report_date=?',(store,report_date))
- return {'date':report_date,'openingFloat':number(result[0]['opening_float']) if result else None}
+ result=rows('SELECT opening_float,denominations FROM cash_days WHERE store_id=? AND report_date=?',(store,report_date))
+ if not result: return {'date':report_date,'openingFloat':None,'denominations':None}
+ return {'date':report_date,'openingFloat':number(result[0]['opening_float']),'denominations':stored_denominations(result[0]['denominations'])}
 
 @app.get('/api/cash-day')
 def get_cash_day():
@@ -316,11 +339,17 @@ def update_cash_day():
  if not amount.is_finite() or amount<0: return error('จำนวนเงินทอนตั้งต้นต้องไม่ติดลบ')
  if amount>Decimal('9999999999.99'): return error('จำนวนเงินทอนตั้งต้นสูงเกินไป')
  amount=amount.quantize(Decimal('0.01'))
+ counts,problem=parse_denominations(payload.get('denominations'))
+ if problem: return error(problem)
+ # A count that no longer adds up to the total would come back as a breakdown
+ # of money the drawer does not hold.
+ if counts and sum(value*count for value,count in counts.items())!=amount: return error('ยอดรวมไม่ตรงกับจำนวนแบงก์และเหรียญที่นับ')
+ stored={str(value):counts[value] for value in FLOAT_DENOMINATIONS if value in counts} if counts else None
  report_date=bangkok_today().isoformat()
  with transaction() as (_,cursor):
-  execute(cursor,"""INSERT INTO cash_days (store_id,report_date,opening_float) VALUES (?,?,?)
-   ON CONFLICT(store_id,report_date) DO UPDATE SET opening_float=excluded.opening_float,updated_at=CURRENT_TIMESTAMP""",(current_store(),report_date,number(amount)))
- return jsonify(date=report_date,openingFloat=number(amount))
+  execute(cursor,"""INSERT INTO cash_days (store_id,report_date,opening_float,denominations) VALUES (?,?,?,?)
+   ON CONFLICT(store_id,report_date) DO UPDATE SET opening_float=excluded.opening_float,denominations=excluded.denominations,updated_at=CURRENT_TIMESTAMP""",(current_store(),report_date,number(amount),json.dumps(stored) if stored else None))
+ return jsonify(date=report_date,openingFloat=number(amount),denominations=stored)
 
 def apply_due_stock_plans(cursor,store,today):
  due=execute(cursor,"SELECT id,product_id,quantity FROM stock_plans WHERE store_id=? AND status='pending' AND plan_date<=?",(store,today)).fetchall()

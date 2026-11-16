@@ -120,6 +120,10 @@ CREATE TABLE IF NOT EXISTS cash_days (
     store_id INTEGER NOT NULL DEFAULT 1 REFERENCES stores(id),
     report_date TEXT NOT NULL,
     opening_float REAL NOT NULL CHECK (opening_float >= 0),
+    -- The notes and coins counted into the float, as JSON {"100": 5, ...}, so
+    -- the count can be corrected later instead of keyed in again. NULL when the
+    -- total was typed by hand.
+    denominations TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (store_id, report_date)
