@@ -186,7 +186,7 @@ test('stock adjustments, planning, and product management confirm server state',
   await form.getByLabel('หมวดหมู่').fill('E2E Managed');
   await form.getByLabel('ราคาขาย (บาท)').fill('75');
   await form.getByLabel('ต้นทุน/ชิ้น (บาท)').fill('30');
-  await form.getByLabel('จำนวนคงเหลือ').fill('5');
+  await form.getByLabel('จำนวนเริ่มต้น').fill('5');
   await form.getByLabel('จุดสั่งเตรียมขั้นต่ำ').fill('1');
   await form.getByRole('button', { name: 'บันทึกเมนู' }).click();
   await expect(page.getByText('เพิ่มเมนูใหม่แล้ว')).toBeVisible();
@@ -195,6 +195,8 @@ test('stock adjustments, planning, and product management confirm server state',
   await expect(product).toContainText('E2E Managed Product');
   await product.getByRole('button', { name: 'แก้ไข E2E Managed Product' }).click();
   const edit = page.getByRole('dialog', { name: 'แก้ไขเมนู' });
+  // Stock is shown, not typed, on an edit: it moves on the stock page.
+  await expect(edit.locator('.product-stock-readonly')).toContainText('5 ชิ้น');
   await edit.getByLabel('ชื่อเมนู').fill('E2E Managed Product Edited');
   await edit.getByRole('button', { name: 'บันทึกเมนู' }).click();
   await expect(page.getByText('แก้ไขเมนูแล้ว')).toBeVisible();
@@ -205,7 +207,7 @@ test('stock adjustments, planning, and product management confirm server state',
   await expect(product).toContainText('พักขาย');
   page.once('dialog', (dialog) => dialog.accept());
   await product.getByRole('button', { name: 'ลบ E2E Managed Product Edited' }).click();
-  await expect(page.getByText('ลบเมนูแล้ว')).toBeVisible();
+  await expect(page.getByText('ลบ E2E Managed Product Edited แล้ว')).toBeVisible();
   await expect(page.locator('.product-admin-item').filter({ hasText: 'E2E-MAN' })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });

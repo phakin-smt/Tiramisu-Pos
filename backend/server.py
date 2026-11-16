@@ -425,7 +425,10 @@ def update_product(product_id):
  if problem: return error(problem)
  with transaction() as (_,cursor):
   if not execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone(): return error('ไม่พบเมนูนี้',404)
-  execute(cursor,'UPDATE products SET sku=?,name=?,category=?,unit_price=?,cost_price=?,stock_qty=?,stock_min=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock'],data['stock_min'],data['active'],product_id))
+  # Stock is left alone on purpose. The form's figure is whatever it read when
+  # it opened, so writing it back undid any sale made in between, and left no
+  # movement to explain the jump. Stock changes go through /api/stock/adjust.
+  execute(cursor,'UPDATE products SET sku=?,name=?,category=?,unit_price=?,cost_price=?,stock_min=?,is_active=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(data['sku'],data['name'],data['category'],data['price'],data['cost'],data['stock_min'],data['active'],product_id))
  return jsonify(id=product_id,code=data['sku'])
 
 @app.patch('/api/products/<int:product_id>/active')
@@ -441,10 +444,14 @@ def update_product_active(product_id):
 def delete_product(product_id):
  with transaction() as (_,cursor):
   if not execute(cursor,'SELECT id FROM products WHERE id=? AND store_id=?',(product_id,current_store())).fetchone(): return error('ไม่พบเมนูนี้',404)
-  used=execute(cursor,'SELECT 1 FROM order_items WHERE product_id=? LIMIT 1',(product_id,)).fetchone()
+  # A menu with any history -- an order, a stock movement, a prep plan -- is
+  # kept so that history still names it, and is only taken off sale. Deleting
+  # it anyway broke those references (a 500 on a menu prepared but never sold).
+  # Say which happened, so the page does not claim a deletion.
+  used=any(execute(cursor,'SELECT 1 FROM {} WHERE product_id=? LIMIT 1'.format(table),(product_id,)).fetchone() for table in ('order_items','stock_movements','stock_plans'))
   if used: execute(cursor,'UPDATE products SET is_active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?',(product_id,))
   else: execute(cursor,'DELETE FROM products WHERE id=?',(product_id,))
- return jsonify(id=product_id,deleted=True)
+ return jsonify(id=product_id,deleted=not used,deactivated=bool(used))
 
 def product_image_url(product_id,checksum):
  """Where a menu picture lives, or None for a menu that has none."""

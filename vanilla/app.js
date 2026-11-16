@@ -1408,6 +1408,11 @@ function openProductModal(item) {
   document.getElementById('productPrice').value = item ? item.price : '';
   document.getElementById('productCost').value = item ? item.cost : '';
   document.getElementById('productStock').value = item ? item.stockNow : 0;
+  // Stock is only typed for a new menu. On an edit the figure is whatever was
+  // read when the form opened, so saving it back would undo any sale made in
+  // between; it is shown for reference and changed on the stock page instead.
+  document.getElementById('productStock').disabled = Boolean(item);
+  document.getElementById('productStockLabel').textContent = item ? 'จำนวนคงเหลือ (ปรับที่หน้าสต็อก)' : 'จำนวนเริ่มต้น';
   document.getElementById('productMinStock').value = item ? item.minStock : 2;
   document.getElementById('productActive').checked = item ? item.active : true;
 
@@ -1439,10 +1444,10 @@ async function saveProduct() {
     category: document.getElementById('productCategory').value.trim(),
     price: Number(document.getElementById('productPrice').value),
     cost: Number(document.getElementById('productCost').value) || 0,
-    stock: Number(document.getElementById('productStock').value) || 0,
     minStock: Number(document.getElementById('productMinStock').value) || 0,
     active: document.getElementById('productActive').checked
   };
+  if (editingProductId === null) payload.stock = Number(document.getElementById('productStock').value) || 0;
 
 
   if (!payload.code || !payload.name || !payload.category || Number.isNaN(payload.price)) {
@@ -1488,7 +1493,8 @@ async function saveProduct() {
 
 
 async function deleteProduct(item) {
-  if (!confirm(`ต้องการลบเมนู "${item.name}" ใช่หรือไม่?`)) {
+  if (!confirm(`ต้องการลบเมนู "${item.name}" ใช่หรือไม่?
+ถ้าเมนูนี้มีประวัติการขายหรือสต็อก ระบบจะพักขายแทนการลบ เพื่อเก็บประวัติไว้`)) {
     return;
   }
 
@@ -1503,7 +1509,8 @@ async function deleteProduct(item) {
     }
 
 
-    showToast(data.message || 'ลบเมนูแล้ว');
+    // A menu with history is only taken off sale; say so instead of "deleted".
+    showToast(data.deactivated ? `${item.name} มีประวัติการขายหรือสต็อก จึงพักขายแทนการลบ` : `ลบ ${item.name} แล้ว`);
     await Promise.all([fetchStockSummary(), fetchProducts(), fetchMenuSettings()]);
   } catch (error) {
     console.error(error);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatPromptPayAmount, generatePromptPayPayload } from './promptPayPayload';
+import { formatPromptPayAmount, generatePromptPayPayload, generateStaticPromptPayPayload, promptPayAccountSuffix } from './promptPayPayload';
 
 const mobileMerchant = '0016A00000067701011101130066801234567';
 const nationalIdMerchant = '0016A00000067701011102131111111111111';
@@ -27,5 +27,23 @@ describe('PromptPay payload Python parity', () => {
 
   it.each(['0', '-1', '1000000', 'not-a-number', 'NaN', 'Infinity'])('rejects invalid amount %s', (amount) => {
     expect(() => generatePromptPayPayload(mobileMerchant, amount)).toThrow();
+  });
+});
+
+describe('static PromptPay payload for checking the account', () => {
+  it('matches the Python encoder with no amount and the static marker', () => {
+    // Same fields as a sale's QR, but 01=11 (static) and no tag 54.
+    expect(generateStaticPromptPayPayload(mobileMerchant)).toBe('00020101021129370016A000000677010111011300668012345675802TH530376463046197');
+  });
+
+  it('refuses a config that is not PromptPay', () => {
+    expect(() => generateStaticPromptPayPayload('0016XXXX')).toThrow();
+  });
+
+  it('shows only the last four digits of the receiving number', () => {
+    expect(promptPayAccountSuffix(mobileMerchant)).toBe('4567');
+    expect(promptPayAccountSuffix(nationalIdMerchant)).toBe('1111');
+    expect(promptPayAccountSuffix('garbage')).toBeNull();
+    expect(promptPayAccountSuffix('0016A000000677010111')).toBeNull();
   });
 });

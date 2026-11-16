@@ -283,7 +283,10 @@ class StockAdjustmentCharacterizationTests(PosApiTestCase):
         self.assertEqual(self.one("SELECT COUNT(*) FROM stock_movements")[0], before)
         self.assertEqual(self.one("SELECT stock_qty FROM products WHERE id=?", (product_id,))[0], 5)
 
-    def test_product_edit_replaces_stock_without_creating_adjustment_movement(self):
+    def test_product_edit_leaves_stock_to_the_stock_ledger(self):
+        # This used to pin the edit overwriting stock_qty with no movement. That
+        # silently undid sales made while the form was open, so stock now only
+        # moves through /api/stock/adjust, where every change leaves a record.
         product_id = self.add_product(stock=5)
         response = self.client.put(
             f"/api/products/{product_id}",
@@ -300,7 +303,8 @@ class StockAdjustmentCharacterizationTests(PosApiTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.one("SELECT stock_qty FROM products WHERE id=?", (product_id,))[0], 12)
+        self.assertEqual(self.one("SELECT stock_qty FROM products WHERE id=?", (product_id,))[0], 5)
+        self.assertEqual(self.one("SELECT name FROM products WHERE id=?", (product_id,))[0], "Edited product")
         self.assertEqual(self.one("SELECT COUNT(*) FROM stock_movements")[0], 0)
 
 

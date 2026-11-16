@@ -69,3 +69,42 @@ export function generatePromptPayPayload(
   const crcInput = `${body}6304`;
   return `${crcInput}${crc16Xmodem(crcInput)}`;
 }
+
+/**
+ * A PromptPay QR with no amount in it: the customer types the amount.
+ *
+ * Settings shows this so the owner can scan the shared QR and see whose account
+ * it pays into. Selling never uses it -- a sale's QR carries its total.
+ */
+export function generateStaticPromptPayPayload(merchantAccountInfo: string): string {
+  if (!merchantAccountInfo.startsWith(`0016${PROMPTPAY_GUID}`)) {
+    throw new PromptPayPayloadError('PromptPay merchant configuration is invalid');
+  }
+  const body = [
+    tlv('00', '01'),
+    tlv('01', '11'),
+    tlv('29', merchantAccountInfo),
+    tlv('58', 'TH'),
+    tlv('53', '764'),
+  ].join('');
+  const crcInput = `${body}6304`;
+  return `${crcInput}${crc16Xmodem(crcInput)}`;
+}
+
+/**
+ * The last four digits of the receiving PromptPay number, or null if the
+ * config cannot be read. Enough to tell two accounts apart without putting the
+ * whole number on screen.
+ */
+export function promptPayAccountSuffix(merchantAccountInfo: string): string | null {
+  let rest = merchantAccountInfo;
+  while (rest.length >= 4) {
+    const tag = rest.slice(0, 2);
+    const length = Number(rest.slice(2, 4));
+    if (!Number.isInteger(length) || rest.length < 4 + length) return null;
+    const value = rest.slice(4, 4 + length);
+    if (tag !== '00' && /^\d{4,}$/.test(value)) return value.slice(-4);
+    rest = rest.slice(4 + length);
+  }
+  return null;
+}

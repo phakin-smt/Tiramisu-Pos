@@ -43,10 +43,15 @@ export function ProductsAdminPage() {
     if (result) refresh();
   };
   const remove = async (product: StockSummaryItem) => {
-    if (!window.confirm(`ต้องการลบเมนู "${product.name}" ใช่หรือไม่?`)) return;
+    if (!window.confirm(`ต้องการลบเมนู "${product.name}" ใช่หรือไม่?
+ถ้าเมนูนี้มีประวัติการขายหรือสต็อก ระบบจะพักขายแทนการลบ เพื่อเก็บประวัติไว้`)) return;
     setNotice('');
-    const result = await mutation.run(() => deleteProduct(product.productId), 'ลบเมนูแล้ว');
-    if (result) refresh();
+    const result = await mutation.run(() => deleteProduct(product.productId), '');
+    if (!result) return;
+    // The server keeps a menu with history and only takes it off sale; say
+    // which happened rather than claim a deletion the list contradicts.
+    setNotice(result.deactivated ? `${product.name} มีประวัติการขายหรือสต็อก จึงพักขายแทนการลบ` : `ลบ ${product.name} แล้ว`);
+    refresh();
   };
   const saved = (message: string) => { setFormOpen(false); setEditing(null); setNotice(message); refresh(); };
 

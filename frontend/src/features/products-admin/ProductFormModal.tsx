@@ -74,17 +74,22 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // Opening stock is only set on a new menu. On an edit the form's figure is
+    // whatever it read when it opened, and sending it back would undo any sale
+    // made since; stock changes go through the stock page, which records why.
+    const stock = product ? 0 : Number(values.stock || 0);
     const payload: ProductPayload = {
       code: values.code.trim(), name: values.name.trim(), category: values.category.trim(),
-      price: Number(values.price), cost: Number(values.cost || 0), stock: Number(values.stock || 0),
+      price: Number(values.price), cost: Number(values.cost || 0),
       minStock: Number(values.minStock || 0), active: values.active,
+      ...(product ? {} : { stock }),
     };
     if (!payload.code || !payload.name || !payload.category || values.price === '') {
       setValidation('กรอกรหัสเมนู ชื่อเมนู หมวดหมู่ และราคาให้ครบ'); return;
     }
-    if (![payload.price, payload.cost, payload.stock, payload.minStock].every(Number.isFinite)
-      || Math.min(payload.price, payload.cost, payload.stock, payload.minStock) < 0
-      || !Number.isInteger(payload.stock) || !Number.isInteger(payload.minStock)) {
+    if (![payload.price, payload.cost, stock, payload.minStock].every(Number.isFinite)
+      || Math.min(payload.price, payload.cost, stock, payload.minStock) < 0
+      || !Number.isInteger(stock) || !Number.isInteger(payload.minStock)) {
       setValidation('ราคาและจำนวนต้องเป็นตัวเลขไม่ติดลบ และจำนวนสต็อกต้องเป็นจำนวนเต็ม'); return;
     }
     setValidation('');
@@ -112,7 +117,9 @@ export function ProductFormModal({ product, categories, onClose, onSaved }: Prop
           <label className="form-wide"><span>หมวดหมู่</span><input list="product-categories" value={values.category} onChange={(event) => field('category', event.target.value)} required /><datalist id="product-categories">{categories.map((category) => <option key={category} value={category} />)}</datalist></label>
           <label><span>ราคาขาย (บาท)</span><input type="text" inputMode="decimal" autoComplete="off" value={values.price} onChange={(event) => field('price', acceptMoneyInput(event.target.value, values.price))} required /></label>
           <label><span>ต้นทุน/ชิ้น (บาท)</span><input type="text" inputMode="decimal" autoComplete="off" value={values.cost} onChange={(event) => field('cost', acceptMoneyInput(event.target.value, values.cost))} /></label>
-          <label><span>จำนวนคงเหลือ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.stock} onChange={(event) => field('stock', event.target.value)} /></label>
+          {product
+            ? <div className="product-stock-readonly"><span>จำนวนคงเหลือ</span><strong>{product.stockNow} ชิ้น</strong><small>ปรับสต็อกที่หน้าจัดการสต็อก</small></div>
+            : <label><span>จำนวนเริ่มต้น</span><input type="number" min="0" step="1" inputMode="numeric" value={values.stock} onChange={(event) => field('stock', event.target.value)} /></label>}
           <label><span>จุดสั่งเตรียมขั้นต่ำ</span><input type="number" min="0" step="1" inputMode="numeric" value={values.minStock} onChange={(event) => field('minStock', event.target.value)} /></label>
           <div className="product-image-field form-wide">
             <span>รูปเมนู</span>

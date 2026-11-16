@@ -100,16 +100,35 @@ describe('ProductsAdminPage', () => {
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({ code: 'COC', name: 'Cocoa', category: 'Tiramisu', price: 89, cost: 0, stock: 0, minStock: 2, active: true });
   });
 
-  it('edits a product and includes direct stock replacement exactly', async () => {
+  it('edits a product without sending stock, which only the stock page changes', async () => {
     const fetchMock = mockProducts((url, init) => url === '/api/products/1' && init.method === 'PUT' ? json({ id: 1, code: 'ORI' }) : undefined);
     render(<ProductsAdminPage />);
     await screen.findByText('Original');
     fireEvent.click(screen.getByRole('button', { name: 'แก้ไข Original' }));
-    fireEvent.change(screen.getByLabelText('จำนวนคงเหลือ'), { target: { value: '13' } });
+    const dialog = within(screen.getByRole('dialog'));
+    // Shown for reference, not typed: sending the figure back would undo a sale
+    // made while the form was open.
+    expect(dialog.getByText('8 ชิ้น')).toBeInTheDocument();
+    expect(dialog.getByText('ปรับสต็อกที่หน้าจัดการสต็อก')).toBeInTheDocument();
+    expect(dialog.queryByRole('spinbutton', { name: /จำนวนคงเหลือ|จำนวนเริ่มต้น/ })).not.toBeInTheDocument();
+    fireEvent.change(dialog.getByLabelText('ราคาขาย (บาท)'), { target: { value: '75' } });
     fireEvent.click(screen.getByRole('button', { name: 'บันทึกเมนู' }));
     expect(await screen.findByRole('status')).toHaveTextContent('แก้ไขเมนูแล้ว');
     const request = fetchMock.mock.calls.find(([url]) => url === '/api/products/1');
-    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ code: 'ORI', name: 'Original', category: 'Tiramisu', price: 69, cost: 25, stock: 13, minStock: 4, active: true });
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ code: 'ORI', name: 'Original', category: 'Tiramisu', price: 75, cost: 25, minStock: 4, active: true });
+  });
+
+  it('takes an opening stock when the menu is new', async () => {
+    const fetchMock = mockProducts((url, init) => url === '/api/products' && init.method === 'POST' ? json({ id: 9, code: 'COC' }) : undefined);
+    render(<ProductsAdminPage />);
+    await screen.findByText('Original');
+    fireEvent.click(screen.getByRole('button', { name: '+ เพิ่มเมนูใหม่' }));
+    fillCreateForm();
+    fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('จำนวนเริ่มต้น'), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'บันทึกเมนู' }));
+    await screen.findByRole('status');
+    const request = fetchMock.mock.calls.find(([url, init]) => url === '/api/products' && init?.method === 'POST');
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ code: 'COC', stock: 12 });
   });
 
   it.each([
@@ -125,14 +144,24 @@ describe('ProductsAdminPage', () => {
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({ active });
   });
 
-  it('confirms deletion and handles the backend deleted response without assuming hard versus soft delete', async () => {
+  it('confirms deletion and says the menu is gone when it really is', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
-    const fetchMock = mockProducts((url, init) => url === '/api/products/1' && init.method === 'DELETE' ? json({ id: 1, deleted: true }) : undefined);
+    const fetchMock = mockProducts((url, init) => url === '/api/products/1' && init.method === 'DELETE' ? json({ id: 1, deleted: true, deactivated: false }) : undefined);
     render(<ProductsAdminPage />);
     await screen.findByText('Original');
     fireEvent.click(screen.getByRole('button', { name: 'ลบ Original' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('ลบเมนูแล้ว');
+    expect(await screen.findByRole('status')).toHaveTextContent('ลบ Original แล้ว');
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/products/1')).toHaveLength(1);
+  });
+
+  it('says a menu with history was taken off sale rather than claiming it was deleted', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    mockProducts((url, init) => url === '/api/products/1' && init.method === 'DELETE' ? json({ id: 1, deleted: false, deactivated: true }) : undefined);
+    render(<ProductsAdminPage />);
+    await screen.findByText('Original');
+    fireEvent.click(screen.getByRole('button', { name: 'ลบ Original' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Original มีประวัติการขายหรือสต็อก จึงพักขายแทนการลบ');
+    expect(screen.getByRole('status')).not.toHaveTextContent('ลบ Original แล้ว');
   });
 
   it('shows client validation and backend errors while retaining confirmed data', async () => {

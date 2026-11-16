@@ -926,6 +926,10 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
    filling the tile is worth the crop, and the name sits right beside them. */
 .sell-product-card .sell-product-photo { object-fit: contain; }
 .product-image-field { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
+/* Current stock on an edit: shown, not typed. Stock moves on the stock page. */
+.product-stock-readonly { display: grid; gap: 3px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
+.product-stock-readonly strong { display: flex; min-height: 40px; align-items: center; color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums; }
+.product-stock-readonly small { font-weight: 400; }
 .product-image-row { display: flex; align-items: center; gap: 12px; }
 .product-image-preview, .product-image-empty { width: 84px; height: 84px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: var(--radius-md); object-fit: cover; }
 .product-image-empty { display: grid; place-items: center; background: var(--panel-soft); font-size: 34px; }
@@ -939,6 +943,8 @@ tbody tr:hover { background: rgba(246,234,214,.42); }
 .store-qr-preview, .store-qr-empty { width: 120px; height: 120px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; object-fit: contain; }
 .store-qr-empty { display: grid; place-items: center; background: var(--panel-soft); color: var(--text-soft); font-size: 40px; }
 .store-qr-note { margin: 0; color: var(--text-soft); font-size: 12px; }
+.store-qr-status.is-warning, .store-qr-note.is-warning { color: var(--danger); font-weight: 700; }
+.store-qr-empty.is-warning { border-color: #e2b8b0; color: var(--danger); background: #fae9e6; font-weight: 800; }
 /* The total, read across a counter. A generated QR carries it and a picture of
    one cannot, so in the second case it is the only place the customer can get
    it from -- which is why it leads the modal rather than sitting in the header,

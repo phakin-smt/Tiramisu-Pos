@@ -16,7 +16,8 @@ function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body } as Response;
 }
 
-const SHARED = { configured: true, mode: 'promptpay', merchantAccountInfo: '0016A0000006770101', version: 1 };
+const SHARED = { configured: true, mode: 'promptpay', merchantAccountInfo: '0016A00000067701011101130066801234567', version: 1 };
+const NONE = { configured: false, mode: 'none', version: 1 };
 const OWN = { configured: true, mode: 'image', imageUrl: '/api/store/payment-qr?v=abc123', imageChecksum: 'abc123', version: 1 };
 
 function mockQr(handler?: (url: string, init: RequestInit) => Response | undefined, config: unknown = SHARED) {
@@ -41,12 +42,49 @@ describe('StorePaymentQrSection', () => {
   beforeEach(() => { prepareQrForUpload.mockClear(); });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it('says out loud that a shop with no QR of its own is paid through the shared one', async () => {
+  it('draws the shared QR a shop without its own is paid through, and names the account', async () => {
     mockQr();
     render(<StorePaymentQrSection />);
-    expect(await screen.findByText(/ยังไม่ได้ตั้ง/)).toBeInTheDocument();
-    expect(screen.getByLabelText('เลือกรูป QR')).toHaveAttribute('accept', 'image/*');
+    expect(await screen.findByText('ยังไม่ได้ตั้ง QR ของร้าน — ใช้ QR พร้อมเพย์กลาง')).toBeInTheDocument();
+    const qr = await screen.findByRole('img', { name: 'QR พร้อมเพย์กลาง' });
+    expect(qr.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+    expect(screen.getByText(/พร้อมเพย์ลงท้าย 4567/)).toBeInTheDocument();
+    expect(screen.getByLabelText('เลือกรูป QR ของร้าน')).toHaveAttribute('accept', 'image/*');
     expect(screen.queryByRole('button', { name: 'ลบ QR' })).not.toBeInTheDocument();
+  });
+
+  it('says transfers cannot be taken when there is no QR at all, instead of claiming a shared one', async () => {
+    mockQr(undefined, NONE);
+    render(<StorePaymentQrSection />);
+    expect(await screen.findByText('ยังรับโอนไม่ได้ — ร้านนี้ยังไม่มี QR')).toBeInTheDocument();
+    expect(screen.getByText(/ลูกค้าจะโอนเงินไม่ได้/)).toBeInTheDocument();
+    expect(screen.queryByText(/QR พร้อมเพย์กลาง/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('admits it could not check, and can try again, rather than guessing', async () => {
+    let fail = true;
+    mockQr((url) => (url === '/api/offline-payment-config' && fail ? json({ error: 'offline' }, 503) : undefined));
+    render(<StorePaymentQrSection />);
+    expect(await screen.findByText('ตรวจสอบ QR ไม่ได้')).toBeInTheDocument();
+    expect(screen.queryByText(/QR พร้อมเพย์กลาง/)).not.toBeInTheDocument();
+
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: 'ลองอีกครั้ง' }));
+    expect(await screen.findByText('ยังไม่ได้ตั้ง QR ของร้าน — ใช้ QR พร้อมเพย์กลาง')).toBeInTheDocument();
+  });
+
+  it('can drop a chosen picture without saving it', async () => {
+    const fetchMock = mockQr();
+    render(<StorePaymentQrSection />);
+    await screen.findByRole('img', { name: 'QR พร้อมเพย์กลาง' });
+    choose();
+    expect(await screen.findByRole('img', { name: 'QR รับเงินของร้าน' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'ยกเลิก' }));
+    expect(screen.getByRole('img', { name: 'QR พร้อมเพย์กลาง' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'บันทึก QR' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/store/payment-qr')).toBe(false);
   });
 
   it('shows the shop its own QR when it has one', async () => {

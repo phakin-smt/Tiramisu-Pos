@@ -4,7 +4,8 @@ export interface ProductPayload {
   category: string;
   price: number;
   cost: number;
-  stock: number;
+  /** Opening stock for a new menu. Ignored on edit: stock moves through /api/stock/adjust. */
+  stock?: number;
   minStock: number;
   active: boolean;
 }
@@ -31,4 +32,5 @@ export interface ProductMutationResponse {
 }
 
 export interface ProductActiveResponse { id: number; active: boolean; }
-export interface DeleteProductResponse { id: number; deleted: boolean; }
+/** A menu with history is taken off sale rather than deleted; `deactivated` says so. */
+export interface DeleteProductResponse { id: number; deleted: boolean; deactivated?: boolean; }
