@@ -178,6 +178,12 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
 .product-modal footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .orders-page .page-toolbar > div h2 { margin: 0; font-size: 18px; }
 .orders-page .page-toolbar > div span { display: block; margin-top: 4px; color: var(--text-soft); font-size: 13px; }
+.order-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg, 8px); background: var(--panel); box-shadow: var(--shadow-sm); }
+.order-filters label { display: grid; gap: 5px; color: var(--text-soft); font-size: 12px; font-weight: 700; }
+.order-filters input, .order-filters select { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md, 8px); color: var(--text); background: #fff; }
+.order-filter-summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--text-soft); font-size: 13px; }
+.order-filter-summary strong { color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums; }
+.order-filter-summary .secondary-button { flex: none; padding: 0 16px; }
 .order-list { display: grid; gap: 12px; }
 .order-card { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .order-card.is-cancelled { border-color: #d9b7b1; background: #fbf5f4; }
@@ -210,6 +216,8 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .product-admin-actions { grid-column: 2 / -1; justify-content: flex-end; }
   .order-card-summary { grid-template-columns: minmax(160px, 1fr) auto minmax(120px, auto); }
   .order-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .order-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .order-filter-query { grid-column: 1 / -1; }
 }
 
 @media (max-width: 767px) {
@@ -250,6 +258,10 @@ th { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
   .product-form-grid { grid-template-columns: 1fr; }
   .product-form-grid .form-wide { grid-column: auto; }
   .product-modal footer { position: sticky; bottom: 0; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: var(--panel); }
+  .order-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px; }
+  /* iOS zooms the page into any field set smaller than 16px. */
+  .order-filters input, .order-filters select { font-size: 16px; }
+  .order-filter-query, .order-filter-sort { grid-column: 1 / -1; }
   .order-card-summary { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
   .order-payment { text-align: left; }
   .order-actions { grid-column: 1 / -1; }

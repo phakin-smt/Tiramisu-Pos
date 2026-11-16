@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/router';
@@ -22,6 +22,8 @@ const orders: OrdersResponse = {
     { id: 2, orderNumber: '202608171215', time: '2026-08-17T12:15:00+07:00', paymentMethod: 'transfer', subtotal: 79, discount: 0, total: 79, status: 'cancelled', items: [{ name: 'Matcha', code: 'MAT', qty: 1, giveawayQty: 0, unitPrice: 79, lineTotal: 79 }] },
   ],
 };
+
+const orderList = () => document.querySelector<HTMLElement>('.order-list')!;
 
 function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body } as Response;
@@ -57,10 +59,10 @@ describe('OrdersPage', () => {
     expect(screen.getByLabelText('วันที่ออเดอร์')).toHaveValue(TODAY);
     expect(screen.getByLabelText('วันที่ออเดอร์')).toHaveAttribute('max', TODAY);
     expect(await screen.findByText('#202608171200')).toBeInTheDocument();
-    expect(screen.getByText('เงินสด')).toBeInTheDocument();
-    expect(screen.getByText('โอน/พร้อมเพย์')).toBeInTheDocument();
-    expect(screen.getByText('เสร็จสิ้น')).toBeInTheDocument();
-    expect(screen.getByText('ยกเลิกแล้ว')).toBeInTheDocument();
+    expect(within(orderList()).getByText('เงินสด')).toBeInTheDocument();
+    expect(within(orderList()).getByText('โอน/พร้อมเพย์')).toBeInTheDocument();
+    expect(within(orderList()).getByText('เสร็จสิ้น')).toBeInTheDocument();
+    expect(within(orderList()).getByText('ยกเลิกแล้ว')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'ดูรายละเอียด' })).not.toBeInTheDocument();
     expect(screen.getByText('ทีรามิสุออริจินัล')).toBeInTheDocument();
     const itemRow = screen.getByText('ORI').closest('tr');
@@ -147,7 +149,7 @@ describe('OrdersPage', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/orders/1/cancel')).toHaveLength(1);
     expect(fetchMock.mock.calls.find(([url]) => url === '/api/orders/1/cancel')?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
     expect(screen.queryByRole('button', { name: 'ยกเลิกออเดอร์ 202608171200' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('ยกเลิกแล้ว')).toHaveLength(2);
+    expect(within(orderList()).getAllByText('ยกเลิกแล้ว')).toHaveLength(2);
   });
 
   it('prevents duplicate cancellation requests while pending and across rerenders', async () => {
@@ -170,7 +172,7 @@ describe('OrdersPage', () => {
     render(<OrdersPage />);
     fireEvent.click(await screen.findByRole('button', { name: 'ยกเลิกออเดอร์ 202608171200' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('ออเดอร์นี้ถูกยกเลิกไปแล้ว');
-    expect(screen.getByText('เสร็จสิ้น')).toBeInTheDocument();
+    expect(within(orderList()).getByText('เสร็จสิ้น')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'ยกเลิกออเดอร์ 202608171200' })).toBeEnabled();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/orders?date='))).toHaveLength(1);
   });
@@ -208,5 +210,69 @@ describe('OrdersPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'ยกเลิกออเดอร์ 202608171200' }));
     expect(await screen.findByLabelText('PIN')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Session expired');
+  });
+
+  describe('filters', () => {
+    const shownNumbers = () => Array.from(orderList().querySelectorAll('.order-identity strong')).map((node) => node.textContent);
+    const summary = () => document.querySelector<HTMLElement>('.order-filter-summary')!;
+
+    it('narrows to transfers and totals only money that came in, then clears', async () => {
+      mockOrders();
+      render(<OrdersPage />);
+      await screen.findByText('#202608171200');
+      expect(summary()).toHaveTextContent('2 ออเดอร์ · ยอดรับ ฿200.00 (ไม่นับที่ยกเลิก)');
+
+      fireEvent.change(screen.getByLabelText('ช่องทางชำระ'), { target: { value: 'transfer' } });
+      expect(shownNumbers()).toEqual(['#202608171215']);
+      expect(summary()).toHaveTextContent('แสดง 1 จาก 2 ออเดอร์ · ยอดรับ ฿0.00 (ไม่นับที่ยกเลิก)');
+
+      fireEvent.click(screen.getByRole('button', { name: 'ล้างตัวกรอง' }));
+      expect(shownNumbers()).toEqual(['#202608171200', '#202608171215']);
+      expect(screen.getByLabelText('ช่องทางชำระ')).toHaveValue('all');
+      expect(screen.queryByRole('button', { name: 'ล้างตัวกรอง' })).not.toBeInTheDocument();
+    });
+
+    it('sorts newest first and by total, and clearing keeps the chosen sort', async () => {
+      mockOrders();
+      render(<OrdersPage />);
+      await screen.findByText('#202608171200');
+      expect(shownNumbers()).toEqual(['#202608171200', '#202608171215']);
+
+      fireEvent.change(screen.getByLabelText('เรียงตาม'), { target: { value: 'newest' } });
+      expect(shownNumbers()).toEqual(['#202608171215', '#202608171200']);
+      fireEvent.change(screen.getByLabelText('เรียงตาม'), { target: { value: 'lowest' } });
+      expect(shownNumbers()).toEqual(['#202608171215', '#202608171200']);
+      fireEvent.change(screen.getByLabelText('เรียงตาม'), { target: { value: 'highest' } });
+      expect(shownNumbers()).toEqual(['#202608171200', '#202608171215']);
+
+      fireEvent.change(screen.getByLabelText('สถานะ'), { target: { value: 'completed' } });
+      fireEvent.click(screen.getByRole('button', { name: 'ล้างตัวกรอง' }));
+      expect(screen.getByLabelText('เรียงตาม')).toHaveValue('highest');
+    });
+
+    it('finds an order by menu name and says when nothing matches', async () => {
+      mockOrders();
+      render(<OrdersPage />);
+      await screen.findByText('#202608171200');
+
+      fireEvent.change(screen.getByLabelText('ค้นหา'), { target: { value: 'matcha' } });
+      expect(shownNumbers()).toEqual(['#202608171215']);
+
+      fireEvent.change(screen.getByLabelText('ค้นหา'), { target: { value: 'ไม่มีเมนูนี้' } });
+      expect(screen.getByText('ไม่มีออเดอร์ที่ตรงกับตัวกรอง')).toBeInTheDocument();
+      expect(screen.queryByText('ยังไม่มีออเดอร์ในวันที่เลือก')).not.toBeInTheDocument();
+    });
+
+    it('keeps the filters when another date is picked', async () => {
+      mockOrders();
+      render(<OrdersPage />);
+      await screen.findByText('#202608171200');
+      fireEvent.change(screen.getByLabelText('ช่องทางชำระ'), { target: { value: 'cash' } });
+
+      fireEvent.change(screen.getByLabelText('วันที่ออเดอร์'), { target: { value: '2026-08-15' } });
+      await screen.findByText(/15 ส\.ค\./);
+      expect(screen.getByLabelText('ช่องทางชำระ')).toHaveValue('cash');
+      expect(shownNumbers()).toEqual(['#202608171200']);
+    });
   });
 });
