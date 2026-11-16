@@ -53,6 +53,17 @@ export function formatThaiDateTime(value: string | null): string {
   }).format(parsed);
 }
 
+/** A YYYY-MM-DD taken from a link, if it is a real date no later than `max`; otherwise null. */
+export function parseDateParam(value: string | null, max: string): string | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return null;
+  return value <= max ? value : null;
+}
+
 export function addDaysISO(date: string, days: number): string {
   const [year, month, day] = date.split('-').map(Number);
   const result = new Date(Date.UTC(year, month - 1, day + days));

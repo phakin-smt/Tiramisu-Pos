@@ -74,6 +74,24 @@ describe('OrdersPage', () => {
     expect(fetchMock).toHaveBeenCalledWith(`/api/orders?date=${TODAY}`, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
+  it('opens on the day a link asks for, and ignores one it cannot use', async () => {
+    try {
+      window.history.pushState({}, '', '/orders?date=2026-08-15');
+      const fetchMock = mockOrders();
+      render(<OrdersPage />);
+      expect(screen.getByLabelText('วันที่ออเดอร์')).toHaveValue('2026-08-15');
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/orders?date=2026-08-15', expect.anything()));
+      cleanup();
+
+      window.history.pushState({}, '', '/orders?date=2099-01-01');
+      mockOrders();
+      render(<OrdersPage />);
+      expect(screen.getByLabelText('วันที่ออเดอร์')).toHaveValue(TODAY);
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
+
   it('sends a selected historical date', async () => {
     const fetchMock = mockOrders();
     render(<OrdersPage />);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bangkokDateISO, formatThaiDate, formatThaiDateTime } from './date';
+import { bangkokDateISO, formatThaiDate, formatThaiDateTime, parseDateParam } from './date';
 
 describe('bangkokDateISO', () => {
   it('advances the business date after Bangkok midnight before UTC rollover', () => {
@@ -38,5 +38,18 @@ describe('formatThaiDateTime', () => {
   it('uses a safe fallback for missing or unexpected values', () => {
     expect(formatThaiDateTime(null)).toBe('—');
     expect(formatThaiDateTime('unexpected')).toBe('unexpected');
+  });
+});
+
+describe('parseDateParam', () => {
+  it('accepts a real date up to the limit', () => {
+    expect(parseDateParam('2026-08-15', '2026-08-17')).toBe('2026-08-15');
+    expect(parseDateParam('2026-08-17', '2026-08-17')).toBe('2026-08-17');
+  });
+
+  it('refuses anything else rather than guessing', () => {
+    for (const value of [null, '', '2026-08-18', '2026-02-30', '2026-8-5', 'today', '2026-08-15T00:00']) {
+      expect(parseDateParam(value, '2026-08-17')).toBeNull();
+    }
   });
 });

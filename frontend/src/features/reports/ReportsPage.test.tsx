@@ -18,8 +18,15 @@ const detail = {
   date: '2026-08-16', orderCount: 2, subtotalAll: 407, discountAll: 14, cashTotal: 200,
   transferTotal: 193, totalRevenue: 393, costTotal: 120, netProfit: 273,
   orders: [{ orderNumber: 'BB-001', time: '2026-08-16T11:15:00+07:00', paymentMethod: 'cash', subtotal: 207, discount: 7, total: 200, items: [{ name: 'Original', code: 'ORI', qty: 3, giveawayQty: 1, unitPrice: 69, lineTotal: 138 }] }],
-  menuSummary: [{ code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, sold: 5, giveaway: 1, waste: 2, remaining: 8 }],
+  menuSummary: [
+    { code: 'ORI', name: 'Original', category: 'classic', icon: '', active: true, sold: 5, giveaway: 1, waste: 2, remaining: 8 },
+    { code: 'MAT', name: 'Matcha', category: 'classic', icon: '', active: true, sold: 0, giveaway: 0, waste: 0, remaining: 4 },
+  ],
 };
+
+function renderPage() {
+  return render(<MemoryRouter><ReportsPage /></MemoryRouter>);
+}
 
 function json(body: unknown, status = 200): Response {
   return { ok: status < 400, status, headers: new Headers({ 'content-type': 'application/json' }), json: async () => body } as Response;
@@ -31,16 +38,22 @@ describe('ReportsPage', () => {
   it('loads days, selects one, and renders the exact report data without mutations', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json(days)).mockResolvedValueOnce(json(detail));
     vi.stubGlobal('fetch', fetchMock);
-    render(<ReportsPage />);
+    renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /16.*2569/ }));
     expect(await screen.findByText('Original')).toBeInTheDocument();
-    expect(screen.getByText(/Original × 3/)).toHaveTextContent('แถม 1');
+    // The order table lives on the orders page; the report links to that day.
+    expect(screen.getByRole('link', { name: /ดูรายการ 2 ออเดอร์ของวันนี้/ })).toHaveAttribute('href', '/orders?date=2026-08-16');
+    expect(screen.queryByText(/Original × 3/)).not.toBeInTheDocument();
     expect(screen.getByText('ยอดขายรวม').parentElement).toHaveTextContent('393');
     expect(screen.getAllByText('เงินสด')[0].parentElement).toHaveTextContent('200');
     expect(screen.getByText('เงินโอน').parentElement).toHaveTextContent('193');
     expect(screen.getByText('ส่วนลดรวม').parentElement).toHaveTextContent('14');
     expect(screen.getByText('ต้นทุนรวม').parentElement).toHaveTextContent('120');
     expect(screen.getByText('กำไรขั้นต้น').parentElement).toHaveTextContent('273');
+    expect(screen.getByText('ยอดก่อนส่วนลด').parentElement).toHaveTextContent('407');
+    expect(screen.getByText('ยอดขายรวม').parentElement).toHaveTextContent('2 ออเดอร์');
+    // No float was set that day, so there is no drawer figure to invent.
+    expect(screen.queryByText(/เงินสดที่ควรมีในลิ้นชัก/)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'ความเคลื่อนไหวสินค้า' })).toBeInTheDocument();
     expect(screen.getByText('ORI · classic').closest('tr')).toHaveTextContent('ORI · classic5128');
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/close-day?date=2026-08-16', expect.objectContaining({ signal: expect.any(AbortSignal) }));
@@ -49,7 +62,7 @@ describe('ReportsPage', () => {
 
   it('renders empty day and empty selected-report states', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ days: [] })));
-    render(<ReportsPage />);
+    renderPage();
     expect(await screen.findByText('ยังไม่มีข้อมูลการขาย')).toBeInTheDocument();
     expect(screen.getByText('เลือกวันที่เพื่อดูรายละเอียดรายงาน')).toBeInTheDocument();
   });
@@ -57,16 +70,47 @@ describe('ReportsPage', () => {
   it('renders an available day with an empty report without inventing data', async () => {
     const emptyDetail = { ...detail, orderCount: 0, subtotalAll: 0, discountAll: 0, cashTotal: 0, transferTotal: 0, totalRevenue: 0, costTotal: 0, netProfit: 0, orders: [], menuSummary: [] };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json(days)).mockResolvedValueOnce(json(emptyDetail)));
-    render(<ReportsPage />);
+    renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /16.*2569/ }));
     expect(await screen.findByText('ไม่มีออเดอร์ในวันที่เลือก')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /ดูรายการ/ })).not.toBeInTheDocument();
     expect(screen.getByText('ไม่มีความเคลื่อนไหวของสินค้าในวันที่เลือก')).toBeInTheDocument();
     expect(screen.getByText('ยอดขายรวม').parentElement).toHaveTextContent('0');
   });
 
+  async function openDay(report: unknown) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json(days)).mockResolvedValueOnce(json(report)));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /16.*2569/ }));
+    await screen.findByText('ยอดขายรวม');
+  }
+
+  it('shows what the cash drawer should hold when the float was set', async () => {
+    await openDay({ ...detail, openingFloat: 500, expectedCash: 700 });
+    expect(screen.getByText(/เงินสดที่ควรมีในลิ้นชัก/)).toHaveTextContent('฿700.00');
+    expect(screen.getByText(/เงินทอนตั้งต้น/)).toHaveTextContent('เงินทอนตั้งต้น ฿500.00 + ขายเงินสด ฿200.00');
+  });
+
+  it('folds away menus that did nothing that day, and can show them', async () => {
+    await openDay(detail);
+    expect(screen.getByText('Original')).toBeInTheDocument();
+    expect(screen.queryByText('Matcha')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'แสดงอีก 1 เมนูที่ไม่มีความเคลื่อนไหว' }));
+    expect(screen.getByText('Matcha').closest('tr')).toHaveTextContent('MAT · classic0004');
+    fireEvent.click(screen.getByRole('button', { name: 'ซ่อนเมนูที่ไม่มีความเคลื่อนไหว' }));
+    expect(screen.queryByText('Matcha')).not.toBeInTheDocument();
+  });
+
+  it('says so when no menu moved at all', async () => {
+    await openDay({ ...detail, menuSummary: [detail.menuSummary[1]] });
+    expect(screen.getByText('วันนี้ไม่มีเมนูที่ขาย แถม หรือเสีย')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'แสดงอีก 1 เมนูที่ไม่มีความเคลื่อนไหว' })).toBeInTheDocument();
+  });
+
   it('shows API errors without crashing the page', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'โหลดรายงานไม่ได้' }, 500)));
-    render(<ReportsPage />);
+    renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent('โหลดรายงานไม่ได้');
     expect(screen.getByRole('heading', { name: 'รายงาน' })).toBeInTheDocument();
   });

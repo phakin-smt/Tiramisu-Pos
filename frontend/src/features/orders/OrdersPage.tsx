@@ -3,7 +3,7 @@ import { cancelOrder } from '../../api/orders';
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState';
 import { MutationFeedback } from '../../components/MutationFeedback';
 import { PageHeader } from '../../components/PageHeader';
-import { bangkokDateISO, formatThaiDate } from '../../domain/date';
+import { bangkokDateISO, formatThaiDate, parseDateParam } from '../../domain/date';
 import { formatCurrency } from '../../domain/format';
 import { applyOrderFilters, DEFAULT_ORDER_FILTERS, hasActiveOrderFilters, summarizeOrders, type OrderFilters } from '../../domain/orderFilters';
 import type { Order } from '../../types/orders';
@@ -14,7 +14,8 @@ import { useOrders } from './useOrders';
 
 export function OrdersPage() {
   const today = bangkokDateISO();
-  const [date, setDate] = useState(today);
+  // The reports page links here with ?date= so a day's orders open directly.
+  const [date, setDate] = useState(() => parseDateParam(new URLSearchParams(window.location.search).get('date'), today) ?? today);
   const [revision, setRevision] = useState(0);
   // Kept across date changes: checking transfers is usually done day after day.
   const [filters, setFilters] = useState<OrderFilters>(DEFAULT_ORDER_FILTERS);

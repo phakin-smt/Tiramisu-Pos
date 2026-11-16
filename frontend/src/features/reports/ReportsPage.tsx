@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState';
 import { PageHeader } from '../../components/PageHeader';
 import { formatThaiDate } from '../../domain/date';
 import { ReportDayList } from './ReportDayList';
-import { ReportOrders } from './ReportOrders';
 import { ReportProductMovements } from './ReportProductMovements';
 import { ReportSummary } from './ReportSummary';
 import { useReportDays, useReportDetail } from './useReports';
@@ -15,7 +15,7 @@ export function ReportsPage() {
   const selectedDay = days.data?.days.find((day) => day.date === selectedDate);
 
   return (
-    <section className="data-page">
+    <section className="data-page reports-page">
       <PageHeader title="รายงาน" />
       <div className="report-workspace">
         <aside className="surface report-days-panel">
@@ -30,7 +30,11 @@ export function ReportsPage() {
             <>
               <div className="section-heading"><div><h2>{formatThaiDate(detail.data.date)}</h2><span>{selectedDay?.closedAt ? `ปิดยอดแล้ว ${selectedDay.closedAt.slice(11, 16)}` : 'ยังไม่ปิดยอด · อ่านอย่างเดียว'}</span></div></div>
               <ReportSummary report={detail.data} />
-              <section className="surface"><h2>รายการออเดอร์</h2><ReportOrders orders={detail.data.orders} /></section>
+              {/* The orders page lists, filters and totals a day's orders; repeating
+                  that table here only made the report longer. */}
+              {detail.data.orderCount > 0
+                ? <Link className="report-orders-link" to={`/orders?date=${detail.data.date}`}>ดูรายการ {detail.data.orderCount} ออเดอร์ของวันนี้ <span aria-hidden="true">→</span></Link>
+                : <EmptyState message="ไม่มีออเดอร์ในวันที่เลือก" />}
               <section className="surface"><h2>ความเคลื่อนไหวสินค้า</h2><ReportProductMovements items={detail.data.menuSummary} /></section>
             </>
           )}
